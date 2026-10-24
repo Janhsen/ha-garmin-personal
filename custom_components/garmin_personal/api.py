@@ -16,6 +16,7 @@ import base64
 import binascii
 import json
 import logging
+import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -52,6 +53,11 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Back-off shared by all callers of one client (kept here, not in const.py: internal tuning).
+RATE_LIMIT_DEFAULT_BLOCK = 60.0  # seconds, when Garmin sends 429 without Retry-After
+EXCHANGE_COOLDOWN = 30.0  # seconds without a new token exchange after a failed one
+MAX_BLOCK = 3600.0  # never block longer than this, whatever Retry-After says
+
 JSON = "application/json"
 ZIP = "application/x-zip-compressed"  # Garmin answers HTTP 406 for application/octet-stream
 
@@ -65,7 +71,11 @@ class GarminAuthError(GarminError):
 
 
 class GarminRateLimitError(GarminError):
-    """Garmin answered HTTP 429."""
+    """Garmin answered HTTP 429 (``retry_after`` in seconds when known)."""
+
+    def __init__(self, message: str, retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class GarminApiError(GarminError):
@@ -210,6 +220,36 @@ def _retry_after(value: str | None) -> float | None:
         return None
 
 
+def _looks_like_html(body: str, content_type: str | None) -> bool:
+    """A web application firewall or maintenance page instead of an API answer."""
+    if content_type and "html" in content_type.lower():
+        return True
+    return body.lstrip()[:1] == "<"
+
+
+def _plausible_token(token: str) -> bool:
+    """Reject bodies that are clearly not a bearer token (HTML, JSON, text with blanks)."""
+    return bool(token) and token[0] not in "<{[" and not any(ch.isspace() for ch in token)
+
+
+def _mapping_or_none(result: Any, what: str) -> Mapping[str, Any] | None:
+    """The decoded answer as a mapping; ``None`` stays ``None``, anything else is an API error."""
+    if result is None:
+        return None
+    if isinstance(result, Mapping):
+        return result
+    raise GarminApiError(f"{what}: unexpected response shape ({type(result).__name__})")
+
+
+def _list_field(page: Mapping[str, Any], key: str, what: str) -> list[Any]:
+    value = page.get(key)
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    raise GarminApiError(f"{what}: {key} is not a list")
+
+
 # ---------------------------------------------------------------------------
 # Client
 # ---------------------------------------------------------------------------
@@ -237,6 +277,25 @@ class GarminPersonalApi:
         self._token: str | None = None
         self._token_expires: datetime | None = None
         self._lock = asyncio.Lock()
+        # Shared by every caller (all coordinators and the services), so that one
+        # answer of HTTP 429 or a failed token exchange stops the requests of all groups.
+        self._blocked_until = 0.0
+        self._blocked_error: GarminError | None = None
+
+    # -- shared back-off --------------------------------------------------
+
+    def _block(self, seconds: float, error: GarminError) -> None:
+        seconds = min(max(seconds, 0.0), MAX_BLOCK)
+        self._blocked_until = time.monotonic() + seconds
+        self._blocked_error = error
+
+    def _raise_if_blocked(self) -> None:
+        remaining = self._blocked_until - time.monotonic()
+        if remaining > 0 and self._blocked_error is not None:
+            err = self._blocked_error
+            if isinstance(err, GarminRateLimitError):
+                raise GarminRateLimitError(str(err), remaining)
+            raise GarminApiError(str(err), getattr(err, "status", None))
 
     # -- tokens -----------------------------------------------------------
 
@@ -248,30 +307,81 @@ class GarminPersonalApi:
         )
 
     async def _exchange_token(self) -> None:
+        self._raise_if_blocked()
         headers = {"Authorization": f"ApiKey {self._api_key}", "Accept": "*/*"}
-        try:
-            async with self._session.post(
-                self._base_url + KEY_EXCHANGE_PATH, headers=headers, timeout=REQUEST_TIMEOUT
-            ) as response:
-                status = response.status
-                text = await response.text()
-        except (ClientError, TimeoutError) as err:
-            raise GarminApiError(f"Cannot reach Garmin: {err}") from err
-        if status in (401, 403):
-            raise GarminAuthError(
-                f"Garmin rejected the API key (HTTP {status}); it may be expired or deleted"
-            )
-        if status >= 400:
-            raise GarminApiError(f"Token exchange failed (HTTP {status})", status)
-        token = text.strip().strip('"')
-        if not token:
-            raise GarminApiError("The token endpoint returned an empty body", status)
-        self._token = token
-        self._token_expires = jwt_expiry(token) or (datetime.now(UTC) + FALLBACK_TOKEN_LIFETIME)
+        attempt = 0
+        while True:
+            try:
+                async with self._session.post(
+                    self._base_url + KEY_EXCHANGE_PATH, headers=headers, timeout=REQUEST_TIMEOUT
+                ) as response:
+                    status = response.status
+                    text = await response.text()
+                    retry_header = response.headers.get("Retry-After")
+                    content_type = response.headers.get("Content-Type")
+            except (ClientError, TimeoutError) as err:
+                if attempt < MAX_RETRIES:
+                    await self._sleep(0.5 * 2**attempt)
+                    attempt += 1
+                    continue
+                error = GarminApiError(f"Cannot reach Garmin: {err}")
+                self._block(EXCHANGE_COOLDOWN, error)
+                raise error from err
+            if status == 401:
+                raise GarminAuthError(
+                    "Garmin rejected the API key (HTTP 401); it may be expired or deleted"
+                )
+            if status == 403:
+                if _looks_like_html(text, content_type):
+                    # A protection layer in front of Garmin, not a verdict on the key.
+                    error = GarminApiError(
+                        "Token exchange blocked by a protection layer (HTTP 403)", 403
+                    )
+                    self._block(EXCHANGE_COOLDOWN, error)
+                    raise error
+                raise GarminAuthError(
+                    "Garmin rejected the API key (HTTP 403); it may be expired or deleted"
+                )
+            if status in RETRY_STATUSES:
+                delay = _retry_after(retry_header)
+                if status != 429 and delay is None:
+                    delay = 0.5 * 2**attempt
+                if delay is not None and delay <= MAX_RETRY_AFTER and attempt < MAX_RETRIES:
+                    await self._sleep(max(delay, 0.5))
+                    attempt += 1
+                    continue
+                if status == 429:
+                    wait = delay if delay is not None else RATE_LIMIT_DEFAULT_BLOCK
+                    limit_error = GarminRateLimitError(
+                        "Garmin rate limit reached during token exchange (HTTP 429)", wait
+                    )
+                    self._block(wait, limit_error)
+                    raise limit_error
+                error = GarminApiError(f"Token exchange failed (HTTP {status})", status)
+                self._block(delay if delay is not None else EXCHANGE_COOLDOWN, error)
+                raise error
+            if status >= 400:
+                raise GarminApiError(f"Token exchange failed (HTTP {status})", status)
+            token = text.strip().strip('"')
+            if not token:
+                raise GarminApiError("The token endpoint returned an empty body", status)
+            if not _plausible_token(token):
+                error = GarminApiError("The token endpoint returned an unexpected answer", status)
+                self._block(EXCHANGE_COOLDOWN, error)
+                raise error
+            self._token = token
+            self._token_expires = jwt_expiry(token) or (datetime.now(UTC) + FALLBACK_TOKEN_LIFETIME)
+            return
 
-    async def _get_token(self, *, force: bool = False) -> str:
+    async def _get_token(self, *, force: bool = False, rejected: str | None = None) -> str:
+        """Return a usable token.
+
+        ``rejected`` is the token Garmin just answered with 401: it is only exchanged
+        again when nobody else has done so in the meantime (parallel requests).
+        """
         async with self._lock:
-            if force or not self._token_usable():
+            replaced = rejected is not None and self._token is not None and self._token != rejected
+            if (force and not replaced) or not self._token_usable():
                 await self._exchange_token()
             assert self._token is not None  # noqa: S101
             return self._token
@@ -296,6 +406,7 @@ class GarminPersonalApi:
         refreshed = False
         attempt = 0
         while True:
+            self._raise_if_blocked()
             token = await self._get_token()
             headers = {"Authorization": f"Bearer {token}", "Accept": accept}
             try:
@@ -317,7 +428,7 @@ class GarminPersonalApi:
 
             if status == 401 and not refreshed:
                 refreshed = True
-                await self._get_token(force=True)
+                await self._get_token(force=True, rejected=token)
                 continue
             if status == 401:
                 raise GarminAuthError("Garmin keeps rejecting the access token")
@@ -326,11 +437,16 @@ class GarminPersonalApi:
                 if delay is None:
                     delay = 0.5 * 2**attempt
                 if delay <= MAX_RETRY_AFTER:
-                    await self._sleep(delay)
+                    await self._sleep(max(delay, 0.5))
                     attempt += 1
                     continue
             if status == 429:
-                raise GarminRateLimitError("Garmin rate limit reached (HTTP 429)")
+                wait = _retry_after(retry_header)
+                if wait is None:
+                    wait = RATE_LIMIT_DEFAULT_BLOCK
+                error = GarminRateLimitError("Garmin rate limit reached (HTTP 429)", wait)
+                self._block(wait, error)
+                raise error
             if status >= 400:
                 raise GarminApiError(f"GET {path} failed (HTTP {status})", status)
             if status == 204 or not body:
@@ -372,7 +488,11 @@ class GarminPersonalApi:
         limit = max(1, min(limit, ACTIVITY_PAGE_MAX))
         params = [("start", str(start)), ("limit", str(limit)), *activity_filter_params(filters)]
         result = await self._request("/activitylist-service/activities/search/activities", params)
-        return result or []
+        if not result:
+            return []
+        if not isinstance(result, list):
+            raise GarminApiError("activity search: unexpected response shape")
+        return result
 
     async def search_activities(
         self, *, limit: int = ACTIVITY_PAGE_DEFAULT, filters: Mapping[str, Any] | None = None
@@ -439,8 +559,11 @@ class GarminPersonalApi:
         """``/hrv-service/hrv/daily/{from}/{to}``, unwrapped to the summary list."""
 
         async def fetch(a: date, b: date) -> Any:
-            page = await self._request(f"/hrv-service/hrv/daily/{a.isoformat()}/{b.isoformat()}")
-            return (page or {}).get("hrvSummaries") or []
+            page = _mapping_or_none(
+                await self._request(f"/hrv-service/hrv/daily/{a.isoformat()}/{b.isoformat()}"),
+                "hrv summaries",
+            )
+            return _list_field(page, "hrvSummaries", "hrv summaries") if page else []
 
         return await self._ranged(fetch, start, end, MAX_DAYS_HRV)
 
@@ -550,11 +673,14 @@ class GarminPersonalApi:
         """``/usersummary-service/v2/dailysummaries``, unwrapped (windows of 31 days)."""
 
         async def fetch(a: date, b: date) -> Any:
-            page = await self._request(
-                "/usersummary-service/v2/dailysummaries",
-                [("startDate", a.isoformat()), ("endDate", b.isoformat())],
+            page = _mapping_or_none(
+                await self._request(
+                    "/usersummary-service/v2/dailysummaries",
+                    [("startDate", a.isoformat()), ("endDate", b.isoformat())],
+                ),
+                "daily summaries",
             )
-            return (page or {}).get("data") or []
+            return _list_field(page, "data", "daily summaries") if page else []
 
         return await self._ranged(fetch, start, end, MAX_DAYS_DAILY_SUMMARIES)
 
@@ -573,13 +699,19 @@ class GarminPersonalApi:
         """``/weight-service/weight/range/{start}/{end}`` merged over windows."""
         merged: dict[str, Any] = {"dailyWeightSummaries": []}
         for window_start, window_end in split_range(start, end, MAX_DAYS_WEIGHT):
-            page = await self._request(
-                f"/weight-service/weight/range/{window_start.isoformat()}/{window_end.isoformat()}",
-                [("includeAll", "true" if include_all else "false")],
+            page = _mapping_or_none(
+                await self._request(
+                    f"/weight-service/weight/range/{window_start.isoformat()}"
+                    f"/{window_end.isoformat()}",
+                    [("includeAll", "true" if include_all else "false")],
+                ),
+                "weight range",
             )
             if not page:
                 continue
-            merged["dailyWeightSummaries"].extend(page.get("dailyWeightSummaries") or [])
+            merged["dailyWeightSummaries"].extend(
+                _list_field(page, "dailyWeightSummaries", "weight range")
+            )
             for key in ("totalAverage", "previousDateWeight", "nextDateWeight"):
                 if page.get(key) is not None:
                     merged[key] = page[key]
@@ -628,6 +760,7 @@ class GarminPersonalApi:
         self,
         endpoint: str,
         *,
+        today: date | None = None,
         day: date | None = None,
         start: date | None = None,
         end: date | None = None,
@@ -635,8 +768,12 @@ class GarminPersonalApi:
         filters: Mapping[str, Any] | None = None,
         limit: int = ACTIVITY_PAGE_DEFAULT,
     ) -> Any:
-        """Call one of the endpoints by its short name (see ``ENDPOINT_NAMES``)."""
-        today = datetime.now().date()
+        """Call one of the endpoints by its short name (see ``ENDPOINT_NAMES``).
+
+        ``today`` is the current day in the Home Assistant time zone, supplied by the
+        caller. Only if it is missing, the process-local date is used as a fallback.
+        """
+        today = today or date.today()
         day = day or today
         end = end or day
         start = start or (end - timedelta(days=6))
