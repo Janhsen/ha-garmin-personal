@@ -44,7 +44,7 @@ N = {
  "sleep_spo2_average": ("Sleep SpO2 average", "SpO2 im Schlaf (Durchschnitt)"), "sleep_spo2_lowest": ("Sleep SpO2 lowest", "SpO2 im Schlaf (Minimum)"),
  "sleep_respiration_average": ("Sleep respiration", "Atmung im Schlaf"), "sleep_need": ("Sleep need", "Schlafbedarf"),
  "sleep_need_next": ("Next sleep need", "Nächster Schlafbedarf"), "sleep_feedback": ("Sleep feedback", "Schlaf-Feedback"),
- "sleep_insight": ("Sleep insight", "Schlaf-Einblick"), "sleep_breathing_disruption": ("Breathing disruption", "Atemaussetzer"),
+ "sleep_insight": ("Sleep insight", "Schlaf-Einblick"), "sleep_personal_insight": ("Personal sleep insight", "Persönlicher Schlaf-Einblick"), "sleep_breathing_disruption": ("Breathing disruption", "Atemaussetzer"),
  "hrv_last_night": ("HRV last night", "HRV letzte Nacht"), "hrv_weekly": ("HRV weekly average", "HRV Wochendurchschnitt"),
  "hrv_5min_high": ("HRV 5 min high", "HRV 5-Min-Höchstwert"), "hrv_status": ("HRV status", "HRV-Status"),
  "hrv_feedback": ("HRV feedback", "HRV-Feedback"),

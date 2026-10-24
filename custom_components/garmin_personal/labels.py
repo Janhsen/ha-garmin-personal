@@ -95,3 +95,71 @@ LABELS: dict[str, dict[str, tuple[str, str]]] = {
         "other": ("Other", "Sonstiges"),
     },
 }
+
+# "personal insight": the key is built from a topic, a direction, the sleep quality and a context.
+# Only combinations seen in real responses are listed; the words are translated literally.
+_TOPIC = {
+    "STRESS": ("Stress", "Stress"), "HARD_EXERCISE": ("Hard exercise", "Hartes Training"),
+    "MOD_EXERCISE": ("Moderate exercise", "Moderates Training"), "GENERAL": ("General", "Allgemein"),
+    "RHYTHM": ("Rhythm", "Rhythmus"), "ALTITUDE": ("Altitude", "Höhe"),
+}
+_DIR = {"POS": ("positive", "positiv"), "NEG": ("negative", "negativ")}
+_SLEEP = {
+    "EXCELLENT_OR_GOOD_SLEEP": ("excellent or good sleep", "ausgezeichneter oder guter Schlaf"),
+    "FAIR_OR_POOR_SLEEP": ("fair or poor sleep", "mittelmäßiger oder schlechter Schlaf"),
+    "FAIR_SLEEP": ("fair sleep", "mittelmäßiger Schlaf"), "POOR_SLEEP": ("poor sleep", "schlechter Schlaf"),
+}
+_CONTEXT = {
+    "RESTFUL_EVENING": ("restful evening", "erholsamer Abend"), "RESTFUL_DAY": ("restful day", "erholsamer Tag"),
+    "VERY_RESTFUL_DAY": ("very restful day", "sehr erholsamer Tag"),
+    "HARD_CLOSE_BED": ("hard close to bedtime", "hart kurz vor dem Schlafen"),
+    "HARD_DURING_DAY": ("hard during the day", "hart im Tagesverlauf"),
+    "VIGOROUS_CLOSE_BED": ("vigorous close to bedtime", "intensiv kurz vor dem Schlafen"),
+    "VIGOROUS_DURING_DAY": ("vigorous during the day", "intensiv im Tagesverlauf"),
+    "VIGOROUS_DURING_DAY_OUTDOOR": ("vigorous outdoors during the day", "intensiv draußen im Tagesverlauf"),
+    "MODERATE_CLOSE_BED": ("moderate close to bedtime", "moderat kurz vor dem Schlafen"),
+    "MODERATE_DURING_DAY": ("moderate during the day", "moderat im Tagesverlauf"),
+    "REALLY_LATE_TIMING": ("really late timing", "sehr später Zeitpunkt"),
+}
+_SEEN_PERSONAL = [
+    "STRESS_POS_EXCELLENT_OR_GOOD_SLEEP_RESTFUL_EVENING", "HARD_EXERCISE_NEG_FAIR_OR_POOR_SLEEP_HARD_CLOSE_BED",
+    "HARD_EXERCISE_NEG_FAIR_OR_POOR_SLEEP_HARD_DURING_DAY", "GENERAL_POS_FAIR_OR_POOR_SLEEP",
+    "STRESS_POS_FAIR_OR_POOR_SLEEP_RESTFUL_DAY", "MOD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_VIGOROUS_CLOSE_BED",
+    "GENERAL_NEG_FAIR_OR_POOR_SLEEP", "RHYTHM_NEG_FAIR_SLEEP_REALLY_LATE_TIMING",
+    "MOD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_VIGOROUS_DURING_DAY", "ALTITUDE_NEG_POOR_SLEEP",
+    "ALTITUDE_POS_FAIR_SLEEP", "HARD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_HARD_CLOSE_BED",
+    "STRESS_POS_FAIR_OR_POOR_SLEEP_RESTFUL_EVENING", "MOD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_MODERATE_DURING_DAY",
+    "MOD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_VIGOROUS_DURING_DAY_OUTDOOR",
+    "STRESS_POS_EXCELLENT_OR_GOOD_SLEEP_RESTFUL_DAY", "MOD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_MODERATE_CLOSE_BED",
+    "STRESS_POS_EXCELLENT_OR_GOOD_SLEEP_VERY_RESTFUL_DAY", "GENERAL_POS_EXCELLENT_OR_GOOD_SLEEP",
+]
+
+
+def _personal() -> dict[str, tuple[str, str]]:
+    out: dict[str, tuple[str, str]] = {"not_available": ("Not available", "Nicht verfügbar")}
+    for key in _SEEN_PERSONAL:
+        for topic in sorted(_TOPIC, key=len, reverse=True):
+            if key.startswith(topic + "_"):
+                rest = key[len(topic) + 1:]
+                break
+        else:
+            continue
+        direction, rest = rest.split("_", 1)
+        for sleep in sorted(_SLEEP, key=len, reverse=True):
+            if rest == sleep or rest.startswith(sleep + "_"):
+                ctx = rest[len(sleep) + 1:]
+                break
+        else:
+            continue
+        en = [f"{_TOPIC[topic][0]} {_DIR[direction][0]}: {_SLEEP[sleep][0]}"]
+        de = [f"{_TOPIC[topic][1]} {_DIR[direction][1]}: {_SLEEP[sleep][1]}"]
+        if ctx:
+            if ctx not in _CONTEXT:
+                continue
+            en.append(_CONTEXT[ctx][0])
+            de.append(_CONTEXT[ctx][1])
+        out[key.lower()] = (", ".join(en), ", ".join(de))
+    return out
+
+
+LABELS["sleep_personal_insight"] = _personal()

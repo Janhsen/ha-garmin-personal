@@ -334,6 +334,31 @@
           "none": "None"
         }
       },
+      "sleep_personal_insight": {
+        "name": "Personal sleep insight",
+        "state": {
+          "not_available": "Not available",
+          "stress_pos_excellent_or_good_sleep_restful_evening": "Stress positive: excellent or good sleep, restful evening",
+          "hard_exercise_neg_fair_or_poor_sleep_hard_close_bed": "Hard exercise negative: fair or poor sleep, hard close to bedtime",
+          "hard_exercise_neg_fair_or_poor_sleep_hard_during_day": "Hard exercise negative: fair or poor sleep, hard during the day",
+          "general_pos_fair_or_poor_sleep": "General positive: fair or poor sleep",
+          "stress_pos_fair_or_poor_sleep_restful_day": "Stress positive: fair or poor sleep, restful day",
+          "mod_exercise_pos_excellent_or_good_sleep_vigorous_close_bed": "Moderate exercise positive: excellent or good sleep, vigorous close to bedtime",
+          "general_neg_fair_or_poor_sleep": "General negative: fair or poor sleep",
+          "rhythm_neg_fair_sleep_really_late_timing": "Rhythm negative: fair sleep, really late timing",
+          "mod_exercise_pos_excellent_or_good_sleep_vigorous_during_day": "Moderate exercise positive: excellent or good sleep, vigorous during the day",
+          "altitude_neg_poor_sleep": "Altitude negative: poor sleep",
+          "altitude_pos_fair_sleep": "Altitude positive: fair sleep",
+          "hard_exercise_pos_excellent_or_good_sleep_hard_close_bed": "Hard exercise positive: excellent or good sleep, hard close to bedtime",
+          "stress_pos_fair_or_poor_sleep_restful_evening": "Stress positive: fair or poor sleep, restful evening",
+          "mod_exercise_pos_excellent_or_good_sleep_moderate_during_day": "Moderate exercise positive: excellent or good sleep, moderate during the day",
+          "mod_exercise_pos_excellent_or_good_sleep_vigorous_during_day_outdoor": "Moderate exercise positive: excellent or good sleep, vigorous outdoors during the day",
+          "stress_pos_excellent_or_good_sleep_restful_day": "Stress positive: excellent or good sleep, restful day",
+          "mod_exercise_pos_excellent_or_good_sleep_moderate_close_bed": "Moderate exercise positive: excellent or good sleep, moderate close to bedtime",
+          "stress_pos_excellent_or_good_sleep_very_restful_day": "Stress positive: excellent or good sleep, very restful day",
+          "general_pos_excellent_or_good_sleep": "General positive: excellent or good sleep"
+        }
+      },
       "sleep_breathing_disruption": {
         "name": "Breathing disruption"
       },

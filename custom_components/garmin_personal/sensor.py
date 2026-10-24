@@ -402,6 +402,8 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
        enabled=False),
     _d("sleep_feedback", "sleep", text_at("sleep", "sleepScoreFeedback"), labels="sleep_feedback", state_class=NO_CLASS, enabled=False),
     _d("sleep_insight", "sleep", text_at("sleep", "sleepScoreInsight"), labels="sleep_insight", state_class=NO_CLASS, enabled=False),
+    _d("sleep_personal_insight", "sleep", text_at("sleep", "sleepScorePersonalizedInsight"), labels="sleep_personal_insight",
+       state_class=NO_CLASS, enabled=False),
     _d("sleep_breathing_disruption", "sleep", text_at("sleep", "breathingDisruptionSeverity"), state_class=NO_CLASS,
        enabled=False),
     _d("hrv_last_night", "sleep", _hrv("lastNightAvg"), unit="ms", icon="mdi:heart-flash", attrs=_hrv_attrs),

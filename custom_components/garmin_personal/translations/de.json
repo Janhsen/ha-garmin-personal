@@ -334,6 +334,31 @@
           "none": "Keine"
         }
       },
+      "sleep_personal_insight": {
+        "name": "Persönlicher Schlaf-Einblick",
+        "state": {
+          "not_available": "Nicht verfügbar",
+          "stress_pos_excellent_or_good_sleep_restful_evening": "Stress positiv: ausgezeichneter oder guter Schlaf, erholsamer Abend",
+          "hard_exercise_neg_fair_or_poor_sleep_hard_close_bed": "Hartes Training negativ: mittelmäßiger oder schlechter Schlaf, hart kurz vor dem Schlafen",
+          "hard_exercise_neg_fair_or_poor_sleep_hard_during_day": "Hartes Training negativ: mittelmäßiger oder schlechter Schlaf, hart im Tagesverlauf",
+          "general_pos_fair_or_poor_sleep": "Allgemein positiv: mittelmäßiger oder schlechter Schlaf",
+          "stress_pos_fair_or_poor_sleep_restful_day": "Stress positiv: mittelmäßiger oder schlechter Schlaf, erholsamer Tag",
+          "mod_exercise_pos_excellent_or_good_sleep_vigorous_close_bed": "Moderates Training positiv: ausgezeichneter oder guter Schlaf, intensiv kurz vor dem Schlafen",
+          "general_neg_fair_or_poor_sleep": "Allgemein negativ: mittelmäßiger oder schlechter Schlaf",
+          "rhythm_neg_fair_sleep_really_late_timing": "Rhythmus negativ: mittelmäßiger Schlaf, sehr später Zeitpunkt",
+          "mod_exercise_pos_excellent_or_good_sleep_vigorous_during_day": "Moderates Training positiv: ausgezeichneter oder guter Schlaf, intensiv im Tagesverlauf",
+          "altitude_neg_poor_sleep": "Höhe negativ: schlechter Schlaf",
+          "altitude_pos_fair_sleep": "Höhe positiv: mittelmäßiger Schlaf",
+          "hard_exercise_pos_excellent_or_good_sleep_hard_close_bed": "Hartes Training positiv: ausgezeichneter oder guter Schlaf, hart kurz vor dem Schlafen",
+          "stress_pos_fair_or_poor_sleep_restful_evening": "Stress positiv: mittelmäßiger oder schlechter Schlaf, erholsamer Abend",
+          "mod_exercise_pos_excellent_or_good_sleep_moderate_during_day": "Moderates Training positiv: ausgezeichneter oder guter Schlaf, moderat im Tagesverlauf",
+          "mod_exercise_pos_excellent_or_good_sleep_vigorous_during_day_outdoor": "Moderates Training positiv: ausgezeichneter oder guter Schlaf, intensiv draußen im Tagesverlauf",
+          "stress_pos_excellent_or_good_sleep_restful_day": "Stress positiv: ausgezeichneter oder guter Schlaf, erholsamer Tag",
+          "mod_exercise_pos_excellent_or_good_sleep_moderate_close_bed": "Moderates Training positiv: ausgezeichneter oder guter Schlaf, moderat kurz vor dem Schlafen",
+          "stress_pos_excellent_or_good_sleep_very_restful_day": "Stress positiv: ausgezeichneter oder guter Schlaf, sehr erholsamer Tag",
+          "general_pos_excellent_or_good_sleep": "Allgemein positiv: ausgezeichneter oder guter Schlaf"
+        }
+      },
       "sleep_breathing_disruption": {
         "name": "Atemaussetzer"
       },
