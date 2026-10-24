@@ -8,6 +8,11 @@
           "name": "Name",
           "api_key": "API-Schlüssel",
           "key_validity_days": "Beim Erstellen gewählte Gültigkeit (Tage)"
+        },
+        "data_description": {
+          "name": "Name dieses Kontos in Home Assistant, zum Beispiel der Vorname der Person.",
+          "api_key": "Der Schlüssel aus Garmin Connect. Er wird nur in Home Assistant gespeichert.",
+          "key_validity_days": "Die Gültigkeit, die du bei Garmin beim Erstellen des Schlüssels gewählt hast. Garmin verrät das Ablaufdatum nicht; die Integration berechnet es daraus. Es ist eine Schätzung und dient nur der Erinnerung."
         }
       },
       "reauth_confirm": {
@@ -16,6 +21,9 @@
         "data": {
           "api_key": "API-Schlüssel",
           "key_validity_days": "Gültigkeit (Tage)"
+        },
+        "data_description": {
+          "key_validity_days": "Die Gültigkeit, die du bei Garmin für den neuen Schlüssel gewählt hast. Daraus wird das Ablaufdatum berechnet (Schätzung)."
         }
       },
       "reconfigure": {
@@ -24,6 +32,9 @@
         "data": {
           "api_key": "API-Schlüssel",
           "key_validity_days": "Gültigkeit (Tage)"
+        },
+        "data_description": {
+          "key_validity_days": "Die Gültigkeit, die du bei Garmin für den neuen Schlüssel gewählt hast. Daraus wird das Ablaufdatum berechnet (Schätzung)."
         }
       }
     },
@@ -46,7 +57,12 @@
         "data": {
           "daily_interval_minutes": "Abrufintervall Tageswerte (Minuten)",
           "intraday_attributes": "Tagesverläufe als Attribute anhängen (groß)",
-          "sync_stale_hours": "Warnen, wenn die Uhr nicht synchronisiert hat seit (Stunden)"
+          "sync_stale_hours": "Warnen, wenn die Uhr länger nicht synchronisiert wurde als (Stunden)"
+        },
+        "data_description": {
+          "daily_interval_minutes": "Wie oft die Tageszusammenfassung abgefragt wird. Ein neuer Uhr-Sync löst die übrigen Abfragen aus.",
+          "intraday_attributes": "Hängt Puls-, Body-Battery- und SpO2-Verläufe als Attribute an die Sensoren. Das macht die Zustandsdaten groß und ruft zusätzliche Daten bei Garmin ab.",
+          "sync_stale_hours": "Der Binärsensor meldet ein Problem, wenn der letzte Uhr-Sync länger her ist."
         }
       }
     }
@@ -97,22 +113,22 @@
         "name": "Intensitätsminuten-Ziel"
       },
       "floors_ascended": {
-        "name": "Stockwerke hoch"
+        "name": "Stockwerke aufwärts"
       },
       "floors_descended": {
-        "name": "Stockwerke runter"
+        "name": "Stockwerke abwärts"
       },
       "floors_goal": {
         "name": "Stockwerke-Ziel"
       },
       "highly_active_time": {
-        "name": "Zeit hochaktiv"
+        "name": "Hochaktive Zeit"
       },
       "active_time": {
         "name": "Aktive Zeit"
       },
       "sedentary_time": {
-        "name": "Sitzende Zeit"
+        "name": "Sitzzeit"
       },
       "heart_rate_resting": {
         "name": "Ruhepuls"
@@ -138,21 +154,20 @@
           "calm": "Ruhig",
           "balanced": "Ausgeglichen",
           "stressful": "Stressig",
-          "very_stressful": "Sehr stressig",
-          "unknown": "Unbekannt"
+          "very_stressful": "Sehr stressig"
         }
       },
       "stress_rest_time": {
-        "name": "Ruhezeit (Stress)"
+        "name": "Zeit in Ruhe (Stress)"
       },
       "stress_low_time": {
-        "name": "Zeit niedriger Stress"
+        "name": "Zeit mit niedrigem Stress"
       },
       "stress_medium_time": {
-        "name": "Zeit mittlerer Stress"
+        "name": "Zeit mit mittlerem Stress"
       },
       "stress_high_time": {
-        "name": "Zeit hoher Stress"
+        "name": "Zeit mit hohem Stress"
       },
       "body_battery": {
         "name": "Body Battery"
@@ -164,16 +179,16 @@
         }
       },
       "body_battery_high": {
-        "name": "Body Battery Höchstwert"
+        "name": "Body-Battery-Höchstwert"
       },
       "body_battery_low": {
-        "name": "Body Battery Tiefstwert"
+        "name": "Body-Battery-Tiefstwert"
       },
       "body_battery_charged": {
-        "name": "Body Battery geladen"
+        "name": "Body Battery: geladen"
       },
       "body_battery_drained": {
-        "name": "Body Battery verbraucht"
+        "name": "Body Battery: verbraucht"
       },
       "body_battery_at_wake": {
         "name": "Body Battery beim Aufwachen"
@@ -182,13 +197,13 @@
         "name": "Body Battery im Schlaf"
       },
       "spo2_average": {
-        "name": "SpO2 Durchschnitt"
+        "name": "Durchschnittliche SpO2"
       },
       "spo2_lowest": {
-        "name": "SpO2 Minimum"
+        "name": "Niedrigste SpO2"
       },
       "spo2_latest": {
-        "name": "SpO2 aktuell"
+        "name": "Aktuelle SpO2"
       },
       "spo2_7d": {
         "name": "SpO2 (7 Tage)"
@@ -197,28 +212,28 @@
         "name": "Stressanteil"
       },
       "stress_rest_percentage": {
-        "name": "Ruheanteil"
+        "name": "Anteil Ruhe (Stress)"
       },
       "stress_activity_percentage": {
         "name": "Aktivitätsanteil (Stress)"
       },
       "stress_low_percentage": {
-        "name": "Anteil niedriger Stress"
+        "name": "Anteil mit niedrigem Stress"
       },
       "stress_medium_percentage": {
-        "name": "Anteil mittlerer Stress"
+        "name": "Anteil mit mittlerem Stress"
       },
       "stress_high_percentage": {
-        "name": "Anteil hoher Stress"
+        "name": "Anteil mit hohem Stress"
       },
       "altitude_average": {
         "name": "Durchschnittliche Höhe"
       },
       "respiration_highest": {
-        "name": "Höchste Atmung"
+        "name": "Höchste Atemfrequenz"
       },
       "respiration_lowest": {
-        "name": "Niedrigste Atmung"
+        "name": "Niedrigste Atemfrequenz"
       },
       "heart_rate_avg_min": {
         "name": "Niedrigster Durchschnittspuls"
@@ -227,10 +242,10 @@
         "name": "Höchster Durchschnittspuls"
       },
       "respiration_waking": {
-        "name": "Atmung (wach)"
+        "name": "Atemfrequenz (wach)"
       },
       "respiration_latest": {
-        "name": "Atmung (aktuell)"
+        "name": "Atemfrequenz (aktuell)"
       },
       "hydration": {
         "name": "Flüssigkeitszufuhr"
@@ -260,7 +275,7 @@
         "name": "Wachzeit"
       },
       "nap_duration": {
-        "name": "Nickerchen"
+        "name": "Nickerchen-Dauer"
       },
       "sleep_score": {
         "name": "Schlafwert"
@@ -293,7 +308,7 @@
         }
       },
       "sleep_score_awake_count": {
-        "name": "Schlafwert: Aufwachen",
+        "name": "Schlafwert: Aufwachphasen",
         "state": {
           "excellent": "Ausgezeichnet",
           "good": "Gut",
@@ -317,7 +332,7 @@
         "name": "Schlafende"
       },
       "sleep_awake_count": {
-        "name": "Aufwachen"
+        "name": "Anzahl Aufwachphasen"
       },
       "sleep_heart_rate": {
         "name": "Puls im Schlaf"
@@ -329,10 +344,10 @@
         "name": "SpO2 im Schlaf (Durchschnitt)"
       },
       "sleep_spo2_lowest": {
-        "name": "SpO2 im Schlaf (Minimum)"
+        "name": "SpO2 im Schlaf (niedrigster Wert)"
       },
       "sleep_respiration_average": {
-        "name": "Atmung im Schlaf"
+        "name": "Atemfrequenz im Schlaf (Durchschnitt)"
       },
       "sleep_need": {
         "name": "Schlafbedarf"
@@ -354,8 +369,8 @@
           "positive_continuous": "Positiv: durchgehend",
           "positive_optimal_structure": "Positiv: optimale Struktur",
           "negative_discontinuous": "Negativ: unterbrochen",
-          "negative_light": "Negativ: zu leicht",
-          "negative_short_and_poor_structure": "Negativ: kurz und schlechte Struktur",
+          "negative_light": "Negativ: leicht",
+          "negative_short_and_poor_structure": "Negativ: kurz und schlecht strukturiert",
           "negative_not_enough_rem": "Negativ: zu wenig REM-Schlaf"
         }
       },
@@ -363,14 +378,14 @@
         "name": "Schlaf-Einblick",
         "state": {
           "positive_restful_day": "Positiv: erholsamer Tag",
-          "positive_exercise": "Positiv: Training",
+          "positive_exercise": "Positiv: Bewegung",
           "positive_restful_evening": "Positiv: erholsamer Abend",
           "positive_late_bed_time": "Positiv: späte Schlafenszeit",
           "positive_acclimatization_in_progress": "Positiv: Akklimatisierung läuft",
           "negative_strenuous_exercise": "Negativ: anstrengendes Training",
           "negative_late_strenuous_exercise": "Negativ: spätes anstrengendes Training",
           "negative_acclimatization_in_progress": "Negativ: Akklimatisierung läuft",
-          "none": "Keine"
+          "none": "Kein Einblick"
         }
       },
       "sleep_personal_insight": {
@@ -386,8 +401,8 @@
           "general_neg_fair_or_poor_sleep": "Allgemein negativ: mittelmäßiger oder schlechter Schlaf",
           "rhythm_neg_fair_sleep_really_late_timing": "Rhythmus negativ: mittelmäßiger Schlaf, sehr später Zeitpunkt",
           "mod_exercise_pos_excellent_or_good_sleep_vigorous_during_day": "Moderates Training positiv: ausgezeichneter oder guter Schlaf, intensiv im Tagesverlauf",
-          "altitude_neg_poor_sleep": "Höhe negativ: schlechter Schlaf",
-          "altitude_pos_fair_sleep": "Höhe positiv: mittelmäßiger Schlaf",
+          "altitude_neg_poor_sleep": "Höhenlage negativ: schlechter Schlaf",
+          "altitude_pos_fair_sleep": "Höhenlage positiv: mittelmäßiger Schlaf",
           "hard_exercise_pos_excellent_or_good_sleep_hard_close_bed": "Hartes Training positiv: ausgezeichneter oder guter Schlaf, hart kurz vor dem Schlafen",
           "stress_pos_fair_or_poor_sleep_restful_evening": "Stress positiv: mittelmäßiger oder schlechter Schlaf, erholsamer Abend",
           "mod_exercise_pos_excellent_or_good_sleep_moderate_during_day": "Moderates Training positiv: ausgezeichneter oder guter Schlaf, moderat im Tagesverlauf",
@@ -399,19 +414,19 @@
         }
       },
       "sleep_alignment": {
-        "name": "Schlaf-Ausrichtung",
+        "name": "Schlafausrichtung",
         "state": {
-          "behind": "Hinterher"
+          "behind": "Im Rückstand"
         }
       },
       "sleep_breathing_disruption": {
-        "name": "Atemaussetzer"
+        "name": "Atemstörungen"
       },
       "hrv_last_night": {
         "name": "HRV letzte Nacht"
       },
       "hrv_weekly": {
-        "name": "HRV Wochendurchschnitt"
+        "name": "HRV-Wochendurchschnitt"
       },
       "hrv_5min_high": {
         "name": "HRV 5-Min-Höchstwert"
@@ -435,7 +450,7 @@
           "hrv_balanced_6": "Ausgeglichen: 6",
           "hrv_balanced_7": "Ausgeglichen: 7",
           "hrv_balanced_8": "Ausgeglichen: 8",
-          "onboarding_1": "Einrichtungsphase: 1"
+          "onboarding_1": "Einführung: 1"
         }
       },
       "weight": {
@@ -469,7 +484,7 @@
         "name": "Erreichbares Fitnessalter"
       },
       "chronological_age": {
-        "name": "Kalendarisches Alter"
+        "name": "Tatsächliches Alter"
       },
       "last_activity": {
         "name": "Letzte Aktivität"
@@ -479,26 +494,26 @@
         "state": {
           "running": "Laufen",
           "trail_running": "Trailrunning",
-          "treadmill_running": "Laufband",
+          "treadmill_running": "Laufbandlauf",
           "walking": "Gehen",
           "hiking": "Wandern",
           "cycling": "Radfahren",
-          "road_biking": "Rennrad",
-          "gravel_cycling": "Gravel",
+          "road_biking": "Rennradfahren",
+          "gravel_cycling": "Gravel-Radfahren",
           "mountain_biking": "Mountainbike",
           "e_bike_fitness": "E-Bike",
           "e_bike_mountain": "E-Mountainbike",
           "indoor_cycling": "Indoor-Radfahren",
-          "virtual_ride": "Virtuelle Fahrt",
+          "virtual_ride": "Virtuelle Radfahrt",
           "strength_training": "Krafttraining",
-          "indoor_cardio": "Cardio indoor",
+          "indoor_cardio": "Indoor-Cardio",
           "hiit": "HIIT",
           "yoga": "Yoga",
           "pilates": "Pilates",
           "elliptical": "Crosstrainer",
-          "stair_stepper": "Treppensteiger",
+          "stair_stepper": "Stepper",
           "rowing": "Rudern",
-          "indoor_rowing": "Rudergerät",
+          "indoor_rowing": "Indoor-Rudern",
           "swimming": "Schwimmen",
           "lap_swimming": "Bahnenschwimmen",
           "open_water_swimming": "Freiwasserschwimmen",
@@ -507,7 +522,7 @@
           "backcountry_skiing_snowboarding_ws": "Skitour",
           "inline_skating": "Inlineskaten",
           "stand_up_paddleboarding_v2": "Stand-up-Paddling",
-          "kayaking_v2": "Kajak",
+          "kayaking_v2": "Kajakfahren",
           "golf": "Golf",
           "tennis_v2": "Tennis",
           "multi_sport": "Multisport",
@@ -527,10 +542,10 @@
         "name": "Letzte Aktivität: Kalorien"
       },
       "last_activity_avg_hr": {
-        "name": "Letzte Aktivität: Ø Puls"
+        "name": "Letzte Aktivität: Durchschnittspuls"
       },
       "last_activity_max_hr": {
-        "name": "Letzte Aktivität: Maximalpuls"
+        "name": "Letzte Aktivität: Maximaler Puls"
       },
       "last_activity_aerobic_te": {
         "name": "Letzte Aktivität: aerober Trainingseffekt"
@@ -545,7 +560,7 @@
         "name": "Letzte Aktivität: VO2max"
       },
       "last_activity_elevation": {
-        "name": "Letzte Aktivität: Höhenmeter"
+        "name": "Letzte Aktivität: Höhenmeter (Anstieg)"
       },
       "wellness_activities": {
         "name": "Wellness-Aktivitäten heute"
@@ -554,7 +569,7 @@
         "name": "Konto"
       },
       "hr_max_used": {
-        "name": "Maximalpuls (eingestellt)"
+        "name": "Maximaler Puls (eingestellt)"
       },
       "hr_resting_used": {
         "name": "Ruhepuls (eingestellt)"
@@ -582,7 +597,7 @@
         "state_attributes": {
           "event_type": {
             "state": {
-              "activity_finished": "Aktivität beendet"
+              "activity_finished": "Neue Aktivität"
             }
           }
         }
@@ -610,7 +625,7 @@
         },
         "date": {
           "name": "Datum",
-          "description": "Für Einzeltag-Endpunkte (Standard heute)."
+          "description": "Für Endpunkte mit einem Tag (Standard: heute)."
         },
         "start_date": {
           "name": "Startdatum",
@@ -654,7 +669,7 @@
     },
     "download_activity": {
       "name": "Aktivitätsdatei herunterladen",
-      "description": "Speichert die Original-Aktivitätsdateien (ZIP) auf der Platte.",
+      "description": "Speichert die Original-Aktivitätsdateien (ZIP) im Dateisystem.",
       "fields": {
         "config_entry_id": {
           "name": "Konto",
