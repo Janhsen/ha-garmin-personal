@@ -71,6 +71,10 @@ class Optional(Marker):
     pass
 
 
+class Invalid(Exception):
+    pass
+
+
 class Schema:
     def __init__(self, schema):
         self.schema = schema
@@ -103,9 +107,33 @@ class Range(_Validator):
     pass
 
 
+def _cv_boolean(value):
+    """Wie cv.boolean: Strings wie 'false' werden falsch, Unbekanntes ist ungueltig."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        value = value.lower().strip()
+        if value in ("1", "true", "yes", "on", "enable"):
+            return True
+        if value in ("0", "false", "no", "off", "disable"):
+            return False
+    elif isinstance(value, int | float):
+        return bool(value)
+    raise Invalid(f"invalid boolean value {value!r}")
+
+
 # --------------------------------------------------------------------------- exceptions
 class HomeAssistantError(Exception):
-    pass
+    """Wie HA: optionale Uebersetzungsangaben; ohne Text zeigt str() den Schluessel."""
+
+    def __init__(self, *args, translation_domain=None, translation_key=None, translation_placeholders=None):
+        super().__init__(*args)
+        self.translation_domain = translation_domain
+        self.translation_key = translation_key
+        self.translation_placeholders = translation_placeholders
+
+    def __str__(self):
+        return super().__str__() if self.args else str(self.translation_key)
 
 
 class ServiceValidationError(HomeAssistantError):
@@ -416,6 +444,10 @@ class FakeConfigEntries:
         self.reloaded.append(entry_id)
 
 
+ConfigEntryState = make_enum("ConfigEntryState", "LOADED", "NOT_LOADED", "SETUP_ERROR", "SETUP_RETRY",
+                             "SETUP_IN_PROGRESS", "MIGRATION_ERROR", "FAILED_UNLOAD")
+
+
 class FakeHass:
     def __init__(self, config=None):
         self.config = config or FakeConfig()
@@ -438,8 +470,10 @@ class FakeHass:
 
 class FakeEntry:
     def __init__(self, entry_id="E1", title="Jan", data=None, options=None, unique_id=None,
-                 runtime_data="UNSET"):
+                 runtime_data="UNSET", state=None):
         self.entry_id = entry_id
+        self.state = state or (ConfigEntryState.LOADED if runtime_data not in ("UNSET", None)
+                               else ConfigEntryState.NOT_LOADED)
         self.title = title
         self.data = dict(data or {})
         self.options = dict(options or {})
@@ -466,7 +500,7 @@ def install() -> None:
     sensor_sc = make_enum("SensorStateClass", "MEASUREMENT", "TOTAL", "TOTAL_INCREASING")
 
     stub("voluptuous", Schema=Schema, Required=Required, Optional=Optional, In=In, All=All,
-         Coerce=Coerce, Range=Range)
+         Coerce=Coerce, Range=Range, Invalid=Invalid)
     stub("homeassistant")
     stub("homeassistant.const", Platform=Platform, PERCENTAGE="%",
          EntityCategory=make_enum("EntityCategory", "DIAGNOSTIC", "CONFIG"),
@@ -494,7 +528,7 @@ def install() -> None:
          async_add_external_statistics=async_add_external_statistics)
     RECORDED.clear()
     stub("homeassistant.helpers")
-    stub("homeassistant.helpers.config_validation", string=str, boolean=bool, date=date, positive_int=int,
+    stub("homeassistant.helpers.config_validation", string=str, boolean=_cv_boolean, date=date, positive_int=int,
          config_entry_only_config_schema=lambda domain: Schema({}))
     stub("homeassistant.helpers.entity_registry", async_get=lambda hass: REGISTRY,
          RegistryEntryDisabler=RegistryEntryDisabler)
@@ -517,7 +551,7 @@ def install() -> None:
          TextSelector=Selector, TextSelectorConfig=SelectorConfig,
          TextSelectorType=make_enum("TextSelectorType", "PASSWORD"))
     stub("homeassistant.config_entries", ConfigEntry=Anything, ConfigFlow=ConfigFlow,
-         ConfigFlowResult=dict, OptionsFlow=OptionsFlow)
+         ConfigFlowResult=dict, OptionsFlow=OptionsFlow, ConfigEntryState=ConfigEntryState)
     stub("homeassistant.util")
     stub("homeassistant.util.dt",
          now=lambda: datetime.now(UTC), utcnow=lambda: datetime.now(UTC),
