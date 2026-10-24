@@ -136,11 +136,12 @@ class Jsonable(unittest.TestCase):
 
 
 class Registration(unittest.TestCase):
-    def test_registers_four_services_once(self):
+    def test_registers_all_services_once(self):
         hass = make_hass()
         sv.async_register_services(hass)
         self.assertEqual({n for _, n in hass.services.registered},
-                         {"fetch", "search_activities", "download_activity", "backfill_statistics"})
+                         {"fetch", "search_activities", "download_activity", "backfill_statistics",
+                          "backfill_intraday", "backfill_history"})
         before = dict(hass.services.registered)
         sv.async_register_services(hass)  # idempotent
         self.assertEqual(hass.services.registered, before)

@@ -61,11 +61,13 @@
         "data": {
           "daily_interval_minutes": "Update interval for daily values (minutes)",
           "intraday_attributes": "Add intraday series as attributes (large)",
+          "hourly_statistics": "Write hourly statistics (heart rate, Body Battery, SpO2)",
           "sync_stale_hours": "Warn when the watch has not synced for (hours)"
         },
         "data_description": {
           "daily_interval_minutes": "How often the daily values are requested. The other data is fetched only after a new watch sync or less often.",
           "intraday_attributes": "Adds heart rate, Body Battery and SpO2 series to the sensors as attributes. This makes the state data large, requests extra data from Garmin and the series are not stored in the recorder.",
+          "hourly_statistics": "After each new watch sync, writes heart rate, Body Battery and SpO2 as hourly values (minimum, maximum, mean of each completed hour) into the long-term statistics. Independent of the option above; costs one extra request per series and sync (plus one per series for yesterday in the morning).",
           "sync_stale_hours": "The binary sensor reports a problem when the last watch sync is older than this many hours."
         }
       }
@@ -612,6 +614,15 @@
       },
       "key_expires": {
         "name": "API key expires"
+      },
+      "heart_rate_history": {
+        "name": "Heart rate (history)"
+      },
+      "body_battery_history": {
+        "name": "Body Battery (history)"
+      },
+      "spo2_history": {
+        "name": "SpO2 (history)"
       }
     },
     "binary_sensor": {
@@ -747,6 +758,58 @@
           "description": "Also import steps, distance and floors of days that other apps (e.g. RunGap) wrote into Garmin Connect. Calories and heart rate of those days are never imported."
         }
       }
+    },
+    "backfill_intraday": {
+      "name": "Import hourly values as statistics",
+      "description": "Writes the day curves of heart rate, Body Battery and SpO2 as hourly values (minimum, maximum, mean of each completed hour) into long-term statistics. One request per day and series; a range may span at most 366 days. Safe to repeat: the same hours are overwritten. The response says whether it completed (complete, last_completed_day, error) and how many hours were written per series.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Garmin account. May be left out only if exactly one account is set up."
+        },
+        "start_date": {
+          "name": "Start date",
+          "description": "Default: days back from the end date."
+        },
+        "end_date": {
+          "name": "End date",
+          "description": "Last day to import. Default: today (only completed hours are written, never the running hour)."
+        },
+        "days": {
+          "name": "Days",
+          "description": "Number of days back from the end date (at most 366, default 7). Used when no start date is given."
+        }
+      }
+    },
+    "backfill_history": {
+      "name": "Write history sensors (appending only)",
+      "description": "Writes the real measuring points of heart rate, Body Battery and SpO2 with their own timestamps as recorded states of the (history) sensors, so the History panel shows them. Appends only: points already written are never written again, overwritten or deleted. Not available yet; see the README.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Garmin account. May be left out only if exactly one account is set up."
+        },
+        "start_date": {
+          "name": "Start date",
+          "description": "Default: days back from the end date."
+        },
+        "end_date": {
+          "name": "End date",
+          "description": "Last day. Default: today."
+        },
+        "days": {
+          "name": "Days",
+          "description": "Number of days back from the end date (at most 366, default 1)."
+        },
+        "series": {
+          "name": "Series",
+          "description": "heart_rate, body_battery, spo2 (default: all)."
+        },
+        "confirm_rewrite": {
+          "name": "Confirm without check",
+          "description": "Only if the record of written points is lost and the recorder cannot be checked: write the requested days anyway. This can duplicate states that exist already."
+        }
+      }
     }
   },
   "exceptions": {
@@ -785,6 +848,9 @@
     },
     "download_failed": {
       "message": "Could not write {path}: {error}"
+    },
+    "history_write_unsupported": {
+      "message": "Writing the history sensors is not available yet: Home Assistant offers no supported way to store states with past timestamps, and the unsupported route has not been verified. Nothing was requested or written."
     },
     "backfill_running": {
       "message": "An import is already running for {title}."

@@ -327,6 +327,7 @@ class Options(unittest.TestCase):
         schema = result["data_schema"]
         self.assertEqual(schema.default_of(const.OPT_DAILY_INTERVAL), const.DEFAULT_DAILY_INTERVAL)
         self.assertIs(schema.default_of(const.OPT_INTRADAY), False)
+        self.assertIs(schema.default_of(const.OPT_HOURLY_STATS), True)  # on by default
         self.assertEqual(schema.default_of(const.OPT_SYNC_STALE_HOURS), const.DEFAULT_SYNC_STALE_HOURS)
 
     def test_form_uses_stored_options(self):
@@ -342,7 +343,7 @@ class Options(unittest.TestCase):
             {const.OPT_DAILY_INTERVAL: 10.0, const.OPT_INTRADAY: True, const.OPT_SYNC_STALE_HOURS: 24.0}))
         self.assertEqual(result["type"], "create_entry")
         self.assertEqual(result["data"], {const.OPT_DAILY_INTERVAL: 10, const.OPT_INTRADAY: True,
-                                          const.OPT_SYNC_STALE_HOURS: 24})
+                                          const.OPT_HOURLY_STATS: True, const.OPT_SYNC_STALE_HOURS: 24})
         self.assertIsInstance(result["data"][const.OPT_DAILY_INTERVAL], int)
 
 

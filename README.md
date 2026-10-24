@@ -94,14 +94,21 @@ midnight, as delivered).
 
 Options: update interval for the daily values (this is the sync check), sync warning threshold, and whether intraday
 series (heart rate, Body Battery, SpO2) are attached as attributes (large, not stored in the recorder). Only with this
-option are the extra endpoints for heart rate and Body Battery series requested.
+option are the extra endpoints for heart rate and Body Battery series requested for the sensors.
+
+The option **Write hourly statistics** (on by default) is independent of that: after each new watch sync it writes
+heart rate, Body Battery and SpO2 as hourly values into the long-term statistics (see "History and long-term
+statistics"). It reuses the requests that run anyway and otherwise asks once more per series.
 
 Units: distances are in meters and durations in seconds (sleep need in minutes); the unit is shown on each sensor,
 and a dashboard card can convert it. Many "today" values (steps, minimum/maximum heart rate) start again at midnight.
 
 Request volume: about 290 requests per day and account for the sync check, plus about 9 per watch sync and the
-fallbacks, roughly 400 to 500 in total (without intraday series). Garmin names no limits for the Personal API and
-offers no push; the integration only polls.
+fallbacks, roughly 400 to 500 in total (without intraday series). Hourly statistics add about 2 requests per watch
+sync (heart rate and Body Battery of today; SpO2 is already requested) and 3 for yesterday on the first full refresh
+of each day and after each sync before 10:00 local time, so roughly 30 to 60 more per day. With the intraday
+attributes on, today's series are requested anyway and only yesterday's 3 remain. Garmin names no limits for the
+Personal API and offers no push; the integration only polls.
 
 Not part of the Personal API (and therefore not available): Training Readiness, training status, VO2max as a daily
 value, race predictions. VO2max exists only per activity.
@@ -176,6 +183,25 @@ with a translated error that lists the accounts. All service errors are translat
   time. The response reports `complete`, `last_completed_day` and `error` after an interruption, plus
   `days_imported`, `statistic_series` and `statistic_rows`. Days with a value of 0 for resting/minimum/maximum heart
   rate, stress or respiration are not written.
+* `garmin_personal.backfill_intraday` – writes the day curves of **heart rate, Body Battery and SpO2** retroactively as
+  **hourly statistics** (minimum, maximum and mean per full hour, see "History and long-term statistics"). `days`
+  (default 7), `start_date` and `end_date` work as above; without `end_date` it ends today (only completed hours are
+  written, never the running one), at most 366 days. One request per day and series (3 per day, so a year is about
+  1100 requests: run long ranges in pieces if Garmin answers with a rate limit). Repeatable; the same hours are
+  overwritten. Only one import per account at a time (shared with `backfill_statistics`). The response reports
+  `complete`, `last_completed_day` and `error` after an interruption, plus `heart_rate_hours`, `body_battery_hours`,
+  `spo2_hours`, `days_with_data`, `statistic_series` and `statistic_rows`; `unknown_format` lists series whose
+  answer this version cannot read.
+* `garmin_personal.backfill_history` – **scaffold, not active yet.** Meant to write the real measuring points of heart
+  rate, Body Battery and SpO2 with their own timestamps as recorded states of the disabled-by-default diagnostic
+  sensors *Heart rate (history)*, *Body Battery (history)* and *SpO2 (history)* (the live sensors never get old values),
+  so that the History panel shows them. It is append-only: a persistent record per series and day (exact timestamps and
+  values for the last 7 days, count/first/last/checksum for older days) decides "written already?", never just a last
+  timestamp; late-synced older points are added, already written points are never rewritten, overwritten or deleted,
+  and a changed value for a known timestamp is only counted (`changed_values_skipped`). If the record is lost, the
+  recorder is read first; without that check nothing is written unless `confirm_rewrite` is true. Because Home Assistant
+  has no supported way to store states with past timestamps, the service currently answers `history_write_unsupported`
+  before asking Garmin for anything. The sensors exist (disabled) and show no value.
 
 ## Translations
 
@@ -212,6 +238,31 @@ has no word list yet because the values Garmin sends are not known; each value s
   ```
 * Each imported day is stored as one value at the first hour of that day. With the period *hour*, a card therefore
   shows a spike at midnight and gaps otherwise; use the period *day*.
+* **Hourly values** (heart rate, Body Battery, SpO2) are separate statistics with one value per full hour: minimum,
+  maximum and mean of the real Garmin measurements in that hour (the mean is the plain mean of the points, not
+  weighted by time). They are written after each new watch sync (option *Write hourly statistics*) and retroactively
+  with `backfill_intraday`. IDs: `garmin_personal:<entry_id>_heart_rate_hourly`, `…_body_battery_hourly`,
+  `…_spo2_hourly` (units bpm, %, %). Only completed hours are stored, never the running one; the hours of today and
+  yesterday are recalculated and overwritten after each sync, so later corrections by Garmin are taken over. Hours
+  without a measurement stay empty: nothing is interpolated or filled, and placeholder values (0 or negative for heart
+  rate and SpO2, negative for Body Battery) are dropped. Hours are full UTC hours. Heart rate has about one point every
+  two minutes, so an hour has up to 30 points; Garmin's SpO2 answer only holds hourly averages, so minimum, maximum and
+  mean of an SpO2 hour are the same. Where to see them: a *Statistics graph* card (pick the statistic, period *hour*
+  or *day*, `stat_types` `min`, `max`, `mean`) or Developer tools → Statistics. They do **not** appear in the History
+  panel, which only shows states of entities; they are not states, so they are not stored there or in the attributes.
+  In time zones whose offset is not a whole number of hours, the hour around local midnight is left out at the edge
+  of a fetched range instead of being stored from half its measurements.
+
+  ```yaml
+  type: statistics-graph
+  entities:
+    - garmin_personal:<entry_id>_heart_rate_hourly
+  period: hour
+  stat_types:
+    - min
+    - mean
+    - max
+  ```
 
 ## Spotting Garmin API changes
 

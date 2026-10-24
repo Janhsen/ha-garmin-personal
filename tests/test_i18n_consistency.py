@@ -88,7 +88,7 @@ class SensorsAndStates(unittest.TestCase):
         cls.labels = importlib.import_module(f"{stubs.NAME}.labels")
 
     def test_descriptor_keys_equal_translated_sensors(self):
-        keys = {d.translation_key for d in self.sensor.SENSORS} | {"key_expires"}
+        keys = {d.translation_key for d in self.sensor.SENSORS} | {"key_expires", *self.sensor.HISTORY_UNITS}
         for tree in (EN, DE):
             self.assertEqual(set(tree["entity"]["sensor"]), keys)
             for key, node in tree["entity"]["sensor"].items():
@@ -124,7 +124,7 @@ class SensorsAndStates(unittest.TestCase):
                 self.assertTrue(all(isinstance(x, str) and x for x in pair), f"{name}.{key}")
 
     def test_no_state_block_for_sensors_without_labels(self):
-        plain = {d.translation_key for d in self.sensor.SENSORS if d.options is None or d.labels is None} | {"key_expires"}
+        plain = {d.translation_key for d in self.sensor.SENSORS if d.options is None or d.labels is None} | {"key_expires", *self.sensor.HISTORY_UNITS}
         for key in plain:
             self.assertNotIn("state", EN["entity"]["sensor"][key], key)
 
@@ -198,7 +198,7 @@ class OtherEntitiesAndMessages(unittest.TestCase):
 
     def test_icons_json_covers_every_listed_sensor(self):
         icons = json.loads((PKG / "icons.json").read_text())
-        self.assertEqual(len(icons["entity"]["sensor"]), 41)
+        self.assertEqual(len(icons["entity"]["sensor"]), 44)
         self.assertLessEqual(set(icons["entity"]["sensor"]), set(EN["entity"]["sensor"]))
         for node in icons["entity"]["sensor"].values():
             self.assertRegex(node["default"], r"^mdi:[a-z0-9-]+$")

@@ -67,6 +67,8 @@ class Base(unittest.TestCase):
         self.hass = stubs.FakeHass()
 
     def tearDown(self):
+        for task in self.hass.tasks:  # background jobs of the stub are never run here
+            getattr(task, "close", lambda: None)()
         gp.GarminPersonalApi = self._orig
 
     def setup(self, entry):

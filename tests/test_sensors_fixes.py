@@ -201,7 +201,7 @@ class DescriptorTests(unittest.TestCase):
         import json
         icons = json.loads((stubs.PKG / "icons.json").read_text())["entity"]["sensor"]
         self.assertGreater(len(icons), 30)
-        self.assertTrue(set(icons) <= set(BY))
+        self.assertTrue(set(icons) <= set(BY) | set(sn.HISTORY_UNITS))
 
     def test_private_attributes_are_not_recorded(self):
         for name in ("startLatitude", "startLongitude", "locationName", "description", "values", "events"):

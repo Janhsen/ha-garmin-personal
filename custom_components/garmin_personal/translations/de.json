@@ -61,11 +61,13 @@
         "data": {
           "daily_interval_minutes": "Abrufintervall Tageswerte (Minuten)",
           "intraday_attributes": "Tagesverläufe als Attribute anhängen (groß)",
+          "hourly_statistics": "Stundenstatistik schreiben (Puls, Body Battery, SpO2)",
           "sync_stale_hours": "Warnen, wenn die Uhr länger nicht synchronisiert wurde als (Stunden)"
         },
         "data_description": {
           "daily_interval_minutes": "Wie oft die Tageswerte abgefragt werden. Die übrigen Daten werden nur nach einer neuen Uhr-Synchronisierung oder seltener geholt.",
           "intraday_attributes": "Hängt Puls-, Body-Battery- und SpO2-Verläufe als Attribute an die Sensoren. Das macht die Zustandsdaten groß, ruft zusätzliche Daten bei Garmin ab, und die Verläufe werden nicht im Recorder gespeichert.",
+          "hourly_statistics": "Schreibt nach jeder neuen Uhr-Synchronisierung Puls, Body Battery und SpO2 als Stundenwerte (Minimum, Maximum, Mittelwert jeder abgeschlossenen Stunde) in die Langzeitstatistik. Unabhängig von der Option darüber; kostet je Reihe und Sync eine zusätzliche Anfrage (morgens plus eine je Reihe für gestern).",
           "sync_stale_hours": "Der Binärsensor meldet ein Problem, wenn der letzte Uhr-Sync länger als so viele Stunden her ist."
         }
       }
@@ -612,6 +614,15 @@
       },
       "key_expires": {
         "name": "API-Schlüssel läuft ab"
+      },
+      "heart_rate_history": {
+        "name": "Puls (Verlauf)"
+      },
+      "body_battery_history": {
+        "name": "Body Battery (Verlauf)"
+      },
+      "spo2_history": {
+        "name": "SpO2 (Verlauf)"
       }
     },
     "binary_sensor": {
@@ -747,6 +758,58 @@
           "description": "Schritte, Distanz und Stockwerke von Tagen mitimportieren, die andere Apps (z. B. RunGap) in Garmin Connect geschrieben haben. Kalorien und Puls dieser Tage werden nie importiert."
         }
       }
+    },
+    "backfill_intraday": {
+      "name": "Stundenwerte als Statistik importieren",
+      "description": "Schreibt die Tagesverläufe von Puls, Body Battery und SpO2 als Stundenwerte (Minimum, Maximum, Mittelwert jeder abgeschlossenen Stunde) in die Langzeitstatistik. Eine Anfrage je Tag und Reihe; ein Zeitraum darf höchstens 366 Tage umfassen. Kann gefahrlos wiederholt werden: dieselben Stunden werden überschrieben. Die Antwort sagt, ob alles fertig wurde (complete, last_completed_day, error) und wie viele Stunden je Reihe geschrieben wurden.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist."
+        },
+        "start_date": {
+          "name": "Startdatum",
+          "description": "Standard: Tage rückwärts ab Enddatum."
+        },
+        "end_date": {
+          "name": "Enddatum",
+          "description": "Letzter Tag des Imports. Standard: heute (es werden nur abgeschlossene Stunden geschrieben, nie die laufende)."
+        },
+        "days": {
+          "name": "Tage",
+          "description": "Anzahl Tage rückwärts ab Enddatum (höchstens 366, Standard 7). Wird ohne Startdatum verwendet."
+        }
+      }
+    },
+    "backfill_history": {
+      "name": "Verlauf-Sensoren schreiben (nur anhängend)",
+      "description": "Schreibt die echten Messpunkte von Puls, Body Battery und SpO2 mit ihren eigenen Zeitstempeln als aufgezeichnete Zustände der (Verlauf-)Sensoren, damit der Bereich Verlauf sie zeigt. Nur anhängend: bereits geschriebene Punkte werden nie erneut geschrieben, überschrieben oder gelöscht. Noch nicht verfügbar; siehe README.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist."
+        },
+        "start_date": {
+          "name": "Startdatum",
+          "description": "Standard: Tage rückwärts ab Enddatum."
+        },
+        "end_date": {
+          "name": "Enddatum",
+          "description": "Letzter Tag. Standard: heute."
+        },
+        "days": {
+          "name": "Tage",
+          "description": "Anzahl Tage rückwärts ab Enddatum (höchstens 366, Standard 1)."
+        },
+        "series": {
+          "name": "Reihen",
+          "description": "heart_rate, body_battery, spo2 (Standard: alle)."
+        },
+        "confirm_rewrite": {
+          "name": "Ohne Prüfung bestätigen",
+          "description": "Nur wenn das Protokoll der geschriebenen Punkte verloren ist und der Recorder nicht geprüft werden kann: die angeforderten Tage trotzdem schreiben. Das kann bereits vorhandene Zustände verdoppeln."
+        }
+      }
     }
   },
   "exceptions": {
@@ -785,6 +848,9 @@
     },
     "download_failed": {
       "message": "{path} konnte nicht geschrieben werden: {error}"
+    },
+    "history_write_unsupported": {
+      "message": "Das Schreiben der Verlauf-Sensoren ist noch nicht verfügbar: Home Assistant bietet keinen unterstützten Weg, Zustände mit vergangenen Zeitstempeln zu speichern, und der nicht unterstützte Weg ist noch nicht geprüft. Es wurde nichts abgefragt oder geschrieben."
     },
     "backfill_running": {
       "message": "Für {title} läuft bereits ein Import."

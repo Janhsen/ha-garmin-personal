@@ -600,7 +600,8 @@ def install() -> None:
     RECORDED.clear()
     stub("homeassistant.helpers")
     stub("homeassistant.helpers.config_validation", string=str, boolean=_cv_boolean, date=date, positive_int=int,
-         config_entry_only_config_schema=lambda domain: Schema({}))
+         config_entry_only_config_schema=lambda domain: Schema({}),
+         ensure_list=lambda v: v if isinstance(v, list) else [v])
     stub("homeassistant.helpers.entity_registry", async_get=lambda hass: REGISTRY,
          async_entries_for_config_entry=_entries_for_entry,
          RegistryEntryDisabler=RegistryEntryDisabler)
