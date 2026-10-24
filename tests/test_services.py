@@ -32,6 +32,21 @@ class FakeApi:
         self.search_result = [{"activityId": 1}]
         self.zip = b"PK\x03\x04data"
         self.summaries = []
+        self.sleeps = []
+        self.hrv = []
+        self.weights = {"dailyWeightSummaries": []}
+        self.sleep_error = None
+
+    async def get_sleep_summaries(self, start, end):
+        if self.sleep_error:
+            raise self.sleep_error
+        return self.sleeps
+
+    async def get_hrv_summaries(self, start, end):
+        return self.hrv
+
+    async def get_weight_range(self, start, end):
+        return self.weights
 
     def _maybe_raise(self):
         if self.error:
@@ -236,6 +251,40 @@ class Handlers(unittest.TestCase):
         finally:
             sv.dt_util.now = orig
         self.assertEqual(self.api.calls[0][1:], (date(2026, 5, 5), date(2026, 5, 5)))
+
+    def stat_names(self):
+        return {m.kw["statistic_id"].split(":", 1)[1].split("_", 1)[1] for _, m, _ in stubs.RECORDED}
+
+    def test_backfill_sleep_hrv_weight(self):
+        self.api.sleeps = [
+            {"calendarDate": "2026-10-22", "sleepTimeSeconds": 26340, "deepSleepSeconds": 3360,
+             "sleepScores": {"overall": {"value": 94}}, "sleepNeed": {"actual": 400}, "avgHeartRate": 49},
+            {"calendarDate": "2026-10-21", "sleepTimeSeconds": 0},  # keine gemessene Nacht
+        ]
+        self.api.hrv = [{"calendarDate": "2026-10-22", "lastNightAvg": 103, "weeklyAvg": 87, "lastNight5MinHigh": 142}]
+        self.api.weights = {"dailyWeightSummaries": [
+            {"summaryDate": "2026-09-30", "latestWeight": {"weight": 75800, "sourceType": "MANUAL", "bodyFat": None, "calendarDate": "2026-09-30"}},
+            {"summaryDate": "2026-10-11", "latestWeight": {"weight": 78000, "sourceType": "USER_SETTING"}},
+            {"summaryDate": "2026-10-03", "latestWeight": {"weight": 78000, "sourceType": "CHANGE_LOG"}},
+        ]}
+        out = self.call("backfill_statistics", {"days": 30})
+        names = self.stat_names()
+        self.assertTrue({"sleep_duration", "sleep_deep", "sleep_score", "sleep_need", "sleep_heart_rate",
+                         "hrv_last_night", "hrv_weekly_average", "hrv_5_min_high", "weight"} <= names)
+        self.assertNotIn("body_fat", names)  # Garmin liefert keinen Wert
+        rows = {m.kw["statistic_id"].split(":", 1)[1].split("_", 1)[1]: r for _, m, r in stubs.RECORDED}
+        self.assertEqual([r.mean for r in rows["sleep_duration"]], [26340.0])  # Nacht ohne Schlaf fehlt
+        self.assertEqual([r.mean for r in rows["weight"]], [75.8])  # nur die echte Wiegung, kg
+        self.assertEqual(out["sleep_records"], 2)
+        self.assertEqual(out["hrv_records"], 1)
+        self.assertEqual(out["weight_records"], 3)
+
+    def test_backfill_continues_when_sleep_fails(self):
+        self.api.summaries = [{"calendarDate": "2026-10-01", "source": "garmin", "totalSteps": 100}]
+        self.api.sleep_error = api_mod.GarminApiError("500")
+        out = self.call("backfill_statistics", {"days": 3})
+        self.assertIn("sleep_error", out)
+        self.assertEqual(out["days_imported"], 1)
 
     def test_backfill_error(self):
         self.api.error = api_mod.GarminApiError("x")

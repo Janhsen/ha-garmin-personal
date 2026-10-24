@@ -561,7 +561,7 @@
     },
     "backfill_statistics": {
       "name": "Import daily values as statistics",
-      "description": "Writes daily summary values into long-term statistics (external, one value per day). Safe to repeat.",
+      "description": "Writes daily values (activity, sleep, HRV, weight) into long-term statistics (external, one value per day). Safe to repeat.",
       "fields": {
         "config_entry_id": {
           "name": "Account",

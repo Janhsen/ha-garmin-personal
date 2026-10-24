@@ -219,6 +219,20 @@ def async_register_services(hass: HomeAssistant) -> None:
             raise HomeAssistantError(f"Garmin request failed: {err}") from err
         third_party = bool(call.data.get(ATTR_THIRD_PARTY))
         imported = _import_statistics(hass, entry, summaries, third_party_steps=third_party)
+        api = entry.runtime_data.api
+        extra: dict[str, Any] = {}
+        for label, fetch_range, importer in (
+            ("sleep", api.get_sleep_summaries, _import_sleep),
+            ("hrv", api.get_hrv_summaries, _import_hrv),
+            ("weight", api.get_weight_range, _import_weight),
+        ):
+            try:
+                data = await fetch_range(start, end)
+            except GarminError as err:
+                extra[f"{label}_error"] = str(err)
+                continue
+            imported += importer(hass, entry, data)
+            extra[f"{label}_records"] = len(data["dailyWeightSummaries"]) if label == "weight" else len(data or [])
         usable = [s for s in summaries if usable_summary(s)]
         third = [s for s in summaries if third_party and _third_party_day(s)]
         return {
@@ -228,6 +242,7 @@ def async_register_services(hass: HomeAssistant) -> None:
             "days_skipped_other_source": sum(1 for s in summaries if not from_garmin(s) and s not in third),
             "days_skipped_placeholder": sum(1 for s in summaries if from_garmin(s) and not usable_summary(s)),
             "statistics": imported,
+            **extra,
         }
 
     hass.services.async_register(
@@ -256,6 +271,35 @@ def async_register_services(hass: HomeAssistant) -> None:
     )
 
 
+SLEEP_FIELDS: dict[str, tuple[str | None, tuple[tuple[str, ...], ...]]] = {
+    "sleep_duration": ("s", (("sleepTimeSeconds",),)),
+    "sleep_deep": ("s", (("deepSleepSeconds",),)),
+    "sleep_light": ("s", (("lightSleepSeconds",),)),
+    "sleep_rem": ("s", (("remSleepSeconds",),)),
+    "sleep_awake": ("s", (("awakeSleepSeconds",),)),
+    "sleep_score": (None, (("sleepScores", "overall", "value"),)),
+    "sleep_heart_rate": ("bpm", (("avgHeartRate",),)),
+    "sleep_stress": (None, (("avgSleepStress",),)),
+    "sleep_respiration": ("brpm", (("averageRespirationValue",),)),
+    "sleep_need": ("min", (("sleepNeed", "actual"),)),
+    "sleep_awake_count": (None, (("awakeCount",),)),
+}
+HRV_FIELDS: dict[str, tuple[str | None, tuple[tuple[str, ...], ...]]] = {
+    "hrv_last_night": ("ms", (("lastNightAvg",),)),
+    "hrv_weekly_average": ("ms", (("weeklyAvg",),)),
+    "hrv_5_min_high": ("ms", (("lastNight5MinHigh",),)),
+}
+# name -> (unit, paths, divisor): Garmin reports weights in grams
+WEIGHT_FIELDS: dict[str, tuple[str | None, tuple[tuple[str, ...], ...], float]] = {
+    "weight": ("kg", (("weight",),), 1000.0),
+    "bmi": (None, (("bmi",),), 1.0),
+    "body_fat": ("%", (("bodyFat",),), 1.0),
+    "body_water": ("%", (("bodyWater",),), 1.0),
+    "muscle_mass": ("kg", (("muscleMass",),), 1000.0),
+    "bone_mass": ("kg", (("boneMass",),), 1000.0),
+}
+
+
 def _third_party_day(summary: Any) -> bool:
     """A day from another source that still has a usable step count."""
     if not isinstance(summary, dict) or from_garmin(summary):
@@ -273,13 +317,7 @@ def _import_statistics(
     reports for a day is stored as that day's (hourly, at local midnight) mean.
     Re-running the service overwrites the same hours, so it is safe to repeat.
     """
-    from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
-    from homeassistant.components.recorder.statistics import async_add_external_statistics
-
-    try:
-        from homeassistant.components.recorder.models import StatisticMeanType
-    except ImportError:  # older Home Assistant
-        StatisticMeanType = None  # noqa: N806
+    from homeassistant.components.recorder.models import StatisticData
 
     count = 0
     for name, (unit, paths) in BACKFILL_FIELDS.items():
@@ -297,21 +335,101 @@ def _import_statistics(
             except ValueError:
                 continue
             rows.append(StatisticData(start=start, mean=float(value), min=float(value), max=float(value)))
-        if not rows:
+        if _write_series(hass, entry, name, unit, rows):
+            count += 1
+    return count
+
+
+def _write_series(hass: HomeAssistant, entry: GarminConfigEntry, name: str, unit: str | None, rows: list[Any]) -> bool:
+    """Store one series of daily values as an external statistic; False if there is nothing to store."""
+    if not rows:
+        return False
+    from homeassistant.components.recorder.models import StatisticMetaData
+    from homeassistant.components.recorder.statistics import async_add_external_statistics
+
+    try:
+        from homeassistant.components.recorder.models import StatisticMeanType
+    except ImportError:  # older Home Assistant
+        StatisticMeanType = None  # noqa: N806
+
+    metadata: dict[str, Any] = {
+        "has_sum": False,
+        "name": f"{entry.title} {name.replace('_', ' ')}",
+        "source": DOMAIN,
+        "statistic_id": f"{DOMAIN}:{entry.entry_id.lower()}_{name}",
+        "unit_of_measurement": unit,
+    }
+    if StatisticMeanType is not None:
+        metadata["mean_type"] = StatisticMeanType.ARITHMETIC
+    else:
+        metadata["has_mean"] = True
+    if "unit_class" in getattr(StatisticMetaData, "__annotations__", {}):
+        metadata["unit_class"] = None
+    async_add_external_statistics(hass, StatisticMetaData(**metadata), rows)
+    return True
+
+
+def _day_rows(
+    records: list[Any],
+    paths: tuple[tuple[str, ...], ...],
+    *,
+    day_key: str,
+    accept: Any = None,
+    scale: float = 1.0,
+    skip_zero: bool = False,
+) -> list[Any]:
+    """One statistic row per record: the number found at ``paths``, taken at local midnight of the day."""
+    from homeassistant.components.recorder.models import StatisticData
+
+    rows = []
+    for record in records:
+        if not isinstance(record, dict) or (accept is not None and not accept(record)):
             continue
-        metadata: dict[str, Any] = {
-            "has_sum": False,
-            "name": f"{entry.title} {name.replace('_', ' ')}",
-            "source": DOMAIN,
-            "statistic_id": f"{DOMAIN}:{entry.entry_id.lower()}_{name}",
-            "unit_of_measurement": unit,
-        }
-        if StatisticMeanType is not None:
-            metadata["mean_type"] = StatisticMeanType.ARITHMETIC
-        else:
-            metadata["has_mean"] = True
-        if "unit_class" in getattr(StatisticMetaData, "__annotations__", {}):
-            metadata["unit_class"] = None
-        async_add_external_statistics(hass, StatisticMetaData(**metadata), rows)
-        count += 1
+        value = first_number(record, *paths)
+        day = record.get(day_key)
+        if value is None or value < 0 or (skip_zero and value == 0) or not day:
+            continue
+        try:
+            start = dt_util.start_of_local_day(date.fromisoformat(str(day)))
+        except ValueError:
+            continue
+        value = float(value) / scale
+        rows.append(StatisticData(start=start, mean=value, min=value, max=value))
+    return rows
+
+
+def _import_sleep(hass: HomeAssistant, entry: GarminConfigEntry, sleeps: list[Any]) -> int:
+    """Sleep per night (dated by the wake-up day Garmin uses): only nights with measured sleep."""
+    accept = lambda s: (first_number(s, ("sleepTimeSeconds",)) or 0) > 0  # noqa: E731
+    count = 0
+    for name, (unit, paths) in SLEEP_FIELDS.items():
+        rows = _day_rows(sleeps, paths, day_key="calendarDate", accept=accept)
+        count += _write_series(hass, entry, name, unit, rows)
+    return count
+
+
+def _import_hrv(hass: HomeAssistant, entry: GarminConfigEntry, summaries: list[Any]) -> int:
+    count = 0
+    for name, (unit, paths) in HRV_FIELDS.items():
+        rows = _day_rows(summaries, paths, day_key="calendarDate", skip_zero=True)
+        count += _write_series(hass, entry, name, unit, rows)
+    return count
+
+
+# Entries Garmin creates itself when the profile weight is edited are not weighings.
+NOT_A_WEIGHING = ("USER_SETTING", "CHANGE_LOG")
+
+
+def _import_weight(hass: HomeAssistant, entry: GarminConfigEntry, weights: Any) -> int:
+    """Weighings (manual entries or a scale), one value per day; body composition only where Garmin has it."""
+    days = (weights or {}).get("dailyWeightSummaries") if isinstance(weights, dict) else None
+    records = []
+    for item in days or []:
+        latest = item.get("latestWeight") if isinstance(item, dict) else None
+        if isinstance(latest, dict) and str(latest.get("sourceType", "")).upper() not in NOT_A_WEIGHING:
+            records.append({**latest, "calendarDate": latest.get("calendarDate") or item.get("summaryDate")})
+    count = 0
+    for name, (unit, paths, scale) in WEIGHT_FIELDS.items():
+        rows = _day_rows(records, paths, day_key="calendarDate", scale=scale, skip_zero=True)
+        count += _write_series(hass, entry, name, unit, rows)
     return count

@@ -561,7 +561,7 @@
     },
     "backfill_statistics": {
       "name": "Tageswerte als Statistik importieren",
-      "description": "Schreibt Tageswerte in die Langzeitstatistik (extern, ein Wert pro Tag). Kann gefahrlos wiederholt werden.",
+      "description": "Schreibt Tageswerte (Aktivität, Schlaf, HRV, Gewicht) in die Langzeitstatistik (extern, ein Wert pro Tag). Kann gefahrlos wiederholt werden.",
       "fields": {
         "config_entry_id": {
           "name": "Konto",

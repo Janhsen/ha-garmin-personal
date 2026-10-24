@@ -74,9 +74,13 @@ Trainingsstatus, VO2max als Tageswert, Race Predictions. VO2max gibt es nur je A
 * `garmin_personal.search_activities` – Filter wie `activity_type`, `min_distance`, `start_date`,
   `bounding_box`, mit automatischem Blättern.
 * `garmin_personal.download_activity` – Original-ZIP (FIT) in einen erlaubten Ordner.
-* `garmin_personal.backfill_statistics` – schreibt Tageswerte (Schritte, Puls, Stress, Body Battery,
-  Kalorien …) rückwirkend in die **Langzeitstatistik** (externe Statistik `garmin_personal:<entry>_<name>`,
-  ein Wert pro Tag). Wiederholbar, überschreibt dieselben Tage.
+* `garmin_personal.backfill_statistics` – schreibt Tageswerte rückwirkend in die **Langzeitstatistik**
+  (externe Statistik `garmin_personal:<entry>_<name>`, ein Wert pro Tag): Aktivität (Schritte, Puls, Stress,
+  Body Battery, Kalorien …), Schlaf (Dauer, Phasen, Wert, Puls, Schlafbedarf), HRV und Gewicht/Körperwerte.
+  Importiert werden nur echte Garmin-Tage: Tage anderer Quellen und reine Platzhalter-Tage ohne Schritte
+  und Puls werden übersprungen, ebenso Gewichtseinträge, die nur eine Profiländerung sind. Mit
+  `include_third_party_steps` werden zusätzlich Schritte, Distanz und Stockwerke von Tagen übernommen, die
+  andere Apps (z. B. RunGap) in Garmin Connect geschrieben haben. Wiederholbar, überschreibt dieselben Tage.
 
 ## Datenschutz
 
