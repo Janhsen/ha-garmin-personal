@@ -692,6 +692,7 @@ async def async_setup_entry(
         if description.group in runtime.coordinators
     ]
     entities.append(GarminKeyExpirySensor(entry))
+    entities.extend(GarminHistorySensor(entry, key, unit) for key, unit in HISTORY_UNITS.items())
     async_add_entities(entities)
 
 
@@ -800,6 +801,36 @@ class GarminSensor(CoordinatorEntity[GarminCoordinator], RestoreSensor):
             attrs["last_seen"] = self._last_seen
             attrs["held_value"] = self._current() is None
         return attrs or None
+
+
+# translation key of the history sensor -> unit (see history.py)
+HISTORY_UNITS: dict[str, str] = {"heart_rate_history": BPM, "body_battery_history": "%", "spo2_history": "%"}
+
+
+class GarminHistorySensor(SensorEntity):
+    """Carrier of a series' history: recorded states with the real measurement times.
+
+    Disabled by default and never updated live: it has no value of its own (an old value must
+    never look current), only the recorded history written by ``backfill_history`` matters.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_available = True
+
+    def __init__(self, entry: GarminConfigEntry, key: str, unit: str) -> None:
+        """Set up the sensor."""
+        self._attr_translation_key = key
+        self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self._attr_native_unit_of_measurement = unit
+        self._attr_device_info = device_info(entry)
+
+    @property
+    def native_value(self) -> None:
+        """No live value."""
+        return None
 
 
 class GarminKeyExpirySensor(SensorEntity):

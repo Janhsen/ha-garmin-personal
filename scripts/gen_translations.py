@@ -79,6 +79,9 @@ N = {
  "hr_resting_used": ("Resting heart rate (set)", "Ruhepuls (eingestellt)"),
  "hr_lactate_threshold": ("Lactate threshold heart rate", "Laktatschwelle Puls"),
  "key_expires": ("API key expires", "API-Schlüssel läuft ab"),
+ "heart_rate_history": ("Heart rate (history)", "Puls (Verlauf)"),
+ "body_battery_history": ("Body Battery (history)", "Body Battery (Verlauf)"),
+ "spo2_history": ("SpO2 (history)", "SpO2 (Verlauf)"),
 }
 
 # ---------------------------------------------------------------------------
@@ -87,6 +90,9 @@ N = {
 
 # Default icon per sensor (icons.json). Sensors without an entry use Home Assistant's default.
 ICONS = {
+    "heart_rate_history": "heart-pulse",
+    "body_battery_history": "battery-clock",
+    "spo2_history": "water-percent",
     "steps": "shoe-print",
     "total_calories": "fire",
     "active_calories": "fire",
@@ -166,6 +172,8 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
                          "{path} liegt nicht in einem erlaubten Ordner. Gib {folder} in allowlist_external_dirs frei oder wähle einen Pfad im Medienordner."),
     "path_not_zip": ("The target file {path} must end in .zip.", "Die Zieldatei {path} muss auf .zip enden."),
     "download_failed": ("Could not write {path}: {error}", "{path} konnte nicht geschrieben werden: {error}"),
+    "history_write_unsupported": ("Writing the history sensors is not available yet: Home Assistant offers no supported way to store states with past timestamps, and the unsupported route has not been verified. Nothing was requested or written.",
+                                  "Das Schreiben der Verlauf-Sensoren ist noch nicht verfügbar: Home Assistant bietet keinen unterstützten Weg, Zustände mit vergangenen Zeitstempeln zu speichern, und der nicht unterstützte Weg ist noch nicht geprüft. Es wurde nichts abgefragt oder geschrieben."),
     "backfill_running": ("An import is already running for {title}.", "Für {title} läuft bereits ein Import."),
 }
 
@@ -263,7 +271,7 @@ LABELS = load_labels()
 _DESCRIPTORS = parse_descriptors((ROOT / "sensor.py").read_text())
 if len({k for k, _, _ in _DESCRIPTORS}) != len(_DESCRIPTORS):
     raise GeneratorError("sensor.py: duplicate sensor keys")
-keys = [k for k, _, _ in _DESCRIPTORS] + ["key_expires"]
+keys = [k for k, _, _ in _DESCRIPTORS] + ["key_expires", "heart_rate_history", "body_battery_history", "spo2_history"]
 _bad_icons = sorted(k for k in ICONS if k not in keys)
 if _bad_icons:
     raise GeneratorError(f"ICONS has entries without a sensor: {_bad_icons}")
@@ -402,6 +410,15 @@ def build(i: int) -> dict:
                                              "start_date": {"name": t("Start date", "Startdatum"), "description": t("Default: days back from the end date.", "Standard: Tage rückwärts ab Enddatum.")},
                                              "end_date": {"name": t("End date", "Enddatum"), "description": t("Last day to import. Default: today (only completed hours are written, never the running hour).", "Letzter Tag des Imports. Standard: heute (es werden nur abgeschlossene Stunden geschrieben, nie die laufende).")},
                                              "days": {"name": t("Days", "Tage"), "description": t("Number of days back from the end date (at most 366, default 7). Used when no start date is given.", "Anzahl Tage rückwärts ab Enddatum (höchstens 366, Standard 7). Wird ohne Startdatum verwendet.")}}},
+            "backfill_history": {"name": t("Write history sensors (appending only)", "Verlauf-Sensoren schreiben (nur anhängend)"),
+                                 "description": t("Writes the real measuring points of heart rate, Body Battery and SpO2 with their own timestamps as recorded states of the (history) sensors, so the History panel shows them. Appends only: points already written are never written again, overwritten or deleted. Not available yet; see the README.",
+                                                  "Schreibt die echten Messpunkte von Puls, Body Battery und SpO2 mit ihren eigenen Zeitstempeln als aufgezeichnete Zustände der (Verlauf-)Sensoren, damit der Bereich Verlauf sie zeigt. Nur anhängend: bereits geschriebene Punkte werden nie erneut geschrieben, überschrieben oder gelöscht. Noch nicht verfügbar; siehe README."),
+                                 "fields": {"config_entry_id": {"name": t("Account", "Konto"), "description": t("Garmin account. May be left out only if exactly one account is set up.", "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist.")},
+                                            "start_date": {"name": t("Start date", "Startdatum"), "description": t("Default: days back from the end date.", "Standard: Tage rückwärts ab Enddatum.")},
+                                            "end_date": {"name": t("End date", "Enddatum"), "description": t("Last day. Default: today.", "Letzter Tag. Standard: heute.")},
+                                            "days": {"name": t("Days", "Tage"), "description": t("Number of days back from the end date (at most 366, default 1).", "Anzahl Tage rückwärts ab Enddatum (höchstens 366, Standard 1).")},
+                                            "series": {"name": t("Series", "Reihen"), "description": t("heart_rate, body_battery, spo2 (default: all).", "heart_rate, body_battery, spo2 (Standard: alle).")},
+                                            "confirm_rewrite": {"name": t("Confirm without check", "Ohne Prüfung bestätigen"), "description": t("Only if the record of written points is lost and the recorder cannot be checked: write the requested days anyway. This can duplicate states that exist already.", "Nur wenn das Protokoll der geschriebenen Punkte verloren ist und der Recorder nicht geprüft werden kann: die angeforderten Tage trotzdem schreiben. Das kann bereits vorhandene Zustände verdoppeln.")}}},
         },
         "exceptions": {k: {"message": v[i]} for k, v in EXCEPTIONS.items()},
     }

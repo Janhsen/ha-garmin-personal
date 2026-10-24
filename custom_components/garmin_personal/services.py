@@ -20,6 +20,7 @@ from homeassistant.core import (
 )
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .api import ENDPOINT_NAMES, GarminAuthError, GarminError, GarminRateLimitError, split_range
@@ -29,6 +30,7 @@ from .const import (
     ATTR_CONFIG_ENTRY_ID,
     DOMAIN,
     SERVICE_BACKFILL,
+    SERVICE_BACKFILL_HISTORY,
     SERVICE_BACKFILL_INTRADAY,
     SERVICE_DOWNLOAD_ACTIVITY,
     SERVICE_FETCH,
@@ -45,6 +47,14 @@ from .intraday import (
     merge_points,
     note_unknown_format,
 )
+from .history import (
+    HISTORY_KEYS,
+    HistoryWriteUnsupported,
+    Ledger,
+    recorded_points,
+    write_history_states,
+)
+from . import history as history_mod
 from .stats_writer import build_metadata, write_hourly
 from .values import first_number, from_garmin, usable_summary
 
@@ -85,6 +95,10 @@ ERR_PATH_NOT_ALLOWED = "path_not_allowed"
 ERR_PATH_NOT_ZIP = "path_not_zip"
 ERR_DOWNLOAD_FAILED = "download_failed"
 ERR_BACKFILL_RUNNING = "backfill_running"
+ERR_HISTORY_UNSUPPORTED = "history_write_unsupported"
+ATTR_SERIES = "series"
+ATTR_CONFIRM = "confirm_rewrite"
+MAX_HISTORY_DAYS = 366
 
 
 def _invalid(key: str, **placeholders: Any) -> ServiceValidationError:
@@ -169,6 +183,17 @@ INTRADAY_SCHEMA = vol.Schema(
         vol.Optional(ATTR_DAYS, default=INTRADAY_DEFAULT_DAYS): vol.All(
             vol.Coerce(int), vol.Range(min=1, max=MAX_INTRADAY_DAYS)
         ),
+    }
+)
+
+HISTORY_SCHEMA = vol.Schema(
+    {
+        **BASE,
+        vol.Optional(ATTR_START): cv.date,
+        vol.Optional(ATTR_END): cv.date,
+        vol.Optional(ATTR_DAYS, default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_HISTORY_DAYS)),
+        vol.Optional(ATTR_SERIES): vol.All(cv.ensure_list, [vol.In(tuple(HISTORY_KEYS))]),
+        vol.Optional(ATTR_CONFIRM, default=False): cv.boolean,
     }
 )
 
@@ -404,6 +429,24 @@ def async_register_services(hass: HomeAssistant) -> None:
         async with lock:
             return await _run_intraday_backfill(hass, entry, start, end, end >= today)
 
+    async def backfill_history(call: ServiceCall) -> ServiceResponse:
+        entry = _get_entry(hass, call)
+        if not history_mod.WRITE_SUPPORTED:  # before any request to Garmin
+            raise _failed(ERR_HISTORY_UNSUPPORTED)
+        today = dt_util.now().date()
+        explicit_end = call.data.get(ATTR_END)
+        end = min(explicit_end, today) if explicit_end else today
+        start = call.data.get(ATTR_START) or (end - timedelta(days=call.data.get(ATTR_DAYS, 1) - 1))
+        _check_span(start, end, MAX_HISTORY_DAYS)
+        series = [s for s in (call.data.get(ATTR_SERIES) or list(HISTORY_KEYS)) if s in HISTORY_KEYS]
+        lock = backfill_locks.setdefault(entry.entry_id, asyncio.Lock())
+        if lock.locked():
+            raise _invalid(ERR_BACKFILL_RUNNING, title=entry.title)
+        async with lock:
+            return await _run_history_backfill(
+                hass, entry, start, end, series, bool(call.data.get(ATTR_CONFIRM, False))
+            )
+
     async def _run_backfill(
         entry: GarminConfigEntry, start: date, end: date, third_party: bool, partial_day: bool
     ) -> dict[str, Any]:
@@ -494,6 +537,13 @@ def async_register_services(hass: HomeAssistant) -> None:
         SERVICE_BACKFILL,
         backfill,
         schema=BACKFILL_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_BACKFILL_HISTORY,
+        backfill_history,
+        schema=HISTORY_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
@@ -606,6 +656,89 @@ async def _run_intraday_backfill(
         result["error"] = str(stopped)
         result["last_completed_day"] = last_done.isoformat() if last_done else None
     return result
+
+
+async def _run_history_backfill(
+    hass: HomeAssistant, entry: GarminConfigEntry, start: date, end: date, series: list[str], confirm: bool
+) -> dict[str, Any]:
+    """Append the real measuring points of each day to the history sensors; never rewrite.
+
+    A point is written only if the ledger (and, for days it does not know, the recorder) has
+    never seen its timestamp. Same timestamp with another value is counted, not written.
+    """
+    api = entry.runtime_data.api
+    store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.history_ledger")
+    ledger = Ledger(await store.async_load())
+    result = {"written": 0, "already_written": 0, "changed": 0}
+    unverified = adopted = days_done = 0
+    unreadable: set[str] = set()
+    errors: dict[str, str] = {}
+    stopped: GarminError | None = None
+    last_done: date | None = None
+    day = start
+    while day <= end and stopped is None:
+        iso = day.isoformat()
+        for key in series:
+            try:
+                parsed = SERIES[key].parse(await fetch_series(api, key, day))
+            except (GarminRateLimitError, GarminAuthError) as err:
+                stopped = err
+                break
+            except GarminError as err:
+                errors.setdefault(f"{key}_error", str(err))
+                continue
+            if parsed is None:
+                note_unknown_format(key)
+                unreadable.add(key)
+                continue
+            points = merge_points(parsed)
+            if not points:
+                continue
+            if not ledger.knows(key, iso):
+                try:
+                    found = await recorded_points(hass, entry, key, day)
+                except HistoryWriteUnsupported:
+                    if not confirm:
+                        unverified += 1  # cannot tell what is there: write nothing
+                        continue
+                else:
+                    if found:
+                        ledger.record(key, iso, sorted(found.items()))
+                        adopted += len(found)
+            new, same, changed = ledger.classify(key, iso, points)
+            result["already_written"] += same
+            result["changed"] += changed
+            if new:
+                result["written"] += await write_history_states(hass, entry, key, new)
+                ledger.record(key, iso, new)
+        if stopped is not None:
+            break
+        last_done = day
+        days_done += 1
+        ledger.compact(end.isoformat())
+        await store.async_save(ledger.data)
+        day += timedelta(days=1)
+    await store.async_save(ledger.data)
+    if stopped is not None and last_done is None and not result["written"]:
+        raise _failed(ERR_GARMIN_FAILED, error=stopped) from stopped
+    out: dict[str, Any] = {
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "complete": stopped is None,
+        "days_completed": days_done,
+        "points_written": result["written"],
+        "points_already_written": result["already_written"],
+        "changed_values_skipped": result["changed"],
+        "points_found_in_recorder": adopted,
+        "days_skipped_unverified": unverified,
+        **errors,
+    }
+    if unreadable:
+        out["unknown_format"] = sorted(unreadable)
+    if stopped is not None:
+        out["error"] = str(stopped)
+        out["last_completed_day"] = last_done.isoformat() if last_done else None
+    return out
 
 
 SLEEP_FIELDS: dict[str, tuple[str | None, tuple[tuple[str, ...], ...]]] = {

@@ -1,6 +1,15 @@
 {
   "entity": {
     "sensor": {
+      "heart_rate_history": {
+        "default": "mdi:heart-pulse"
+      },
+      "body_battery_history": {
+        "default": "mdi:battery-clock"
+      },
+      "spo2_history": {
+        "default": "mdi:water-percent"
+      },
       "steps": {
         "default": "mdi:shoe-print"
       },

@@ -83,6 +83,7 @@ SERVICE_SEARCH_ACTIVITIES: Final = "search_activities"
 SERVICE_DOWNLOAD_ACTIVITY: Final = "download_activity"
 SERVICE_BACKFILL: Final = "backfill_statistics"
 SERVICE_BACKFILL_INTRADAY: Final = "backfill_intraday"
+SERVICE_BACKFILL_HISTORY: Final = "backfill_history"
 
 ATTR_CONFIG_ENTRY_ID: Final = "config_entry_id"
 

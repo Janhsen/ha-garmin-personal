@@ -614,6 +614,15 @@
       },
       "key_expires": {
         "name": "API key expires"
+      },
+      "heart_rate_history": {
+        "name": "Heart rate (history)"
+      },
+      "body_battery_history": {
+        "name": "Body Battery (history)"
+      },
+      "spo2_history": {
+        "name": "SpO2 (history)"
       }
     },
     "binary_sensor": {
@@ -771,6 +780,36 @@
           "description": "Number of days back from the end date (at most 366, default 7). Used when no start date is given."
         }
       }
+    },
+    "backfill_history": {
+      "name": "Write history sensors (appending only)",
+      "description": "Writes the real measuring points of heart rate, Body Battery and SpO2 with their own timestamps as recorded states of the (history) sensors, so the History panel shows them. Appends only: points already written are never written again, overwritten or deleted. Not available yet; see the README.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Garmin account. May be left out only if exactly one account is set up."
+        },
+        "start_date": {
+          "name": "Start date",
+          "description": "Default: days back from the end date."
+        },
+        "end_date": {
+          "name": "End date",
+          "description": "Last day. Default: today."
+        },
+        "days": {
+          "name": "Days",
+          "description": "Number of days back from the end date (at most 366, default 1)."
+        },
+        "series": {
+          "name": "Series",
+          "description": "heart_rate, body_battery, spo2 (default: all)."
+        },
+        "confirm_rewrite": {
+          "name": "Confirm without check",
+          "description": "Only if the record of written points is lost and the recorder cannot be checked: write the requested days anyway. This can duplicate states that exist already."
+        }
+      }
     }
   },
   "exceptions": {
@@ -809,6 +848,9 @@
     },
     "download_failed": {
       "message": "Could not write {path}: {error}"
+    },
+    "history_write_unsupported": {
+      "message": "Writing the history sensors is not available yet: Home Assistant offers no supported way to store states with past timestamps, and the unsupported route has not been verified. Nothing was requested or written."
     },
     "backfill_running": {
       "message": "An import is already running for {title}."

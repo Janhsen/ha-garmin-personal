@@ -153,3 +153,38 @@ backfill_intraday:
           max: 366
           unit_of_measurement: d
           mode: box
+backfill_history:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: garmin_personal
+    start_date:
+      example: "2026-10-23"
+      selector:
+        date:
+    end_date:
+      example: "2026-10-23"
+      selector:
+        date:
+    days:
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 366
+          unit_of_measurement: d
+          mode: box
+    series:
+      example: heart_rate
+      selector:
+        select:
+          multiple: true
+          options:
+            - heart_rate
+            - body_battery
+            - spo2
+    confirm_rewrite:
+      default: false
+      selector:
+        boolean:

@@ -19,6 +19,11 @@ each GitHub release shows the matching section.
   `end_date`, `config_entry_id`; at most 366 days, one request per day and series, one run per account at a time,
   partial result with `complete`, `last_completed_day` and `error` after an interruption).
 
+- Scaffold for history sensors: disabled diagnostic sensors *Heart rate / Body Battery / SpO2 (history)* and the
+  service `backfill_history` with an append-only ledger (`history.py`: exact timestamps for 7 days, marks for older
+  days, recorder check when the ledger is lost, `confirm_rewrite`). The service answers `history_write_unsupported`
+  until writing states with past timestamps is verified on a real Home Assistant; nothing is written or requested.
+
 ### Changed
 - The metadata of external statistics is now built in one place (`stats_writer.py`); the existing daily statistics are
   unchanged.

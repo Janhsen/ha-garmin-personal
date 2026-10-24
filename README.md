@@ -192,6 +192,16 @@ with a translated error that lists the accounts. All service errors are translat
   `complete`, `last_completed_day` and `error` after an interruption, plus `heart_rate_hours`, `body_battery_hours`,
   `spo2_hours`, `days_with_data`, `statistic_series` and `statistic_rows`; `unknown_format` lists series whose
   answer this version cannot read.
+* `garmin_personal.backfill_history` – **scaffold, not active yet.** Meant to write the real measuring points of heart
+  rate, Body Battery and SpO2 with their own timestamps as recorded states of the disabled-by-default diagnostic
+  sensors *Heart rate (history)*, *Body Battery (history)* and *SpO2 (history)* (the live sensors never get old values),
+  so that the History panel shows them. It is append-only: a persistent record per series and day (exact timestamps and
+  values for the last 7 days, count/first/last/checksum for older days) decides "written already?", never just a last
+  timestamp; late-synced older points are added, already written points are never rewritten, overwritten or deleted,
+  and a changed value for a known timestamp is only counted (`changed_values_skipped`). If the record is lost, the
+  recorder is read first; without that check nothing is written unless `confirm_rewrite` is true. Because Home Assistant
+  has no supported way to store states with past timestamps, the service currently answers `history_write_unsupported`
+  before asking Garmin for anything. The sensors exist (disabled) and show no value.
 
 ## Translations
 
