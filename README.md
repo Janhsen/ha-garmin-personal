@@ -1,121 +1,115 @@
-# Garmin Connect Personal API für Home Assistant
+# Garmin Connect Personal API for Home Assistant
 
-Custom-Integration (HACS), die **alle 26 lesenden Endpunkte** der offiziellen
-Garmin Connect Personal API bereitstellt: als Sensoren für die Standardwerte und
-als Services für alles andere. Es werden keine Werte berechnet oder erfunden –
-was Garmin nicht liefert, bleibt leer (`unbekannt`).
+*[Deutsche Fassung](README.de.md)*
 
-> **Stand:** v0.3.2, läuft gegen einen echten Garmin-Account in Home Assistant.
-> Die Logik (Token, Retry, Zeitfenster, Filter, Wert-Extraktion, Sensorliste) ist
-> mit simulierten Antworten getestet. Die Feldnamen stammen aus dem Swagger, den
-> dokumentierten Modellen und echten Antworten. Sensoren, die dauerhaft leer
-> bleiben, bitte mit Diagnose und Log melden.
+Custom integration (HACS) exposing **all 26 read endpoints** of the official Garmin Connect Personal API:
+sensors for the common values and services for everything else. Nothing is calculated or invented:
+what Garmin does not deliver stays empty (`unknown`).
+
+> **Status:** v0.3.5, running against a real Garmin account in Home Assistant. Tokens, retries, time windows,
+> filters, value extraction and the sensor list are tested with simulated responses. Field names come from the
+> Swagger file, the documented models and real responses. Please report sensors that stay empty permanently,
+> with the diagnostics and the log.
 
 ## Installation
 
-1. HACS → Benutzerdefinierte Repositories → dieses Repository als *Integration* hinzufügen.
-2. Installieren, Home Assistant neu starten.
-3. Auf <https://connect.garmin.com/app/settings/personalApiToken> einen Schlüssel erzeugen
-   (Garmin zeigt ihn **nur einmal**) und die gewählte Gültigkeit merken.
-4. Einstellungen → Geräte & Dienste → Integration hinzufügen → *Garmin Connect Personal API*.
-   Für jede Person eine eigene Instanz mit eigenem Schlüssel anlegen.
+1. HACS → Custom repositories → add this repository as *Integration*.
+2. Download it and restart Home Assistant.
+3. Create a key at <https://connect.garmin.com/app/settings/personalApiToken>
+   (Garmin shows it **only once**) and note the validity you chose.
+4. Settings → Devices & services → Add integration → *Garmin Connect Personal API*.
+   Create one entry per person, each with its own key.
 
-Der Schlüssel liegt nur in Home Assistant. Gib ihn nirgends sonst ein.
+The key is stored only in Home Assistant. Do not enter it anywhere else.
 
-## Schlüssel-Ablauf
+## Key expiry
 
-Garmin verrät das Ablaufdatum nicht über die API. Die Integration rechnet ab dem
-Anlegen mit der gewählten Gültigkeit (30/90/180/365 Tage), zeigt ein Diagnose-Sensor
-„API-Schlüssel läuft ab“ und legt **7 Tage vorher** einen Reparatur-Hinweis an.
-Erneuern: neuen Schlüssel erzeugen → am Eintrag *Neu konfigurieren*. Wird der Schlüssel
-vorher abgelehnt, startet Home Assistant automatisch die Neu-Anmeldung.
+Garmin does not reveal the expiry date through the API. The integration counts from the moment you add the key
+with the validity you picked (30/90/180/365 days), shows a diagnostic sensor "API key expires" and creates a
+repair issue **7 days before**. To renew: create a new key, then *Reconfigure* the entry. If Garmin rejects the key
+earlier, Home Assistant starts re-authentication automatically.
 
-## Sensoren (~100)
+## Sensors (~100)
 
-Abruf: Der Tageswert (mit der Zeit des letzten Uhr-Syncs) wird alle 5 Minuten abgefragt, das ist eine
-einzige Anfrage. Nur wenn sich die Sync-Zeit ändert, werden SpO2, Trinkmenge, Schlaf, Körperwerte und
-Aktivitäten geholt. Zusätzlich gibt es einen Fallback (Tageswerte stündlich, Schlaf alle 2 Stunden,
-Körperwerte und Aktivitäten stündlich) für Daten, die ohne Uhr-Sync entstehen, z. B. Waage oder App-Einträge.
+Polling: the daily summary (which carries the time of the last watch sync) is requested every 5 minutes, a single
+request. Only when the sync time changes are SpO2, hydration, sleep, body values and activities fetched. A
+fallback covers data that appears without a watch sync, e.g. a scale or app entries (daily values hourly, sleep
+every 2 hours, body values and activities hourly).
 
-Gruppen (Fallback-Intervall in Klammern):
-
-| Gruppe | Inhalt |
+| Group | Content |
 |---|---|
-| Tageswerte (Tageswert 5 min, Rest bei neuem Sync / stündlich) | Schritte, Distanz, Kalorien, Intensitätsminuten, Stockwerke, Puls (Ruhe/Min/Max), Stress, Body Battery, SpO2, Atmung, Trinkmenge, letzte Synchronisation |
-| Schlaf & HRV (bei neuem Sync, sonst 2 h) | Dauer, Phasen, Schlafwert + Teilwerte, Beginn/Ende, Schlafbedarf, HRV letzte Nacht/Woche/Status |
-| Körper (bei neuem Sync, sonst 1 h) | Gewicht, BMI, Körperfett/-wasser, Muskel-/Knochenmasse, Fitnessalter |
-| Aktivitäten (bei neuem Sync, sonst 1 h) | Letzte Aktivität (Name, Typ, Start, Distanz, Dauer, Kalorien, Puls, Trainingseffekt, Belastung, VO2max, Höhenmeter), Wellness-Aktivitäten |
-| Profil (24 h) | Konto, eingestellte Herzfrequenzzonen |
+| Daily values (summary 5 min, the rest on new sync / hourly) | steps, distance, calories, intensity minutes, floors, heart rate (rest/min/max), stress, Body Battery, SpO2, respiration, hydration, last sync |
+| Sleep & HRV (on new sync, otherwise 2 h) | duration, stages, sleep score and sub-scores, start/end, sleep need, HRV last night/week/status |
+| Body (on new sync, otherwise 1 h) | weight, BMI, body fat/water, muscle/bone mass, fitness age |
+| Activities (on new sync, otherwise 1 h) | last activity (name, type, start, distance, duration, calories, heart rate, training effect, load, VO2max, elevation), wellness activities |
+| Profile (24 h) | account, configured heart rate zones |
 
-Viele Detailsensoren sind standardmäßig **deaktiviert** und können einzeln aktiviert werden.
-Beim ersten vollständigen Abruf werden außerdem einmalig die Sensoren deaktiviert, für die Garmin
-zwar den Endpunkt beantwortet, aber keinen Wert für das Feld liefert (z. B. Körperfett ohne
-Körperanalyse-Waage). Endpunkte, die noch gar nichts geliefert haben (z. B. Schlaf am frühen Morgen),
-bleiben unberührt. Wieder einschalten geht jederzeit unter Einstellungen → Entitäten.
-Zusätzlich: Binary-Sensor *Uhr-Synchronisation überfällig* und Event-Entität *Aktivität*
-(feuert `activity_finished` bei jeder neuen Aktivität, nicht beim ersten Start).
+Many detail sensors are **disabled by default** and can be enabled one by one. After the first full fetch, sensors
+for which Garmin answers the endpoint but returns no value for the field (e.g. body fat without a body-composition
+scale) are disabled once. Endpoints that have not delivered anything yet (e.g. sleep early in the morning) are left
+alone. You can re-enable any sensor under Settings → Entities. Also included: binary sensor *Watch sync overdue*
+and the event entity *Activity* (fires `activity_finished` for every new activity, not on first start).
 
-Optionen: Intervall der Sync-Prüfung, Sync-Warnschwelle, und ob Tagesverläufe
-(Puls, Body Battery, SpO2) als Attribute angehängt werden (groß, nicht im Recorder gespeichert).
-Nur mit dieser Option werden die zusätzlichen Endpunkte für Puls- und Body-Battery-Verlauf abgefragt.
+Options: sync check interval, sync warning threshold, and whether intraday series (heart rate, Body Battery, SpO2)
+are attached as attributes (large, not stored in the recorder). Only with this option are the extra endpoints for
+heart rate and Body Battery series requested.
 
-Abrufmenge: etwa 290 Anfragen pro Tag und Konto für die Sync-Prüfung, dazu etwa 9 je Uhr-Sync
-und die Fallbacks, insgesamt grob 400 bis 500 (ohne Tagesverläufe).
-Garmin nennt für die Personal API keine Limits und bietet keinen Push; es wird nur abgefragt.
+Request volume: about 290 requests per day and account for the sync check, plus about 9 per watch sync and the
+fallbacks, roughly 400 to 500 in total (without intraday series). Garmin names no limits for the Personal API and
+offers no push; the integration only polls.
 
-Nicht in der Personal API enthalten (und deshalb nicht vorhanden): Training Readiness,
-Trainingsstatus, VO2max als Tageswert, Race Predictions. VO2max gibt es nur je Aktivität.
+Not part of the Personal API (and therefore not available): Training Readiness, training status, VO2max as a daily
+value, race predictions. VO2max exists only per activity.
 
-## Services (Antwort als Daten, z. B. für Skripte und Templates)
+## Services (responses as data, e.g. for scripts and templates)
 
-* `garmin_personal.fetch` – jeder Endpunkt per Kurzname (`daily_summary`, `sleep`, `hrv_summaries`,
-  `stress`, `menstrual_summary`, `nutrition`, `activity`, …) für Tag oder Zeitraum. Lange Zeiträume
-  werden automatisch in Garmins erlaubte Fenster zerlegt.
-* `garmin_personal.search_activities` – Filter wie `activity_type`, `min_distance`, `start_date`,
-  `bounding_box`, mit automatischem Blättern.
-* `garmin_personal.download_activity` – Original-ZIP (FIT) in einen erlaubten Ordner.
-* `garmin_personal.backfill_statistics` – schreibt Tageswerte rückwirkend in die **Langzeitstatistik**
-  (externe Statistik `garmin_personal:<entry>_<name>`, ein Wert pro Tag): Aktivität (Schritte, Puls, Stress,
-  Body Battery, Kalorien …), Schlaf (Dauer, Phasen, Wert, Puls, Schlafbedarf), HRV und Gewicht/Körperwerte.
-  Importiert werden nur echte Garmin-Tage: Tage anderer Quellen und reine Platzhalter-Tage ohne Schritte
-  und Puls werden übersprungen, ebenso Gewichtseinträge, die nur eine Profiländerung sind. Mit
-  `include_third_party_steps` werden zusätzlich Schritte, Distanz und Stockwerke von Tagen übernommen, die
-  andere Apps (z. B. RunGap) in Garmin Connect geschrieben haben. Wiederholbar, überschreibt dieselben Tage.
+* `garmin_personal.fetch` – any endpoint by short name (`daily_summary`, `sleep`, `hrv_summaries`, `stress`,
+  `menstrual_summary`, `nutrition`, `activity`, …) for a day or a range. Long ranges are split into the windows
+  Garmin allows.
+* `garmin_personal.search_activities` – filters such as `activity_type`, `min_distance`, `start_date`,
+  `bounding_box`, with automatic paging.
+* `garmin_personal.download_activity` – original ZIP (FIT) into an allowed folder.
+* `garmin_personal.backfill_statistics` – writes daily values retroactively into **long-term statistics**
+  (external statistic `garmin_personal:<entry>_<name>`, one value per day): activity (steps, heart rate, stress,
+  Body Battery, calories …), sleep (duration, stages, score, heart rate, sleep need), HRV and weight/body values.
+  Only real Garmin days are imported: days from other sources and pure placeholder days without steps and heart
+  rate are skipped, as are weight entries that are only a profile edit. With `include_third_party_steps`, steps,
+  distance and floors of days written to Garmin Connect by other apps (e.g. RunGap) are imported too. Repeatable;
+  it overwrites the same days.
 
-## Übersetzungen
+## Translations
 
-Alle Namen, Services, Dialoge und Hinweise gibt es auf Deutsch und Englisch (`strings.json`, `translations/`,
-erzeugt mit `scripts/gen_translations.py`). Feste Wortlisten von Garmin (Bewertung EXCELLENT/GOOD/FAIR/POOR,
-HRV-Status, Stressstufe, Aktivitätstyp, Schlaf-Teilwerte) sind ENUM-Sensoren: Der Zustand bleibt der englische
-Schlüssel (z. B. `fair`), die Anzeige wird übersetzt. Unbekannte Werte erscheinen unübersetzt, nichts wird
-erfunden. Schlaf-Feedback und Schlaf-Einsicht sind nur für bisher beobachtete Schlüssel übersetzt (wörtlich aus dem Schlüssel).
-Das HRV-Feedback (`HRV_BALANCED_2` bis `_8`, `ONBOARDING_1`) bleibt unübersetzt: Es sind nummerierte Textvarianten
-von Garmin, deren Wortlaut die API nicht liefert.
+All names, services, dialogs and notices are available in English and German (`strings.json`, `translations/`,
+generated with `scripts/gen_translations.py`). Fixed word lists from Garmin (rating EXCELLENT/GOOD/FAIR/POOR, HRV
+status, stress level, activity type, sleep sub-scores, sleep feedback and insight) are ENUM sensors: the state
+stays the English key (e.g. `fair`) and Home Assistant shows the translation. Sleep feedback, insight and the
+personal insight are translated literally from the key, only for keys seen in real responses. Unknown values are
+shown untranslated, logged once at info level, and never hidden. HRV feedback (`HRV_BALANCED_2` to `_8`,
+`ONBOARDING_1`) stays untranslated: these are numbered text variants whose wording the API does not provide.
 
-## Verlauf und Langzeitstatistik
+## History and long-term statistics
 
-* Live-Sensoren erscheinen im Verlauf erst ab dem Zeitpunkt, an dem sie angelegt wurden.
-* Rückwirkend importierte Tageswerte (`backfill_statistics`) sind externe Statistiken. Der Bereich *Verlauf* zeigt
-  sie nicht; sie erscheinen in einer *Statistik-Diagramm*-Karte und unter Entwicklerwerkzeuge → Statistiken.
+* Live sensors appear in the History panel only from the moment they were created.
+* Retroactively imported daily values (`backfill_statistics`) are external statistics. The History panel does not
+  show them; use a *Statistics graph* card or Developer tools → Statistics.
 
-## Datenschutz
+## Privacy
 
-Gesundheitsdaten. Menstruations- und Ernährungsdaten gibt es **nur** über Services auf ausdrücklichen
-Abruf, nie als Sensor. Die Diagnose enthält weder Schlüssel noch Messwerte.
+Health data. Menstrual and nutrition data are available **only** through services on explicit request, never as
+sensors. Diagnostics contain neither the key nor measurements.
 
-## Garmin-Eigenheiten, die berücksichtigt sind
+## Garmin quirks that are handled
 
-Zeitraumgrenzen (Schritte/Stress 28 Tage, Schlaf/Hydration/Body Battery 31 Tage, HRV 365 Tage),
-maximal ~45 Aktivitäten je Seite, Wiederholung bei 429/5xx mit `Retry-After`, ein erneuter
-Token-Tausch bei 401, Zeitstempel als ISO oder Millisekunden. `weight/all` liefert bei Garmin
-derzeit immer HTTP 400 und ist nur der Vollständigkeit halber über `fetch` erreichbar.
+Range limits (steps/stress 28 days, sleep/hydration/Body Battery 31 days, HRV 365 days), about 45 activities per
+page, retry on 429/5xx honouring `Retry-After`, a new token exchange on 401, timestamps as ISO or milliseconds.
+`weight/all` currently always returns HTTP 400 at Garmin and is reachable via `fetch` only for completeness.
 
-## Entwicklung
+## Development
 
 ```
 python3 -I tests/test_api.py && python3 -I tests/test_values.py && python3 -I tests/test_sensors.py
-python3 -I scripts/gen_translations.py   # erzeugt strings.json und translations/
+python3 -I scripts/gen_translations.py   # generates strings.json and translations/
 ```
-Die Tests brauchen weder Home Assistant noch Netzwerk.
+The tests need neither Home Assistant nor network access.
 
-Persönliche Nutzung laut Garmin-Bedingungen der Personal API.
+Personal use according to Garmin's terms for the Personal API.
