@@ -25,6 +25,4 @@ jobs:
         with:
           python-version: "3.13"
       - run: |
-          python -I tests/test_api.py
-          python -I tests/test_values.py
-          python -I tests/test_sensors.py
+          for t in tests/test_*.py; do python -I "$t" || exit 1; done
