@@ -6,12 +6,37 @@ on:
       - custom_components/garmin_personal/manifest.json
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  # A release goes out only after the tests, the lint and hassfest are green.
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: pip install "ruff==0.16.9"
+      - run: ruff check .
+      - run: |
+          for t in tests/test_*.py; do python3 -I "$t" || exit 1; done
+  hassfest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: home-assistant/actions/hassfest@master
+  release:
+    needs: [tests, hassfest]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
       - name: Version lesen
         id: version
         run: echo "tag=v$(python3 -c "import json;print(json.load(open('custom_components/garmin_personal/manifest.json'))['version'])")" >> "$GITHUB_OUTPUT"

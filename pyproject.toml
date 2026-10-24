@@ -1,0 +1,25 @@
+# Tool configuration only; the integration itself is installed by HACS, not built from here.
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+# Deliberately small: real errors (E4/E7/E9/F), whitespace (W) and import order (I).
+# Long lines (E501) are not enforced; stricter sets (B, UP, SIM, ASYNC, RUF) would
+# need a larger clean-up and are left for later.
+select = ["E4", "E7", "E9", "F", "W", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components"]
+
+[tool.ruff.lint.per-file-ignores]
+# Known findings in files that other work streams were changing when this was added.
+# Remove an entry once `ruff check` is clean for that file.
+"custom_components/garmin_personal/sensor.py" = ["I001"]
+"custom_components/garmin_personal/services.py" = ["I001"]
+"scripts/gen_translations.py" = ["E402", "I001", "E731"]
+"tests/test_coordinator.py" = ["F841"]
+"tests/test_sensors.py" = ["I001"]
+# The tests put tests/ on sys.path first and load the stubs before the package.
+"tests/*.py" = ["E402"]

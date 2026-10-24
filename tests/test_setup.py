@@ -145,15 +145,9 @@ class Misc(unittest.TestCase):
         self.assertTrue(stubs.run(gp.async_setup(hass, {})))
         self.assertTrue(hass.services.has_service(DOMAIN, "fetch"))
 
-    def test_reload_only_on_option_change(self):
-        hass = stubs.FakeHass()
-        entry = entry_with({}, options={"a": 1})
-        entry.runtime_data.options = {"a": 1}
-        stubs.run(gp._async_reload_on_options(hass, entry))
-        self.assertEqual(hass.config_entries.reloaded, [])
-        entry.options = {"a": 2}
-        stubs.run(gp._async_reload_on_options(hass, entry))
-        self.assertEqual(hass.config_entries.reloaded, ["E1"])
+    def test_no_update_listener_is_left_behind(self):
+        """Options reload through OptionsFlowWithReload; a listener would double the reload."""
+        self.assertFalse(hasattr(gp, "_async_reload_on_options"))
 
     def test_platforms(self):
         self.assertEqual([p.value for p in gp.PLATFORMS], ["sensor", "binary_sensor", "calendar", "event"])
