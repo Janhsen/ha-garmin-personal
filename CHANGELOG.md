@@ -3,7 +3,7 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
-## Unreleased
+## 0.4.0
 
 Requires Home Assistant 2025.10.0 or newer (`hacs.json`). Version number not yet set.
 
