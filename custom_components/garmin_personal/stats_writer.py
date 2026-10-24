@@ -21,6 +21,14 @@ def statistic_id(entry_id: str, name: str) -> str:
     return f"{DOMAIN}:{entry_id.lower()}_{name}"
 
 
+def display_name(title: str, name: str) -> str:
+    """``Alex`` + ``heart_rate_hourly`` -> ``Alex heart rate (hourly)``; only the name changes, never the id."""
+    words = name.replace("_", " ")
+    if words.endswith(" hourly"):
+        words = f"{words[: -len(' hourly')]} (hourly)"
+    return f"{title} {words}"
+
+
 def build_metadata(entry_id: str, title: str, name: str, unit: str | None) -> Any:
     """Metadata of an external statistic with mean (no sum), for the installed Home Assistant."""
     from homeassistant.components.recorder.models import StatisticMetaData
@@ -34,7 +42,7 @@ def build_metadata(entry_id: str, title: str, name: str, unit: str | None) -> An
     # places, e.g. ``sleep_respiration``): renaming would orphan the history already stored.
     metadata: dict[str, Any] = {
         "has_sum": False,
-        "name": f"{title} {name.replace('_', ' ')}",
+        "name": display_name(title, name),
         "source": DOMAIN,
         "statistic_id": statistic_id(entry_id, name),
         "unit_of_measurement": unit,

@@ -118,7 +118,7 @@ class Flow(Base):
                                       "garmin_personal:e1_spo2_hourly"})
         hr = metas["garmin_personal:e1_heart_rate_hourly"]
         self.assertEqual((hr["unit_of_measurement"], hr["has_sum"], hr["source"]), ("bpm", False, DOMAIN))
-        self.assertEqual(hr["name"], "Alex heart rate hourly")
+        self.assertEqual(hr["name"], "Alex heart rate (hourly)")
         self.assertEqual(metas["garmin_personal:e1_spo2_hourly"]["unit_of_measurement"], "%")
         self.assertIn("mean_type", hr)
         import re  # Home Assistant's rule for external statistic ids

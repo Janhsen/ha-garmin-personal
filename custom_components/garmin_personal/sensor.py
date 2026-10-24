@@ -32,6 +32,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import OPT_INTRADAY
 from .coordinator import GarminConfigEntry, GarminCoordinator
 from .entity import device_info
+from .history import HISTORY_KEYS, manager_for
 from .labels import LABELS
 from .repairs import key_expires_at
 from .values import (
@@ -64,6 +65,7 @@ KCAL = "kcal"
 STEPS = "steps"
 MINUTES = UnitOfTime.MINUTES
 SECONDS = UnitOfTime.SECONDS
+YEARS = UnitOfTime.YEARS
 
 ATTRIBUTE_TEXT_LIMIT = 255
 AttrsFn = Callable[[Mapping[str, Any]], Mapping[str, Any] | None]
@@ -530,11 +532,11 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("bone_mass", "body", weight_at("boneMass", scale=1000, digits=2, zero_is_none=True), unit=UnitOfMass.KILOGRAMS,
        device_class=SensorDeviceClass.WEIGHT),
     _d("visceral_fat", "body", weight_at("visceralFat"), enabled=False),
-    _d("metabolic_age", "body", weight_at("metabolicAge", digits=0), unit="a", enabled=False),
-    _d("fitness_age", "body", number_at("fitness_age", "fitnessAge", digits=1), unit="a", attrs=_fitness_age_attrs),
-    _d("fitness_age_achievable", "body", number_at("fitness_age", "achievableFitnessAge", digits=1), unit="a",
+    _d("metabolic_age", "body", weight_at("metabolicAge", digits=0), unit=YEARS, enabled=False),
+    _d("fitness_age", "body", number_at("fitness_age", "fitnessAge", digits=1), unit=YEARS, attrs=_fitness_age_attrs),
+    _d("fitness_age_achievable", "body", number_at("fitness_age", "achievableFitnessAge", digits=1), unit=YEARS,
        enabled=False),
-    _d("chronological_age", "body", number_at("fitness_age", "chronologicalAge"), unit="a", enabled=False,
+    _d("chronological_age", "body", number_at("fitness_age", "chronologicalAge"), unit=YEARS, enabled=False,
        category=EntityCategory.DIAGNOSTIC),
     # ---- Activities (group "activities") ----------------------------------------------
     _d("last_activity", "activities", activity_text("activityName"), state_class=NO_CLASS, attrs=_activity_attrs),
@@ -822,6 +824,8 @@ class GarminHistorySensor(SensorEntity):
 
     def __init__(self, entry: GarminConfigEntry, key: str, unit: str) -> None:
         """Set up the sensor."""
+        self._entry = entry
+        self._series = next((s for s, k in HISTORY_KEYS.items() if k == key), key)
         self._attr_translation_key = key
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_native_unit_of_measurement = unit
@@ -831,6 +835,23 @@ class GarminHistorySensor(SensorEntity):
     def native_value(self) -> None:
         """No live value."""
         return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str] | None:
+        """How far back the automatic load has come (a date, never the series)."""
+        runtime = getattr(self._entry, "runtime_data", None)
+        manager = getattr(runtime, "history", None)
+        return (manager.progress.get(self._series) or None) if manager is not None else None
+
+    async def async_added_to_hass(self) -> None:
+        """Let the history load refresh the progress attribute."""
+        manager_for(self.hass, self._entry).listeners[self._series] = self.async_write_ha_state
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Stop listening."""
+        manager = getattr(getattr(self._entry, "runtime_data", None), "history", None)
+        if manager is not None:
+            manager.listeners.pop(self._series, None)
 
 
 class GarminKeyExpirySensor(SensorEntity):

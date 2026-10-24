@@ -67,7 +67,7 @@ def install_stubs():
     stub("homeassistant.const", PERCENTAGE="%",
          EntityCategory=make_enum("EntityCategory", "DIAGNOSTIC", "CONFIG"),
          UnitOfLength=make_enum("UnitOfLength", "METERS"), UnitOfMass=make_enum("UnitOfMass", "KILOGRAMS"),
-         UnitOfTime=make_enum("UnitOfTime", "MINUTES", "SECONDS"),
+         UnitOfTime=make_enum("UnitOfTime", "MINUTES", "SECONDS", "YEARS"),
          UnitOfVolume=make_enum("UnitOfVolume", "MILLILITERS"))
     stub("homeassistant.core", HomeAssistant=Anything, callback=lambda f: f)
     stub("homeassistant.helpers")
