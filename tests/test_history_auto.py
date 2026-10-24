@@ -628,6 +628,16 @@ class LatestValue(LiveBase):
         stubs.run(empty.async_added_to_hass())
         self.assertIsNone(empty.native_value)
 
+    def test_value_published_before_sensor_exists(self):
+        self.make()
+        manager = sn.manager_for(self.hass, self.entry)
+        manager.publish_latest("heart_rate", [(ms(2026, 10, 24, 7, 0), 60.0), (ms(2026, 10, 24, 8, 0), 72.0)])
+        sensor = sn.GarminHistorySensor(self.entry, "heart_rate_history", "bpm")
+        sensor.hass = self.hass
+        stubs.run(sensor.async_added_to_hass())
+        self.assertEqual(sensor.native_value, 72.0)
+        self.assertEqual(sensor.extra_state_attributes["measured_at"], "2026-10-24T08:00:00+00:00")
+
 
 TODAY_ISO = "2026-10-24"
 

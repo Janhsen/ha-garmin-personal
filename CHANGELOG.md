@@ -3,6 +3,11 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## 0.5.5
+
+### Fixed
+- The history sensors now show the last value with its time (`measured_at`) even when the first live fill ran before the sensor was added (for example right after a restart). Before, they stayed *unknown*.
+
 ## 0.5.4
 
 ### Changed

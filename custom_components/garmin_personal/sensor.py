@@ -871,6 +871,8 @@ class GarminHistorySensor(RestoreSensor):
         manager = manager_for(self.hass, self._entry)
         manager.listeners[self._series] = self.async_write_ha_state
         manager.latest_listeners[self._series] = self.show_latest
+        if self._series in manager.latest:  # the live job ran before this sensor was added
+            self.show_latest(*manager.latest[self._series])
 
     async def async_will_remove_from_hass(self) -> None:
         """Stop listening."""

@@ -396,6 +396,7 @@ class HistoryManager:
         self.progress: dict[str, dict[str, str]] = {}
         self.listeners: dict[str, Callable[[], None]] = {}
         self.latest_listeners: dict[str, Callable[[int, float], None]] = {}
+        self.latest: dict[str, tuple[int, float]] = {}  # newest live point per series, for sensors added later
         self._store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.history_ledger")
         self._ledger: Ledger | None = None
         self._task: Any = None
@@ -439,10 +440,13 @@ class HistoryManager:
         Only the forward path calls this (never the initial load or a service run for old days).
         The sensor itself ignores a point that is not newer than the one it shows.
         """
-        listener = self.latest_listeners.get(series)
-        if listener is None or not points:
+        if not points:
             return
         ts, value = max(points)
+        self.latest[series] = (ts, value)  # the sensor may not exist yet at the first refresh
+        listener = self.latest_listeners.get(series)
+        if listener is None:
+            return
         try:
             listener(ts, value)
         except Exception as err:  # a display problem must not stop the job
