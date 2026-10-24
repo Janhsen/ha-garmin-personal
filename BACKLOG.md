@@ -12,8 +12,12 @@ Ideas and open points, roughly by priority. Nothing here is promised; items move
   against real responses) have no good home inside HA yet. Options to evaluate:
   - time-series database (InfluxDB) fed by the integration, nightly for the previous day plus a one-time backfill;
   - one file per day and person (JSON/Parquet) in a configurable folder;
-  - recorder states with historic timestamps: not supported by Home Assistant, would need direct database writes
-    and is purged after `purge_keep_days`; rejected for now.
+  - **recorder states with historic timestamps** (wanted, to be tested): real points written as ordinary states into the
+    recorder, so the History panel shows them like live values. Home Assistant has no supported service for this and
+    purges states after `purge_keep_days`, so it needs (1) a dedicated history entity per series, not the live sensor,
+    (2) a much longer `purge_keep_days` (PostgreSQL recommended, roughly 1.5 million rows per year for Garmin points
+    of two people), (3) a small test first: one series, one day, check History panel, purge behaviour and database
+    growth, before importing a year. May break with future Home Assistant versions.
   No interpolation or resampling: only the points Garmin delivers.
 - Option to merge backfilled statistics into the live sensors' own statistics (only for point-in-time values such as
   resting heart rate, sleep score, HRV, weight).
