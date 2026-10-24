@@ -3,51 +3,55 @@
     "step": {
       "user": {
         "title": "Garmin Connect Personal API",
-        "description": "Erstelle unter connect.garmin.com/app/settings/personalApiToken einen Schlüssel und füge ihn hier ein. Garmin zeigt ihn nur einmal an.",
+        "description": "Erstelle in [Garmin Connect]({key_url}) einen Schlüssel und füge ihn hier ein. Garmin zeigt ihn nur einmal an.",
         "data": {
           "name": "Name",
           "api_key": "API-Schlüssel",
           "key_validity_days": "Beim Erstellen gewählte Gültigkeit (Tage)"
         },
         "data_description": {
-          "name": "Name dieses Kontos in Home Assistant, zum Beispiel der Vorname der Person.",
-          "api_key": "Der Schlüssel aus Garmin Connect. Er wird nur in Home Assistant gespeichert.",
-          "key_validity_days": "Die Gültigkeit, die du bei Garmin beim Erstellen des Schlüssels gewählt hast. Garmin verrät das Ablaufdatum nicht; die Integration berechnet es daraus. Es ist eine Schätzung und dient nur der Erinnerung."
+          "name": "Anzeigename des Kontos, z. B. der Vorname. Er wird Gerätename und Teil aller Entitäts-IDs (z. B. sensor.<name>_schritte); späteres Umbenennen ändert bestehende IDs nicht.",
+          "api_key": "Der Schlüssel aus Garmin Connect (Einstellungen > Persönlicher API-Schlüssel). Garmin zeigt ihn nur einmal.",
+          "key_validity_days": "Dieselbe Dauer, die du beim Erzeugen des Schlüssels in Garmin gewählt hast. Garmin verrät das Ablaufdatum nicht; es wird daraus berechnet und nur für die Erinnerung vor dem Ablauf genutzt."
         }
       },
       "reauth_confirm": {
         "title": "Neuer API-Schlüssel",
-        "description": "Der Schlüssel für {account} funktioniert nicht mehr. Erstelle einen neuen und gib ihn ein.",
+        "description": "Der Schlüssel für {account} funktioniert nicht mehr (erwartetes Ablaufdatum: {expires}). Erzeuge im selben Garmin-Konto in [Garmin Connect]({key_url}) einen neuen Schlüssel und gib ihn ein.",
         "data": {
           "api_key": "API-Schlüssel",
           "key_validity_days": "Gültigkeit (Tage)"
         },
         "data_description": {
-          "key_validity_days": "Die Gültigkeit, die du bei Garmin für den neuen Schlüssel gewählt hast. Daraus wird das Ablaufdatum berechnet (Schätzung)."
+          "api_key": "Der neue Schlüssel aus Garmin Connect, erzeugt im selben Garmin-Konto.",
+          "key_validity_days": "Die Dauer, die du in Garmin für den neuen Schlüssel gewählt hast (vorbelegt: deine letzte Wahl). Das Ablaufdatum wird daraus berechnet."
         }
       },
       "reconfigure": {
         "title": "API-Schlüssel ersetzen",
-        "description": "Gib einen neuen Schlüssel für {account} ein.",
+        "description": "Gib einen neuen Schlüssel für {account} ein (erwartetes Ablaufdatum: {expires}). Erzeuge ihn im selben Garmin-Konto in [Garmin Connect]({key_url}).",
         "data": {
           "api_key": "API-Schlüssel",
           "key_validity_days": "Gültigkeit (Tage)"
         },
         "data_description": {
-          "key_validity_days": "Die Gültigkeit, die du bei Garmin für den neuen Schlüssel gewählt hast. Daraus wird das Ablaufdatum berechnet (Schätzung)."
+          "api_key": "Der neue Schlüssel aus Garmin Connect, erzeugt im selben Garmin-Konto.",
+          "key_validity_days": "Die Dauer, die du in Garmin für den neuen Schlüssel gewählt hast (vorbelegt: deine letzte Wahl). Das Ablaufdatum wird daraus berechnet."
         }
       }
     },
     "error": {
       "invalid_auth": "Garmin hat den Schlüssel abgelehnt.",
       "cannot_connect": "Garmin ist nicht erreichbar.",
-      "unknown": "Unerwarteter Fehler, siehe Log."
+      "unknown": "Unerwarteter Fehler, siehe Log.",
+      "name_required": "Bitte gib einen Namen ein.",
+      "account_id_missing": "Garmin hat keine Konto-ID geliefert. Das Konto kann nicht eindeutig erkannt werden."
     },
     "abort": {
       "already_configured": "Dieses Konto ist bereits eingerichtet.",
       "reauth_successful": "Der Schlüssel wurde aktualisiert.",
       "reconfigure_successful": "Der Schlüssel wurde aktualisiert.",
-      "wrong_account": "Dieser Schlüssel gehört zu einem anderen Garmin-Konto."
+      "wrong_account": "Dieser Schlüssel gehört zu einem anderen Garmin-Konto als der Eintrag. Erzeuge den Schlüssel im selben Garmin-Konto."
     }
   },
   "options": {
@@ -60,9 +64,9 @@
           "sync_stale_hours": "Warnen, wenn die Uhr länger nicht synchronisiert wurde als (Stunden)"
         },
         "data_description": {
-          "daily_interval_minutes": "Wie oft die Tageszusammenfassung abgefragt wird. Ein neuer Uhr-Sync löst die übrigen Abfragen aus.",
-          "intraday_attributes": "Hängt Puls-, Body-Battery- und SpO2-Verläufe als Attribute an die Sensoren. Das macht die Zustandsdaten groß und ruft zusätzliche Daten bei Garmin ab.",
-          "sync_stale_hours": "Der Binärsensor meldet ein Problem, wenn der letzte Uhr-Sync länger her ist."
+          "daily_interval_minutes": "Wie oft die Tageswerte abgefragt werden. Die übrigen Daten werden nur nach einer neuen Uhr-Synchronisierung oder seltener geholt.",
+          "intraday_attributes": "Hängt Puls-, Body-Battery- und SpO2-Verläufe als Attribute an die Sensoren. Das macht die Zustandsdaten groß, ruft zusätzliche Daten bei Garmin ab, und die Verläufe werden nicht im Recorder gespeichert.",
+          "sync_stale_hours": "Der Binärsensor meldet ein Problem, wenn der letzte Uhr-Sync länger als so viele Stunden her ist."
         }
       }
     }
@@ -74,6 +78,35 @@
         "90": "90 Tage",
         "180": "180 Tage",
         "365": "365 Tage"
+      }
+    },
+    "endpoint": {
+      "options": {
+        "activities": "Aktivitäten",
+        "activity": "Aktivität",
+        "activity_workouts": "Workouts einer Aktivität",
+        "hr_zones": "Herzfrequenzzonen",
+        "fitness_age": "Fitnessalter",
+        "weight_goals": "Gewichtsziele",
+        "hrv": "HRV",
+        "hrv_summaries": "HRV-Zusammenfassungen",
+        "nutrition": "Ernährung",
+        "menstrual_summary": "Menstruations-Zusammenfassung",
+        "menstrual_day": "Menstruations-Tagesansicht",
+        "sleep": "Schlaf",
+        "sleep_summaries": "Schlaf-Zusammenfassungen",
+        "profile": "Profil",
+        "hydration": "Flüssigkeitszufuhr",
+        "steps": "Schritte",
+        "stress": "Stress",
+        "daily_summary": "Tageszusammenfassung",
+        "daily_summaries": "Tageszusammenfassungen",
+        "weights_all": "Alle Gewichtseinträge",
+        "weight_range": "Gewicht (Zeitraum)",
+        "body_battery": "Body Battery",
+        "spo2": "SpO2",
+        "heart_rate": "Puls",
+        "wellness_activities": "Wellness-Aktivitäten"
       }
     }
   },
@@ -606,8 +639,12 @@
   },
   "issues": {
     "key_expiring": {
-      "title": "Garmin-API-Schlüssel läuft bald ab",
-      "description": "Der Personal-API-Schlüssel für {account} läuft am {expires} ab. Erstelle in Garmin Connect einen neuen und nutze am Eintrag „Neu konfigurieren“."
+      "title": "Garmin-Schlüssel für {account} läuft bald ab",
+      "description": "Der API-Schlüssel für {account} läuft voraussichtlich am {expires} ab (noch {days_left} Tage). Garmin meldet das Ablaufdatum nicht; es wird aus deiner Angabe bei der Einrichtung berechnet. Erzeuge rechtzeitig einen neuen Schlüssel in Garmin Connect und trage ihn über „Neu konfigurieren“ ein."
+    },
+    "key_expired": {
+      "title": "Garmin-Schlüssel für {account} abgelaufen",
+      "description": "Der API-Schlüssel für {account} ist laut deiner Angabe seit {expires} abgelaufen. Erzeuge einen neuen Schlüssel in Garmin Connect und trage ihn über „Neu konfigurieren“ ein."
     }
   },
   "services": {
@@ -617,7 +654,7 @@
       "fields": {
         "config_entry_id": {
           "name": "Konto",
-          "description": "Nur bei mehreren Konten nötig."
+          "description": "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist."
         },
         "endpoint": {
           "name": "Endpunkt",
@@ -641,7 +678,7 @@
         },
         "filters": {
           "name": "Filter",
-          "description": "Aktivitätsfilter, z. B. activity_type."
+          "description": "Aktivitätsfilter als Mapping, z. B. activity_type: running, min_distance: 10000, favorite: false."
         },
         "limit": {
           "name": "Limit",
@@ -655,11 +692,11 @@
       "fields": {
         "config_entry_id": {
           "name": "Konto",
-          "description": "Nur bei mehreren Konten nötig."
+          "description": "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist."
         },
         "filters": {
           "name": "Filter",
-          "description": "Zum Beispiel activity_type, min_distance, start_date."
+          "description": "Filter als Mapping, zum Beispiel activity_type, min_distance, start_date, favorite."
         },
         "limit": {
           "name": "Limit",
@@ -669,11 +706,11 @@
     },
     "download_activity": {
       "name": "Aktivitätsdatei herunterladen",
-      "description": "Speichert die Original-Aktivitätsdateien (ZIP) im Dateisystem.",
+      "description": "Speichert die Original-Aktivitätsdateien (ZIP) in einem erlaubten Ordner.",
       "fields": {
         "config_entry_id": {
           "name": "Konto",
-          "description": "Nur bei mehreren Konten nötig."
+          "description": "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist."
         },
         "activity_id": {
           "name": "Aktivitäts-ID",
@@ -681,17 +718,17 @@
         },
         "path": {
           "name": "Zieldatei",
-          "description": "Standard: Ordner garmin_personal im Konfigurationsverzeichnis."
+          "description": "Ziel-.zip-Datei oder Ordner. Standard: Ordner garmin_personal im Medienordner, Datei activity_ID.zip. Der Ordner muss in allowlist_external_dirs erlaubt sein (Medienordner sind es)."
         }
       }
     },
     "backfill_statistics": {
       "name": "Tageswerte als Statistik importieren",
-      "description": "Schreibt Tageswerte (Aktivität, Schlaf, HRV, Gewicht) in die Langzeitstatistik (extern, ein Wert pro Tag). Kann gefahrlos wiederholt werden.",
+      "description": "Schreibt Tageswerte (Aktivität, Schlaf, HRV, Gewicht) in die Langzeitstatistik (extern, ein Wert pro Tag). Kann gefahrlos wiederholt werden. Läuft in 31-Tage-Fenstern; die Antwort sagt, ob alles fertig wurde (complete, last_completed_day, error) und wie viele Tage und Zeilen geschrieben wurden (days_imported, statistic_series, statistic_rows).",
       "fields": {
         "config_entry_id": {
           "name": "Konto",
-          "description": "Nur bei mehreren Konten nötig."
+          "description": "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist."
         },
         "start_date": {
           "name": "Startdatum",
@@ -699,11 +736,11 @@
         },
         "end_date": {
           "name": "Enddatum",
-          "description": "Standard: heute."
+          "description": "Letzter Tag des Imports. Standard: gestern; heute nur, wenn ausdrücklich angegeben (unvollständiger Tag)."
         },
         "days": {
           "name": "Tage",
-          "description": "Wird ohne Startdatum verwendet."
+          "description": "Anzahl Tage rückwärts ab Enddatum (höchstens 3650). Wird ohne Startdatum verwendet."
         },
         "include_third_party_steps": {
           "name": "Schritte aus anderen Apps",
@@ -712,5 +749,45 @@
       }
     }
   },
-  "exceptions": {}
+  "exceptions": {
+    "auth_failed": {
+      "message": "Der API-Schlüssel fehlt oder ist ungültig. Bitte gib einen neuen Schlüssel ein."
+    },
+    "no_entry": {
+      "message": "Es ist kein Garmin-Konto eingerichtet."
+    },
+    "entry_required": {
+      "message": "Es gibt mehrere Garmin-Konten. Wähle im Feld Konto eines aus: {entries}"
+    },
+    "entry_unknown": {
+      "message": "Unbekanntes Garmin-Konto: {entry_id}"
+    },
+    "entry_not_loaded": {
+      "message": "Das Garmin-Konto {title} ist nicht geladen. Prüfe die Integration unter Einstellungen > Geräte & Dienste."
+    },
+    "garmin_request_failed": {
+      "message": "Die Anfrage an Garmin ist fehlgeschlagen: {error}"
+    },
+    "invalid_request": {
+      "message": "Ungültige Anfrage: {error}"
+    },
+    "invalid_date_range": {
+      "message": "Das Startdatum ({start}) liegt nach dem Enddatum ({end}). Um heute einzuschließen, gib das Enddatum ausdrücklich an."
+    },
+    "date_range_too_long": {
+      "message": "Der Zeitraum {start} bis {end} ist zu lang (höchstens {max_days} Tage)."
+    },
+    "path_not_allowed": {
+      "message": "{path} liegt nicht in einem erlaubten Ordner. Gib {folder} in allowlist_external_dirs frei oder wähle einen Pfad im Medienordner."
+    },
+    "path_not_zip": {
+      "message": "Die Zieldatei {path} muss auf .zip enden."
+    },
+    "download_failed": {
+      "message": "{path} konnte nicht geschrieben werden: {error}"
+    },
+    "backfill_running": {
+      "message": "Für {title} läuft bereits ein Import."
+    }
+  }
 }

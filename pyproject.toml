@@ -18,7 +18,7 @@ known-first-party = ["custom_components"]
 # Remove an entry once `ruff check` is clean for that file.
 "custom_components/garmin_personal/sensor.py" = ["I001"]
 "custom_components/garmin_personal/services.py" = ["I001"]
-"scripts/gen_translations.py" = ["E402", "I001", "E731"]
+"scripts/gen_translations.py" = ["E731"]
 "tests/test_coordinator.py" = ["F841"]
 "tests/test_sensors.py" = ["I001"]
 # The tests put tests/ on sys.path first and load the stubs before the package.

@@ -3,51 +3,55 @@
     "step": {
       "user": {
         "title": "Garmin Connect Personal API",
-        "description": "Create a key at connect.garmin.com/app/settings/personalApiToken and paste it here. Garmin shows it only once.",
+        "description": "Create a key in [Garmin Connect]({key_url}) and paste it here. Garmin shows it only once.",
         "data": {
           "name": "Name",
           "api_key": "API key",
           "key_validity_days": "Validity chosen for the key (days)"
         },
         "data_description": {
-          "name": "Name of this account in Home Assistant, for example the person's first name.",
-          "api_key": "The key from Garmin Connect. It is stored only in Home Assistant.",
-          "key_validity_days": "The validity you chose at Garmin when creating the key. Garmin does not reveal the expiry date, so the integration calculates it from this value; it is an estimate and only used for the reminder."
+          "name": "Display name of the account, e.g. a first name. It becomes the device name and part of every entity ID (for example sensor.<name>_steps); renaming later does not change existing entity IDs.",
+          "api_key": "The key from Garmin Connect (Settings > Personal API key). Garmin shows it only once.",
+          "key_validity_days": "The same duration you chose in Garmin when creating the key. Garmin does not report the expiry date; it is calculated from this value and only used for the reminder before expiry."
         }
       },
       "reauth_confirm": {
         "title": "New API key",
-        "description": "The key for {account} no longer works. Create a new one and enter it.",
+        "description": "The key for {account} no longer works (expected to expire on {expires}). Create a new key in the same Garmin account in [Garmin Connect]({key_url}) and enter it.",
         "data": {
           "api_key": "API key",
           "key_validity_days": "Validity (days)"
         },
         "data_description": {
-          "key_validity_days": "The validity you chose at Garmin for the new key. The expiry date is calculated from it (estimate)."
+          "api_key": "The new key from Garmin Connect, created in the same Garmin account.",
+          "key_validity_days": "The duration you chose in Garmin for the new key (preset: your last choice). The expiry date is calculated from it."
         }
       },
       "reconfigure": {
         "title": "Replace API key",
-        "description": "Enter a new key for {account}.",
+        "description": "Enter a new key for {account} (expected to expire on {expires}). Create it in the same Garmin account in [Garmin Connect]({key_url}).",
         "data": {
           "api_key": "API key",
           "key_validity_days": "Validity (days)"
         },
         "data_description": {
-          "key_validity_days": "The validity you chose at Garmin for the new key. The expiry date is calculated from it (estimate)."
+          "api_key": "The new key from Garmin Connect, created in the same Garmin account.",
+          "key_validity_days": "The duration you chose in Garmin for the new key (preset: your last choice). The expiry date is calculated from it."
         }
       }
     },
     "error": {
       "invalid_auth": "The key was rejected by Garmin.",
       "cannot_connect": "Could not reach Garmin.",
-      "unknown": "Unexpected error, see the log."
+      "unknown": "Unexpected error, see the log.",
+      "name_required": "Please enter a name.",
+      "account_id_missing": "Garmin did not return an account ID, so the account cannot be identified."
     },
     "abort": {
       "already_configured": "This account is already set up.",
       "reauth_successful": "The key was updated.",
       "reconfigure_successful": "The key was updated.",
-      "wrong_account": "This key belongs to a different Garmin account."
+      "wrong_account": "This key belongs to a different Garmin account than this entry. Create the key in the same Garmin account."
     }
   },
   "options": {
@@ -60,9 +64,9 @@
           "sync_stale_hours": "Warn when the watch has not synced for (hours)"
         },
         "data_description": {
-          "daily_interval_minutes": "How often the daily summary is requested. A new watch sync triggers the other requests.",
-          "intraday_attributes": "Adds heart rate, Body Battery and SpO2 series to the sensors as attributes. This makes the state data large and requests extra data from Garmin.",
-          "sync_stale_hours": "The binary sensor reports a problem when the last watch sync is older than this."
+          "daily_interval_minutes": "How often the daily values are requested. The other data is fetched only after a new watch sync or less often.",
+          "intraday_attributes": "Adds heart rate, Body Battery and SpO2 series to the sensors as attributes. This makes the state data large, requests extra data from Garmin and the series are not stored in the recorder.",
+          "sync_stale_hours": "The binary sensor reports a problem when the last watch sync is older than this many hours."
         }
       }
     }
@@ -74,6 +78,35 @@
         "90": "90 days",
         "180": "180 days",
         "365": "365 days"
+      }
+    },
+    "endpoint": {
+      "options": {
+        "activities": "Activities",
+        "activity": "Activity",
+        "activity_workouts": "Activity workouts",
+        "hr_zones": "Heart rate zones",
+        "fitness_age": "Fitness age",
+        "weight_goals": "Weight goals",
+        "hrv": "HRV",
+        "hrv_summaries": "HRV summaries",
+        "nutrition": "Nutrition",
+        "menstrual_summary": "Menstrual summary",
+        "menstrual_day": "Menstrual day",
+        "sleep": "Sleep",
+        "sleep_summaries": "Sleep summaries",
+        "profile": "Profile",
+        "hydration": "Hydration",
+        "steps": "Steps",
+        "stress": "Stress",
+        "daily_summary": "Daily summary",
+        "daily_summaries": "Daily summaries",
+        "weights_all": "All weight entries",
+        "weight_range": "Weight range",
+        "body_battery": "Body Battery",
+        "spo2": "SpO2",
+        "heart_rate": "Heart rate",
+        "wellness_activities": "Wellness activities"
       }
     }
   },
@@ -606,8 +639,12 @@
   },
   "issues": {
     "key_expiring": {
-      "title": "Garmin API key expires soon",
-      "description": "The Personal API key for {account} expires on {expires}. Create a new key in Garmin Connect and use Reconfigure on the integration."
+      "title": "Garmin API key for {account} expires soon",
+      "description": "The API key for {account} is expected to expire on {expires} ({days_left} days left). Garmin does not report the expiry date; it is calculated from your entry during setup. Create a new key in Garmin Connect in time and enter it via Reconfigure."
+    },
+    "key_expired": {
+      "title": "Garmin API key for {account} has expired",
+      "description": "According to your entry the API key for {account} expired on {expires}. Create a new key in Garmin Connect and enter it via Reconfigure."
     }
   },
   "services": {
@@ -617,7 +654,7 @@
       "fields": {
         "config_entry_id": {
           "name": "Account",
-          "description": "Only needed with several accounts."
+          "description": "Garmin account. May be left out only if exactly one account is set up."
         },
         "endpoint": {
           "name": "Endpoint",
@@ -641,7 +678,7 @@
         },
         "filters": {
           "name": "Filters",
-          "description": "Activity filters, e.g. activity_type."
+          "description": "Activity filters as a mapping, e.g. activity_type: running, min_distance: 10000, favorite: false."
         },
         "limit": {
           "name": "Limit",
@@ -655,11 +692,11 @@
       "fields": {
         "config_entry_id": {
           "name": "Account",
-          "description": "Only needed with several accounts."
+          "description": "Garmin account. May be left out only if exactly one account is set up."
         },
         "filters": {
           "name": "Filters",
-          "description": "For example activity_type, min_distance, start_date."
+          "description": "Filters as a mapping, for example activity_type, min_distance, start_date, favorite."
         },
         "limit": {
           "name": "Limit",
@@ -669,11 +706,11 @@
     },
     "download_activity": {
       "name": "Download activity file",
-      "description": "Saves the original activity files (ZIP) to disk.",
+      "description": "Saves the original activity files (ZIP) to an allowed folder.",
       "fields": {
         "config_entry_id": {
           "name": "Account",
-          "description": "Only needed with several accounts."
+          "description": "Garmin account. May be left out only if exactly one account is set up."
         },
         "activity_id": {
           "name": "Activity ID",
@@ -681,17 +718,17 @@
         },
         "path": {
           "name": "Target file",
-          "description": "Default: garmin_personal folder in the config directory."
+          "description": "Target .zip file or a folder. Default: folder garmin_personal in the media folder, file activity_ID.zip. The folder must be allowed in allowlist_external_dirs (media folders are)."
         }
       }
     },
     "backfill_statistics": {
       "name": "Import daily values as statistics",
-      "description": "Writes daily values (activity, sleep, HRV, weight) into long-term statistics (external, one value per day). Safe to repeat.",
+      "description": "Writes daily values (activity, sleep, HRV, weight) into long-term statistics (external, one value per day). Safe to repeat. Runs in 31-day windows; the response says whether it completed (complete, last_completed_day, error) and how many days and rows were written (days_imported, statistic_series, statistic_rows).",
       "fields": {
         "config_entry_id": {
           "name": "Account",
-          "description": "Only needed with several accounts."
+          "description": "Garmin account. May be left out only if exactly one account is set up."
         },
         "start_date": {
           "name": "Start date",
@@ -699,11 +736,11 @@
         },
         "end_date": {
           "name": "End date",
-          "description": "Default: today."
+          "description": "Last day to import. Default: yesterday; today only if given explicitly (an incomplete day)."
         },
         "days": {
           "name": "Days",
-          "description": "Used when no start date is given."
+          "description": "Number of days back from the end date (at most 3650). Used when no start date is given."
         },
         "include_third_party_steps": {
           "name": "Steps from other apps",
@@ -712,5 +749,45 @@
       }
     }
   },
-  "exceptions": {}
+  "exceptions": {
+    "auth_failed": {
+      "message": "The API key is missing or invalid. Please enter a new key."
+    },
+    "no_entry": {
+      "message": "No Garmin account is set up."
+    },
+    "entry_required": {
+      "message": "Several Garmin accounts exist. Choose one in the Account field: {entries}"
+    },
+    "entry_unknown": {
+      "message": "Unknown Garmin account: {entry_id}"
+    },
+    "entry_not_loaded": {
+      "message": "The Garmin account {title} is not loaded. Check the integration under Settings > Devices & services."
+    },
+    "garmin_request_failed": {
+      "message": "The Garmin request failed: {error}"
+    },
+    "invalid_request": {
+      "message": "Invalid request: {error}"
+    },
+    "invalid_date_range": {
+      "message": "The start date ({start}) is after the end date ({end}). To include today, set the end date explicitly."
+    },
+    "date_range_too_long": {
+      "message": "The range {start} to {end} is too long (at most {max_days} days)."
+    },
+    "path_not_allowed": {
+      "message": "{path} is not in an allowed folder. Allow {folder} in allowlist_external_dirs or choose a path under the media folder."
+    },
+    "path_not_zip": {
+      "message": "The target file {path} must end in .zip."
+    },
+    "download_failed": {
+      "message": "Could not write {path}: {error}"
+    },
+    "backfill_running": {
+      "message": "An import is already running for {title}."
+    }
+  }
 }

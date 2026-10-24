@@ -4,7 +4,6 @@ import argparse
 import ast
 import importlib.util
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -86,38 +85,125 @@ N = {
 # Data that is added to by hand. The generator only assembles; nothing here is derived from code.
 # Format: key -> (English, German). Placeholders such as {error} must appear in both languages.
 
+# Default icon per sensor (icons.json). Sensors without an entry use Home Assistant's default.
+ICONS = {
+    "steps": "shoe-print",
+    "total_calories": "fire",
+    "active_calories": "fire",
+    "resting_calories": "fire",
+    "moderate_intensity_minutes": "run-fast",
+    "vigorous_intensity_minutes": "run-fast",
+    "floors_ascended": "stairs-up",
+    "floors_descended": "stairs-down",
+    "heart_rate_resting": "heart-pulse",
+    "heart_rate_resting_7d": "heart-pulse",
+    "heart_rate_min": "heart-pulse",
+    "heart_rate_max": "heart-pulse",
+    "stress_average": "emoticon-neutral",
+    "body_battery": "battery-heart-variant",
+    "body_battery_level": "battery-heart-variant",
+    "body_battery_high": "battery-heart-variant",
+    "body_battery_low": "battery-heart-variant",
+    "spo2_average": "water-percent",
+    "spo2_lowest": "water-percent",
+    "spo2_latest": "water-percent",
+    "altitude_average": "altimeter",
+    "respiration_highest": "lungs",
+    "respiration_lowest": "lungs",
+    "heart_rate_avg_min": "heart-pulse",
+    "heart_rate_avg_max": "heart-pulse",
+    "respiration_waking": "lungs",
+    "respiration_latest": "lungs",
+    "hydration": "cup-water",
+    "last_sync": "watch-vibrate",
+    "sleep_duration": "sleep",
+    "sleep_score": "sleep",
+    "sleep_alignment": "sleep",
+    "hrv_last_night": "heart-flash",
+    "hrv_weekly": "heart-flash",
+    "weight": "scale-bathroom",
+    "bmi": "human",
+    "body_fat": "percent",
+    "body_water": "water-percent",
+    "fitness_age": "human-handsup",
+    "last_activity": "run",
+    "account": "account",
+}
+
+# Endpoint names of the service `fetch` (selector.endpoint.options); must equal the options in services.yaml.
+ENDPOINT_NAMES: dict[str, tuple[str, str]] = {
+    "activities": ("Activities", "Aktivitäten"), "activity": ("Activity", "Aktivität"),
+    "activity_workouts": ("Activity workouts", "Workouts einer Aktivität"), "hr_zones": ("Heart rate zones", "Herzfrequenzzonen"),
+    "fitness_age": ("Fitness age", "Fitnessalter"), "weight_goals": ("Weight goals", "Gewichtsziele"),
+    "hrv": ("HRV", "HRV"), "hrv_summaries": ("HRV summaries", "HRV-Zusammenfassungen"),
+    "nutrition": ("Nutrition", "Ernährung"), "menstrual_summary": ("Menstrual summary", "Menstruations-Zusammenfassung"),
+    "menstrual_day": ("Menstrual day", "Menstruations-Tagesansicht"), "sleep": ("Sleep", "Schlaf"),
+    "sleep_summaries": ("Sleep summaries", "Schlaf-Zusammenfassungen"), "profile": ("Profile", "Profil"),
+    "hydration": ("Hydration", "Flüssigkeitszufuhr"), "steps": ("Steps", "Schritte"), "stress": ("Stress", "Stress"),
+    "daily_summary": ("Daily summary", "Tageszusammenfassung"), "daily_summaries": ("Daily summaries", "Tageszusammenfassungen"),
+    "weights_all": ("All weight entries", "Alle Gewichtseinträge"), "weight_range": ("Weight range", "Gewicht (Zeitraum)"),
+    "body_battery": ("Body Battery", "Body Battery"), "spo2": ("SpO2", "SpO2"), "heart_rate": ("Heart rate", "Puls"),
+    "wellness_activities": ("Wellness activities", "Wellness-Aktivitäten"),
+}
+
 # exceptions.<key>.message, raised as HomeAssistantError(translation_domain=DOMAIN, translation_key=<key>).
-EXCEPTIONS: dict[str, tuple[str, str]] = {}
+EXCEPTIONS: dict[str, tuple[str, str]] = {
+    "auth_failed": ("The API key is missing or invalid. Please enter a new key.",
+                    "Der API-Schlüssel fehlt oder ist ungültig. Bitte gib einen neuen Schlüssel ein."),
+    "no_entry": ("No Garmin account is set up.", "Es ist kein Garmin-Konto eingerichtet."),
+    "entry_required": ("Several Garmin accounts exist. Choose one in the Account field: {entries}",
+                       "Es gibt mehrere Garmin-Konten. Wähle im Feld Konto eines aus: {entries}"),
+    "entry_unknown": ("Unknown Garmin account: {entry_id}", "Unbekanntes Garmin-Konto: {entry_id}"),
+    "entry_not_loaded": ("The Garmin account {title} is not loaded. Check the integration under Settings > Devices & services.",
+                         "Das Garmin-Konto {title} ist nicht geladen. Prüfe die Integration unter Einstellungen > Geräte & Dienste."),
+    "garmin_request_failed": ("The Garmin request failed: {error}", "Die Anfrage an Garmin ist fehlgeschlagen: {error}"),
+    "invalid_request": ("Invalid request: {error}", "Ungültige Anfrage: {error}"),
+    "invalid_date_range": ("The start date ({start}) is after the end date ({end}). To include today, set the end date explicitly.",
+                           "Das Startdatum ({start}) liegt nach dem Enddatum ({end}). Um heute einzuschließen, gib das Enddatum ausdrücklich an."),
+    "date_range_too_long": ("The range {start} to {end} is too long (at most {max_days} days).",
+                            "Der Zeitraum {start} bis {end} ist zu lang (höchstens {max_days} Tage)."),
+    "path_not_allowed": ("{path} is not in an allowed folder. Allow {folder} in allowlist_external_dirs or choose a path under the media folder.",
+                         "{path} liegt nicht in einem erlaubten Ordner. Gib {folder} in allowlist_external_dirs frei oder wähle einen Pfad im Medienordner."),
+    "path_not_zip": ("The target file {path} must end in .zip.", "Die Zieldatei {path} muss auf .zip enden."),
+    "download_failed": ("Could not write {path}: {error}", "{path} konnte nicht geschrieben werden: {error}"),
+    "backfill_running": ("An import is already running for {title}.", "Für {title} läuft bereits ein Import."),
+}
 
 # <flow>.step.<step>.data_description.<field>; every field must also exist in the step's "data".
 DATA_DESCRIPTIONS: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
     ("config", "user"): {
-        "name": ("Name of this account in Home Assistant, for example the person's first name.",
-                 "Name dieses Kontos in Home Assistant, zum Beispiel der Vorname der Person."),
-        "api_key": ("The key from Garmin Connect. It is stored only in Home Assistant.",
-                    "Der Schlüssel aus Garmin Connect. Er wird nur in Home Assistant gespeichert."),
-        "key_validity_days": ("The validity you chose at Garmin when creating the key. Garmin does not reveal the expiry date, "
-                              "so the integration calculates it from this value; it is an estimate and only used for the reminder.",
-                              "Die Gültigkeit, die du bei Garmin beim Erstellen des Schlüssels gewählt hast. Garmin verrät das Ablaufdatum nicht; "
-                              "die Integration berechnet es daraus. Es ist eine Schätzung und dient nur der Erinnerung."),
+        "name": ("Display name of the account, e.g. a first name. It becomes the device name and part of every entity ID "
+                 "(for example sensor.<name>_steps); renaming later does not change existing entity IDs.",
+                 "Anzeigename des Kontos, z. B. der Vorname. Er wird Gerätename und Teil aller Entitäts-IDs "
+                 "(z. B. sensor.<name>_schritte); späteres Umbenennen ändert bestehende IDs nicht."),
+        "api_key": ("The key from Garmin Connect (Settings > Personal API key). Garmin shows it only once.",
+                    "Der Schlüssel aus Garmin Connect (Einstellungen > Persönlicher API-Schlüssel). Garmin zeigt ihn nur einmal."),
+        "key_validity_days": ("The same duration you chose in Garmin when creating the key. Garmin does not report the expiry date; "
+                              "it is calculated from this value and only used for the reminder before expiry.",
+                              "Dieselbe Dauer, die du beim Erzeugen des Schlüssels in Garmin gewählt hast. Garmin verrät das Ablaufdatum nicht; "
+                              "es wird daraus berechnet und nur für die Erinnerung vor dem Ablauf genutzt."),
     },
     ("config", "reauth_confirm"): {
-        "key_validity_days": ("The validity you chose at Garmin for the new key. The expiry date is calculated from it (estimate).",
-                              "Die Gültigkeit, die du bei Garmin für den neuen Schlüssel gewählt hast. Daraus wird das Ablaufdatum berechnet (Schätzung)."),
+        "api_key": ("The new key from Garmin Connect, created in the same Garmin account.",
+                    "Der neue Schlüssel aus Garmin Connect, erzeugt im selben Garmin-Konto."),
+        "key_validity_days": ("The duration you chose in Garmin for the new key (preset: your last choice). The expiry date is calculated from it.",
+                              "Die Dauer, die du in Garmin für den neuen Schlüssel gewählt hast (vorbelegt: deine letzte Wahl). Das Ablaufdatum wird daraus berechnet."),
     },
     ("config", "reconfigure"): {
-        "key_validity_days": ("The validity you chose at Garmin for the new key. The expiry date is calculated from it (estimate).",
-                              "Die Gültigkeit, die du bei Garmin für den neuen Schlüssel gewählt hast. Daraus wird das Ablaufdatum berechnet (Schätzung)."),
+        "api_key": ("The new key from Garmin Connect, created in the same Garmin account.",
+                    "Der neue Schlüssel aus Garmin Connect, erzeugt im selben Garmin-Konto."),
+        "key_validity_days": ("The duration you chose in Garmin for the new key (preset: your last choice). The expiry date is calculated from it.",
+                              "Die Dauer, die du in Garmin für den neuen Schlüssel gewählt hast (vorbelegt: deine letzte Wahl). Das Ablaufdatum wird daraus berechnet."),
     },
     ("options", "init"): {
-        "daily_interval_minutes": ("How often the daily summary is requested. A new watch sync triggers the other requests.",
-                                   "Wie oft die Tageszusammenfassung abgefragt wird. Ein neuer Uhr-Sync löst die übrigen Abfragen aus."),
+        "daily_interval_minutes": ("How often the daily values are requested. The other data is fetched only after a new watch sync or less often.",
+                                   "Wie oft die Tageswerte abgefragt werden. Die übrigen Daten werden nur nach einer neuen Uhr-Synchronisierung oder seltener geholt."),
         "intraday_attributes": ("Adds heart rate, Body Battery and SpO2 series to the sensors as attributes. This makes the state data "
-                                "large and requests extra data from Garmin.",
+                                "large, requests extra data from Garmin and the series are not stored in the recorder.",
                                 "Hängt Puls-, Body-Battery- und SpO2-Verläufe als Attribute an die Sensoren. Das macht die Zustandsdaten "
-                                "groß und ruft zusätzliche Daten bei Garmin ab."),
-        "sync_stale_hours": ("The binary sensor reports a problem when the last watch sync is older than this.",
-                             "Der Binärsensor meldet ein Problem, wenn der letzte Uhr-Sync länger her ist."),
+                                "groß, ruft zusätzliche Daten bei Garmin ab, und die Verläufe werden nicht im Recorder gespeichert."),
+        "sync_stale_hours": ("The binary sensor reports a problem when the last watch sync is older than this many hours.",
+                             "Der Binärsensor meldet ein Problem, wenn der letzte Uhr-Sync länger als so viele Stunden her ist."),
     },
 }
 
@@ -132,26 +218,31 @@ class GeneratorError(Exception):
     """Raised with a message that says what to fix; the command line prints it and exits with 1."""
 
 
-def parse_descriptors(source: str) -> list[tuple[str, str | None, str | None]]:
-    """(key, labels, icon) of every ``_d("key", ...)`` call in sensor.py, read from the syntax tree.
+def parse_descriptors(source: str) -> list[tuple[str, str | None, bool]]:
+    """(key, labels, open_enum) of every ``_d("key", ...)`` call in sensor.py, read from the syntax tree.
 
     The tree does not depend on line breaks or on Home Assistant, and an argument that is not a
-    plain string constant is an error instead of being skipped silently.
+    plain constant is an error instead of being skipped silently.
     """
-    out: list[tuple[str, str | None, str | None]] = []
+    out: list[tuple[str, str | None, bool]] = []
     for node in ast.walk(ast.parse(source)):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "_d"):
             continue
         if not node.args or not (isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
             raise GeneratorError(f"sensor.py line {node.lineno}: first argument of _d() must be a string literal")
         key = node.args[0].value
-        found: dict[str, str | None] = {"labels": None, "icon": None}
+        labels: str | None = None
+        open_enum = False
         for kw in node.keywords:
-            if kw.arg in found:
+            if kw.arg == "labels":
                 if not (isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str)):
-                    raise GeneratorError(f"sensor.py line {node.lineno}: {kw.arg}= of sensor {key!r} must be a string literal")
-                found[kw.arg] = kw.value.value
-        out.append((key, found["labels"], found["icon"]))
+                    raise GeneratorError(f"sensor.py line {node.lineno}: labels= of sensor {key!r} must be a string literal")
+                labels = kw.value.value
+            elif kw.arg == "open_enum":
+                if not (isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, bool)):
+                    raise GeneratorError(f"sensor.py line {node.lineno}: open_enum= of sensor {key!r} must be True or False")
+                open_enum = kw.value.value
+        out.append((key, labels, open_enum))
     return out
 
 
@@ -167,6 +258,9 @@ _DESCRIPTORS = parse_descriptors((ROOT / "sensor.py").read_text())
 if len({k for k, _, _ in _DESCRIPTORS}) != len(_DESCRIPTORS):
     raise GeneratorError("sensor.py: duplicate sensor keys")
 keys = [k for k, _, _ in _DESCRIPTORS] + ["key_expires"]
+_bad_icons = sorted(k for k in ICONS if k not in keys)
+if _bad_icons:
+    raise GeneratorError(f"ICONS has entries without a sensor: {_bad_icons}")
 # sensor key -> word list name (labels=...)
 LABEL_OF = {k: lab for k, lab, _ in _DESCRIPTORS if lab}
 _missing = [k for k in keys if k not in N]
@@ -187,8 +281,8 @@ def build(i: int) -> dict:
                 "user": {
                     "title": t("Garmin Connect Personal API", "Garmin Connect Personal API"),
                     "description": t(
-                        "Create a key at connect.garmin.com/app/settings/personalApiToken and paste it here. Garmin shows it only once.",
-                        "Erstelle unter connect.garmin.com/app/settings/personalApiToken einen Schlüssel und füge ihn hier ein. Garmin zeigt ihn nur einmal an.",
+                        "Create a key in [Garmin Connect]({key_url}) and paste it here. Garmin shows it only once.",
+                        "Erstelle in [Garmin Connect]({key_url}) einen Schlüssel und füge ihn hier ein. Garmin zeigt ihn nur einmal an.",
                     ),
                     "data": {
                         "name": t("Name", "Name"),
@@ -198,13 +292,14 @@ def build(i: int) -> dict:
                 },
                 "reauth_confirm": {
                     "title": t("New API key", "Neuer API-Schlüssel"),
-                    "description": t("The key for {account} no longer works. Create a new one and enter it.",
-                                     "Der Schlüssel für {account} funktioniert nicht mehr. Erstelle einen neuen und gib ihn ein."),
+                    "description": t("The key for {account} no longer works (expected to expire on {expires}). Create a new key in the same Garmin account in [Garmin Connect]({key_url}) and enter it.",
+                                     "Der Schlüssel für {account} funktioniert nicht mehr (erwartetes Ablaufdatum: {expires}). Erzeuge im selben Garmin-Konto in [Garmin Connect]({key_url}) einen neuen Schlüssel und gib ihn ein."),
                     "data": {"api_key": t("API key", "API-Schlüssel"), "key_validity_days": t("Validity (days)", "Gültigkeit (Tage)")},
                 },
                 "reconfigure": {
                     "title": t("Replace API key", "API-Schlüssel ersetzen"),
-                    "description": t("Enter a new key for {account}.", "Gib einen neuen Schlüssel für {account} ein."),
+                    "description": t("Enter a new key for {account} (expected to expire on {expires}). Create it in the same Garmin account in [Garmin Connect]({key_url}).",
+                                     "Gib einen neuen Schlüssel für {account} ein (erwartetes Ablaufdatum: {expires}). Erzeuge ihn im selben Garmin-Konto in [Garmin Connect]({key_url})."),
                     "data": {"api_key": t("API key", "API-Schlüssel"), "key_validity_days": t("Validity (days)", "Gültigkeit (Tage)")},
                 },
             },
@@ -212,12 +307,16 @@ def build(i: int) -> dict:
                 "invalid_auth": t("The key was rejected by Garmin.", "Garmin hat den Schlüssel abgelehnt."),
                 "cannot_connect": t("Could not reach Garmin.", "Garmin ist nicht erreichbar."),
                 "unknown": t("Unexpected error, see the log.", "Unerwarteter Fehler, siehe Log."),
+                "name_required": t("Please enter a name.", "Bitte gib einen Namen ein."),
+                "account_id_missing": t("Garmin did not return an account ID, so the account cannot be identified.",
+                                        "Garmin hat keine Konto-ID geliefert. Das Konto kann nicht eindeutig erkannt werden."),
             },
             "abort": {
                 "already_configured": t("This account is already set up.", "Dieses Konto ist bereits eingerichtet."),
                 "reauth_successful": t("The key was updated.", "Der Schlüssel wurde aktualisiert."),
                 "reconfigure_successful": t("The key was updated.", "Der Schlüssel wurde aktualisiert."),
-                "wrong_account": t("This key belongs to a different Garmin account.", "Dieser Schlüssel gehört zu einem anderen Garmin-Konto."),
+                "wrong_account": t("This key belongs to a different Garmin account than this entry. Create the key in the same Garmin account.",
+                                   "Dieser Schlüssel gehört zu einem anderen Garmin-Konto als der Eintrag. Erzeuge den Schlüssel im selben Garmin-Konto."),
             },
         },
         "options": {
@@ -234,6 +333,7 @@ def build(i: int) -> dict:
         },
         "selector": {
             "key_validity": {"options": {d: t(f"{d} days", f"{d} Tage") for d in ("30", "90", "180", "365")}},
+            "endpoint": {"options": {k: v[i] for k, v in ENDPOINT_NAMES.items()}},
         },
         "entity": {
             "sensor": {k: ({"name": N[k][i]} | ({"state": {v: names[i] for v, names in LABELS[LABEL_OF[k]].items()}} if k in LABEL_OF else {})) for k in keys},
@@ -244,42 +344,49 @@ def build(i: int) -> dict:
         },
         "issues": {
             "key_expiring": {
-                "title": t("Garmin API key expires soon", "Garmin-API-Schlüssel läuft bald ab"),
+                "title": t("Garmin API key for {account} expires soon", "Garmin-Schlüssel für {account} läuft bald ab"),
                 "description": t(
-                    "The Personal API key for {account} expires on {expires}. Create a new key in Garmin Connect and use Reconfigure on the integration.",
-                    "Der Personal-API-Schlüssel für {account} läuft am {expires} ab. Erstelle in Garmin Connect einen neuen und nutze am Eintrag „Neu konfigurieren“.",
+                    "The API key for {account} is expected to expire on {expires} ({days_left} days left). Garmin does not report the expiry date; it is calculated from your entry during setup. Create a new key in Garmin Connect in time and enter it via Reconfigure.",
+                    "Der API-Schlüssel für {account} läuft voraussichtlich am {expires} ab (noch {days_left} Tage). Garmin meldet das Ablaufdatum nicht; es wird aus deiner Angabe bei der Einrichtung berechnet. Erzeuge rechtzeitig einen neuen Schlüssel in Garmin Connect und trage ihn über „Neu konfigurieren“ ein.",
                 ),
-            }
+            },
+            "key_expired": {
+                "title": t("Garmin API key for {account} has expired", "Garmin-Schlüssel für {account} abgelaufen"),
+                "description": t(
+                    "According to your entry the API key for {account} expired on {expires}. Create a new key in Garmin Connect and enter it via Reconfigure.",
+                    "Der API-Schlüssel für {account} ist laut deiner Angabe seit {expires} abgelaufen. Erzeuge einen neuen Schlüssel in Garmin Connect und trage ihn über „Neu konfigurieren“ ein.",
+                ),
+            },
         },
         "services": {
             "fetch": {"name": t("Fetch data", "Daten abrufen"),
                       "description": t("Fetch any Garmin endpoint for a day or range and return the raw result.",
                                        "Ruft einen beliebigen Garmin-Endpunkt für einen Tag oder Zeitraum ab und liefert das Rohergebnis."),
-                      "fields": {"config_entry_id": {"name": t("Account", "Konto"), "description": t("Only needed with several accounts.", "Nur bei mehreren Konten nötig.")},
+                      "fields": {"config_entry_id": {"name": t("Account", "Konto"), "description": t("Garmin account. May be left out only if exactly one account is set up.", "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist.")},
                                  "endpoint": {"name": t("Endpoint", "Endpunkt"), "description": t("Short name of the endpoint.", "Kurzname des Endpunkts.")},
                                  "date": {"name": t("Date", "Datum"), "description": t("For single-day endpoints (default today).", "Für Endpunkte mit einem Tag (Standard: heute).")},
                                  "start_date": {"name": t("Start date", "Startdatum"), "description": t("For range endpoints.", "Für Zeitraum-Endpunkte.")},
                                  "end_date": {"name": t("End date", "Enddatum"), "description": t("For range endpoints.", "Für Zeitraum-Endpunkte.")},
                                  "activity_id": {"name": t("Activity ID", "Aktivitäts-ID"), "description": t("For activity endpoints.", "Für Aktivitäts-Endpunkte.")},
-                                 "filters": {"name": t("Filters", "Filter"), "description": t("Activity filters, e.g. activity_type.", "Aktivitätsfilter, z. B. activity_type.")},
+                                 "filters": {"name": t("Filters", "Filter"), "description": t("Activity filters as a mapping, e.g. activity_type: running, min_distance: 10000, favorite: false.", "Aktivitätsfilter als Mapping, z. B. activity_type: running, min_distance: 10000, favorite: false.")},
                                  "limit": {"name": t("Limit", "Limit"), "description": t("Maximum number of activities.", "Maximale Anzahl Aktivitäten.")}}},
             "search_activities": {"name": t("Search activities", "Aktivitäten suchen"),
                                   "description": t("Search activities with filters; pages automatically.", "Sucht Aktivitäten mit Filtern; blättert automatisch."),
-                                  "fields": {"config_entry_id": {"name": t("Account", "Konto"), "description": t("Only needed with several accounts.", "Nur bei mehreren Konten nötig.")},
-                                             "filters": {"name": t("Filters", "Filter"), "description": t("For example activity_type, min_distance, start_date.", "Zum Beispiel activity_type, min_distance, start_date.")},
+                                  "fields": {"config_entry_id": {"name": t("Account", "Konto"), "description": t("Garmin account. May be left out only if exactly one account is set up.", "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist.")},
+                                             "filters": {"name": t("Filters", "Filter"), "description": t("Filters as a mapping, for example activity_type, min_distance, start_date, favorite.", "Filter als Mapping, zum Beispiel activity_type, min_distance, start_date, favorite.")},
                                              "limit": {"name": t("Limit", "Limit"), "description": t("Maximum number of activities.", "Maximale Anzahl Aktivitäten.")}}},
             "download_activity": {"name": t("Download activity file", "Aktivitätsdatei herunterladen"),
-                                  "description": t("Saves the original activity files (ZIP) to disk.", "Speichert die Original-Aktivitätsdateien (ZIP) im Dateisystem."),
-                                  "fields": {"config_entry_id": {"name": t("Account", "Konto"), "description": t("Only needed with several accounts.", "Nur bei mehreren Konten nötig.")},
+                                  "description": t("Saves the original activity files (ZIP) to an allowed folder.", "Speichert die Original-Aktivitätsdateien (ZIP) in einem erlaubten Ordner."),
+                                  "fields": {"config_entry_id": {"name": t("Account", "Konto"), "description": t("Garmin account. May be left out only if exactly one account is set up.", "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist.")},
                                              "activity_id": {"name": t("Activity ID", "Aktivitäts-ID"), "description": t("ID of the activity.", "ID der Aktivität.")},
-                                             "path": {"name": t("Target file", "Zieldatei"), "description": t("Default: garmin_personal folder in the config directory.", "Standard: Ordner garmin_personal im Konfigurationsverzeichnis.")}}},
+                                             "path": {"name": t("Target file", "Zieldatei"), "description": t("Target .zip file or a folder. Default: folder garmin_personal in the media folder, file activity_ID.zip. The folder must be allowed in allowlist_external_dirs (media folders are).", "Ziel-.zip-Datei oder Ordner. Standard: Ordner garmin_personal im Medienordner, Datei activity_ID.zip. Der Ordner muss in allowlist_external_dirs erlaubt sein (Medienordner sind es).")}}},
             "backfill_statistics": {"name": t("Import daily values as statistics", "Tageswerte als Statistik importieren"),
-                                    "description": t("Writes daily values (activity, sleep, HRV, weight) into long-term statistics (external, one value per day). Safe to repeat.",
-                                                     "Schreibt Tageswerte (Aktivität, Schlaf, HRV, Gewicht) in die Langzeitstatistik (extern, ein Wert pro Tag). Kann gefahrlos wiederholt werden."),
-                                    "fields": {"config_entry_id": {"name": t("Account", "Konto"), "description": t("Only needed with several accounts.", "Nur bei mehreren Konten nötig.")},
+                                    "description": t("Writes daily values (activity, sleep, HRV, weight) into long-term statistics (external, one value per day). Safe to repeat. Runs in 31-day windows; the response says whether it completed (complete, last_completed_day, error) and how many days and rows were written (days_imported, statistic_series, statistic_rows).",
+                                                     "Schreibt Tageswerte (Aktivität, Schlaf, HRV, Gewicht) in die Langzeitstatistik (extern, ein Wert pro Tag). Kann gefahrlos wiederholt werden. Läuft in 31-Tage-Fenstern; die Antwort sagt, ob alles fertig wurde (complete, last_completed_day, error) und wie viele Tage und Zeilen geschrieben wurden (days_imported, statistic_series, statistic_rows)."),
+                                    "fields": {"config_entry_id": {"name": t("Account", "Konto"), "description": t("Garmin account. May be left out only if exactly one account is set up.", "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist.")},
                                                "start_date": {"name": t("Start date", "Startdatum"), "description": t("Default: days back from the end date.", "Standard: Tage rückwärts ab Enddatum.")},
-                                               "end_date": {"name": t("End date", "Enddatum"), "description": t("Default: today.", "Standard: heute.")},
-                                               "days": {"name": t("Days", "Tage"), "description": t("Used when no start date is given.", "Wird ohne Startdatum verwendet.")},
+                                               "end_date": {"name": t("End date", "Enddatum"), "description": t("Last day to import. Default: yesterday; today only if given explicitly (an incomplete day).", "Letzter Tag des Imports. Standard: gestern; heute nur, wenn ausdrücklich angegeben (unvollständiger Tag).")},
+                                               "days": {"name": t("Days", "Tage"), "description": t("Number of days back from the end date (at most 3650). Used when no start date is given.", "Anzahl Tage rückwärts ab Enddatum (höchstens 3650). Wird ohne Startdatum verwendet.")},
                                                "include_third_party_steps": {"name": t("Steps from other apps", "Schritte aus anderen Apps"), "description": t("Also import steps, distance and floors of days that other apps (e.g. RunGap) wrote into Garmin Connect. Calories and heart rate of those days are never imported.", "Schritte, Distanz und Stockwerke von Tagen mitimportieren, die andere Apps (z. B. RunGap) in Garmin Connect geschrieben haben. Kalorien und Puls dieser Tage werden nie importiert.")}}},
         },
         "exceptions": {k: {"message": v[i]} for k, v in EXCEPTIONS.items()},
@@ -298,8 +405,8 @@ def build(i: int) -> dict:
     return out
 
 def icons() -> dict:
-    """icons.json: default icon per sensor, taken from the descriptors (icon="mdi:...")."""
-    sensors = {k: {"default": icon} for k, _, icon in _DESCRIPTORS if icon}
+    """icons.json: default icon per sensor, from the ICONS table above."""
+    sensors = {k: {"default": f"mdi:{icon}"} for k, icon in ICONS.items()}
     return {"entity": {"sensor": sensors, "calendar": {"activities": {"default": "mdi:run"}}}}
 
 
@@ -336,7 +443,7 @@ def main(argv: list[str] | None = None) -> int:
     for path, text in files.items():
         path.parent.mkdir(exist_ok=True)
         path.write_text(text)
-    print("ok", len(keys), "sensor names,", sum(1 for _, _, i in _DESCRIPTORS if i), "icons")
+    print("ok", len(keys), "sensor names,", len(ICONS), "icons")
     return 0
 
 

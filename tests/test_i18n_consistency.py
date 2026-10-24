@@ -2,8 +2,8 @@
 
 import contextlib
 import importlib
-import io
 import importlib.util
+import io
 import json
 import re
 import sys
@@ -98,12 +98,23 @@ class SensorsAndStates(unittest.TestCase):
         enums = [d for d in self.sensor.SENSORS if d.options is not None]
         self.assertTrue(enums)
         for d in enums:
+            if d.labels is None:
+                # open_enum: Garmin's values are not known yet, so the option list starts empty and has no translations.
+                self.assertEqual(list(d.options), [], d.key)
+                for tree in (EN, DE):
+                    self.assertNotIn("state", tree["entity"]["sensor"][d.translation_key], d.key)
+                continue
             self.assertIn(d.labels, self.labels.LABELS)
             for tree in (EN, DE):
                 states = tree["entity"]["sensor"][d.translation_key]["state"]
                 self.assertEqual(set(states), set(d.options), d.key)
             for option in d.options:
                 self.assertRegex(option, STATE_KEY, f"{d.key}: {option}")
+
+    def test_only_known_open_enums(self):
+        # A sensor with an empty option list is a deliberate choice (no observed values); keep the list explicit.
+        open_enums = {d.key for d in self.sensor.SENSORS if d.options is not None and d.labels is None}
+        self.assertEqual(open_enums, {"sleep_breathing_disruption"})
 
     def test_label_texts_are_pairs_of_non_empty_strings(self):
         for name, words in self.labels.LABELS.items():
@@ -113,7 +124,7 @@ class SensorsAndStates(unittest.TestCase):
                 self.assertTrue(all(isinstance(x, str) and x for x in pair), f"{name}.{key}")
 
     def test_no_state_block_for_sensors_without_labels(self):
-        plain = {d.translation_key for d in self.sensor.SENSORS if d.options is None} | {"key_expires"}
+        plain = {d.translation_key for d in self.sensor.SENSORS if d.options is None or d.labels is None} | {"key_expires"}
         for key in plain:
             self.assertNotIn("state", EN["entity"]["sensor"][key], key)
 
@@ -139,18 +150,66 @@ class OtherEntitiesAndMessages(unittest.TestCase):
             states = tree["entity"]["event"]["activity"]["state_attributes"]["event_type"]["state"]
             self.assertEqual(set(states), {value})
 
-    def test_exception_keys_are_used_in_code(self):
+    @staticmethod
+    def raised_keys():
+        """translation_key literals plus the ERR_* constants of services.py (passed on as keys)."""
         source = code_text(*[p.name for p in PKG.glob("*.py")])
+        keys = set(re.findall(r'(?<![a-z_])translation_key\s*=\s*"([a-z0-9_]+)"', source))
+        return keys | set(re.findall(r'^ERR_[A-Z_]+ = "([a-z0-9_]+)"', source, re.M))
+
+    def test_exception_keys_are_used_in_code(self):
+        used = self.raised_keys()
         for tree in (EN, DE):
             for key, node in tree["exceptions"].items():
                 self.assertIn("message", node)
-                self.assertRegex(source, rf'(?<![a-z_])translation_key\s*=\s*"{key}"', f"exceptions.{key} is never raised")
+                self.assertIn(key, used, f"exceptions.{key} is never raised")
 
     def test_exceptions_raised_with_a_key_exist(self):
-        source = code_text(*[p.name for p in PKG.glob("*.py")])
-        used = set(re.findall(r'(?<![a-z_])translation_key\s*=\s*"([a-z0-9_]+)"', source))
-        known = set(EN["exceptions"]) | set(EN["issues"]) | {"key_validity"}
-        self.assertFalse(used - known, f"translation_key without a translation: {sorted(used - known)}")
+        known = set(EN["exceptions"]) | set(EN["issues"]) | {"key_validity", "endpoint"}
+        # entity/sensor keys also appear as translation_key; leave out those
+        entity_keys = {k for p in EN["entity"].values() for k in p}
+        missing = self.raised_keys() - known - entity_keys
+        self.assertFalse(missing, f"translation_key without a translation: {sorted(missing)}")
+
+    def test_exception_placeholders_are_passed_by_the_code(self):
+        source = code_text("services.py")
+        for key, node in EN["exceptions"].items():
+            if key == "auth_failed":
+                continue
+            const = re.search(rf'^(ERR_[A-Z_]+) = "{key}"', source, re.M).group(1)
+            for call in re.findall(rf"_(?:invalid|failed)\({const}([^\n]*)\)", source):
+                for name in PLACEHOLDER.findall(node["message"]):
+                    self.assertIn(f"{name}=", call, f"{key}: placeholder {name} is not passed")
+
+    def test_issue_placeholders_are_passed_by_the_code(self):
+        source = code_text("repairs.py")
+        for key in ("key_expiring", "key_expired"):
+            for tree in (EN, DE):
+                for part in tree["issues"][key].values():
+                    for name in PLACEHOLDER.findall(part):
+                        self.assertIn(f'"{name}":', source, f"{key}: {name}")
+
+    def test_endpoint_options_match_services_yaml(self):
+        yaml_text = (PKG / "services.yaml").read_text()
+        options = re.findall(r"^\s+- ([a-z_0-9]+)$", yaml_text.split("options:")[1].split("date:")[0], re.M)
+        self.assertEqual(len(options), 25)
+        for tree in (EN, DE):
+            self.assertEqual(set(tree["selector"]["endpoint"]["options"]), set(options))
+
+    def test_icons_json_covers_every_listed_sensor(self):
+        icons = json.loads((PKG / "icons.json").read_text())
+        self.assertEqual(len(icons["entity"]["sensor"]), 41)
+        self.assertLessEqual(set(icons["entity"]["sensor"]), set(EN["entity"]["sensor"]))
+        for node in icons["entity"]["sensor"].values():
+            self.assertRegex(node["default"], r"^mdi:[a-z0-9-]+$")
+
+    def test_config_flow_texts_use_the_placeholders_the_flow_passes(self):
+        source = code_text("config_flow.py")
+        passed = set(re.findall(r'"([a-z_]+)":', source[source.index("description_placeholders"):]))
+        for tree in (EN, DE):
+            for step in tree["config"]["step"].values():
+                for name in PLACEHOLDER.findall(step.get("description", "")):
+                    self.assertIn(name, passed | {"key_url", "account", "expires"}, name)
 
     def test_issues_have_a_title_and_exactly_one_body(self):
         for tree in (EN, DE):
@@ -203,10 +262,10 @@ class GeneratorParser(unittest.TestCase):
         src = (
             'SENSORS = (\n'
             '    _d("a", "daily", f, labels="x"),\n'
-            '_d("b", "daily", f,\n    unit=1,\n    labels=\n    "y", icon="mdi:foo"),\n'
+            '_d("b", "daily", f,\n    unit=1,\n    labels=\n    "y", open_enum=True),\n'
             '    _d("c", "daily", f),\n)\n'
         )
-        self.assertEqual(GEN.parse_descriptors(src), [("a", "x", None), ("b", "y", "mdi:foo"), ("c", None, None)])
+        self.assertEqual(GEN.parse_descriptors(src), [("a", "x", False), ("b", "y", True), ("c", None, False)])
 
     def test_non_literal_arguments_fail_loudly(self):
         with self.assertRaises(GEN.GeneratorError):
