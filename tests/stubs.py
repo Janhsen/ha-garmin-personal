@@ -337,9 +337,13 @@ class RestoreSensor:
 
     _stored = None
     _stored_state = None
+    state_writes = 0
 
     async def async_added_to_hass(self):
         return None
+
+    def async_write_ha_state(self):
+        self.state_writes += 1
 
     async def async_get_last_sensor_data(self):
         return self._stored
@@ -577,7 +581,7 @@ def install() -> None:
          EntityCategory=make_enum("EntityCategory", "DIAGNOSTIC", "CONFIG"),
          UnitOfLength=make_enum("UnitOfLength", "METERS"),
          UnitOfMass=make_enum("UnitOfMass", "KILOGRAMS"),
-         UnitOfTime=make_enum("UnitOfTime", "MINUTES", "SECONDS"),
+         UnitOfTime=make_enum("UnitOfTime", "MINUTES", "SECONDS", "YEARS"),
          UnitOfVolume=make_enum("UnitOfVolume", "MILLILITERS"))
     stub("homeassistant.core", HomeAssistant=Anything, ServiceCall=FakeCall, ServiceResponse=dict,
          SupportsResponse=make_enum("SupportsResponse", "ONLY", "OPTIONAL", "NONE"),
@@ -600,7 +604,8 @@ def install() -> None:
     RECORDED.clear()
     stub("homeassistant.helpers")
     stub("homeassistant.helpers.config_validation", string=str, boolean=_cv_boolean, date=date, positive_int=int,
-         config_entry_only_config_schema=lambda domain: Schema({}))
+         config_entry_only_config_schema=lambda domain: Schema({}),
+         ensure_list=lambda v: v if isinstance(v, list) else [v])
     stub("homeassistant.helpers.entity_registry", async_get=lambda hass: REGISTRY,
          async_entries_for_config_entry=_entries_for_entry,
          RegistryEntryDisabler=RegistryEntryDisabler)
@@ -632,7 +637,9 @@ def install() -> None:
     stub("homeassistant.util")
     stub("homeassistant.util.dt",
          now=lambda: datetime.now(UTC), utcnow=lambda: datetime.now(UTC),
-         start_of_local_day=lambda d: datetime(d.year, d.month, d.day, tzinfo=UTC))
+         start_of_local_day=lambda d: datetime(d.year, d.month, d.day, tzinfo=UTC),
+         utc_from_timestamp=lambda t: datetime.fromtimestamp(t, tz=UTC),
+         parse_datetime=lambda text: datetime.fromisoformat(text))
     # `from homeassistant.helpers import ... entity_registry as er` braucht Attribute am Paket
     helpers = sys.modules["homeassistant.helpers"]
     for sub in ("config_validation", "entity_registry"):

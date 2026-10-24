@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 from dataclasses import dataclass, field
@@ -22,18 +21,40 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
 
-from .api import ENDPOINT_NAMES, GarminError, GarminRateLimitError, split_range
+from .api import ENDPOINT_NAMES, GarminAuthError, GarminError, GarminRateLimitError, split_range
 from .const import (
     ACTIVITY_PAGE_DEFAULT,
     ACTIVITY_SEARCH_MAX_TOTAL,
     ATTR_CONFIG_ENTRY_ID,
     DOMAIN,
     SERVICE_BACKFILL,
+    SERVICE_BACKFILL_HISTORY,
+    SERVICE_BACKFILL_INTRADAY,
     SERVICE_DOWNLOAD_ACTIVITY,
     SERVICE_FETCH,
     SERVICE_SEARCH_ACTIVITIES,
 )
 from .coordinator import GarminConfigEntry
+from .intraday import (
+    HISTORY_SERIES,
+    SERIES,
+    closed_hours,
+    drop_straddling,
+    fetch_series,
+    hour_start,
+    hourly_aggregate,
+    merge_points,
+    note_unknown_format,
+)
+from .history import (
+    HISTORY_KEYS,
+    HistoryTargetError,
+    HistoryWriteUnsupported,
+    append_points,
+    check_target,
+    manager_for,
+)
+from .stats_writer import build_metadata, write_hourly
 from .values import first_number, from_garmin, usable_summary
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,6 +75,11 @@ MAX_RANGE_DAYS = 3650
 # The backfill works through the range in pieces of this many days and stores each piece
 # right away, so a failure late in a long range keeps what was already imported.
 BACKFILL_WINDOW_DAYS = 31
+# The hourly statistics (backfill_intraday) ask Garmin once per day and series: a shorter limit.
+MAX_INTRADAY_DAYS = 366
+INTRADAY_DEFAULT_DAYS = 7
+# The hourly backfill writes what it has collected after this many days (and at the end or on a stop).
+INTRADAY_FLUSH_DAYS = 31
 
 # Translation keys of the errors raised here (``exceptions.<key>.message`` in strings.json).
 ERR_NO_ENTRY = "no_entry"
@@ -68,6 +94,13 @@ ERR_PATH_NOT_ALLOWED = "path_not_allowed"
 ERR_PATH_NOT_ZIP = "path_not_zip"
 ERR_DOWNLOAD_FAILED = "download_failed"
 ERR_BACKFILL_RUNNING = "backfill_running"
+ERR_HISTORY_UNSUPPORTED = "history_write_unsupported"
+ATTR_SERIES = "series"
+ATTR_CONFIRM = "confirm_rewrite"
+MAX_HISTORY_DAYS = 31
+ERR_HISTORY_SENSOR_MISSING = "history_sensor_missing"
+ERR_HISTORY_SENSOR_DISABLED = "history_sensor_disabled"
+ERR_HISTORY_NOT_RECORDED = "history_not_recorded"
 
 
 def _invalid(key: str, **placeholders: Any) -> ServiceValidationError:
@@ -144,6 +177,28 @@ BACKFILL_SCHEMA = vol.Schema(
     }
 )
 
+INTRADAY_SCHEMA = vol.Schema(
+    {
+        **BASE,
+        vol.Optional(ATTR_START): cv.date,
+        vol.Optional(ATTR_END): cv.date,
+        vol.Optional(ATTR_DAYS, default=INTRADAY_DEFAULT_DAYS): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=MAX_INTRADAY_DAYS)
+        ),
+    }
+)
+
+HISTORY_SCHEMA = vol.Schema(
+    {
+        **BASE,
+        vol.Optional(ATTR_START): cv.date,
+        vol.Optional(ATTR_END): cv.date,
+        vol.Optional(ATTR_DAYS, default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_HISTORY_DAYS)),
+        vol.Optional(ATTR_SERIES): vol.All(cv.ensure_list, [vol.In(tuple(HISTORY_KEYS))]),
+        vol.Optional(ATTR_CONFIRM, default=False): cv.boolean,
+    }
+)
+
 # statistic id suffix -> (unit, candidate paths). The daily-summaries range endpoint
 # is nested ("movement.steps.value"); the flat names are the single-day format.
 BACKFILL_FIELDS: dict[str, tuple[str | None, tuple[tuple[str, ...], ...]]] = {
@@ -189,10 +244,6 @@ SKIP_ZERO_FIELDS = frozenset(
     }
 )
 
-# Recorder unit classes for units Home Assistant can convert (statistics cards then follow the
-# unit system); other units stay without a class. Only set when the recorder knows the field.
-UNIT_CLASSES: dict[str, str] = {"m": "distance", "kg": "mass", "s": "duration", "min": "duration"}
-
 
 def _loaded(entry: Any) -> bool:
     return (
@@ -235,13 +286,13 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
-def _check_span(start: date, end: date) -> None:
-    """Reject reversed ranges and ranges longer than ``MAX_RANGE_DAYS``."""
+def _check_span(start: date, end: date, max_days: int = MAX_RANGE_DAYS) -> None:
+    """Reject reversed ranges and ranges longer than ``max_days``."""
     if start > end:
         raise _invalid(ERR_INVALID_DATE_RANGE, start=start.isoformat(), end=end.isoformat())
-    if (end - start).days + 1 > MAX_RANGE_DAYS:
+    if (end - start).days + 1 > max_days:
         raise _invalid(
-            ERR_DATE_RANGE_TOO_LONG, start=start.isoformat(), end=end.isoformat(), max_days=MAX_RANGE_DAYS
+            ERR_DATE_RANGE_TOO_LONG, start=start.isoformat(), end=end.isoformat(), max_days=max_days
         )
 
 
@@ -269,8 +320,6 @@ def async_register_services(hass: HomeAssistant) -> None:
     """Register all services (idempotent)."""
     if hass.services.has_service(DOMAIN, SERVICE_FETCH):
         return
-
-    backfill_locks: dict[str, asyncio.Lock] = {}
 
     async def fetch(call: ServiceCall) -> ServiceResponse:
         entry = _get_entry(hass, call)
@@ -360,11 +409,41 @@ def async_register_services(hass: HomeAssistant) -> None:
         end = min(explicit_end, today) if explicit_end else today - timedelta(days=1)
         start = call.data.get(ATTR_START) or (end - timedelta(days=call.data[ATTR_DAYS] - 1))
         _check_span(start, end)
-        lock = backfill_locks.setdefault(entry.entry_id, asyncio.Lock())
+        lock = manager_for(hass, entry).lock
         if lock.locked():
             raise _invalid(ERR_BACKFILL_RUNNING, title=entry.title)
         async with lock:
             return await _run_backfill(entry, start, end, bool(call.data.get(ATTR_THIRD_PARTY)), end >= today)
+
+    async def backfill_intraday(call: ServiceCall) -> ServiceResponse:
+        entry = _get_entry(hass, call)
+        today = dt_util.now().date()
+        explicit_end = call.data.get(ATTR_END)
+        # The running hour is never stored, so today can be included safely.
+        end = min(explicit_end, today) if explicit_end else today
+        start = call.data.get(ATTR_START) or (end - timedelta(days=call.data.get(ATTR_DAYS, INTRADAY_DEFAULT_DAYS) - 1))
+        _check_span(start, end, MAX_INTRADAY_DAYS)
+        lock = manager_for(hass, entry).lock
+        if lock.locked():
+            raise _invalid(ERR_BACKFILL_RUNNING, title=entry.title)
+        async with lock:
+            return await _run_intraday_backfill(hass, entry, start, end, end >= today)
+
+    async def backfill_history(call: ServiceCall) -> ServiceResponse:
+        entry = _get_entry(hass, call)
+        today = dt_util.now().date()
+        explicit_end = call.data.get(ATTR_END)
+        end = min(explicit_end, today) if explicit_end else today
+        start = call.data.get(ATTR_START) or (end - timedelta(days=call.data.get(ATTR_DAYS, 1) - 1))
+        _check_span(start, end, MAX_HISTORY_DAYS)
+        series = [s for s in (call.data.get(ATTR_SERIES) or list(HISTORY_KEYS)) if s in HISTORY_KEYS]
+        lock = manager_for(hass, entry).lock
+        if lock.locked():
+            raise _invalid(ERR_BACKFILL_RUNNING, title=entry.title)
+        async with lock:
+            return await _run_history_backfill(
+                hass, entry, start, end, series, bool(call.data.get(ATTR_CONFIRM, False))
+            )
 
     async def _run_backfill(
         entry: GarminConfigEntry, start: date, end: date, third_party: bool, partial_day: bool
@@ -458,6 +537,208 @@ def async_register_services(hass: HomeAssistant) -> None:
         schema=BACKFILL_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_BACKFILL_HISTORY,
+        backfill_history,
+        schema=HISTORY_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_BACKFILL_INTRADAY,
+        backfill_intraday,
+        schema=INTRADAY_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+
+
+async def _run_intraday_backfill(
+    hass: HomeAssistant, entry: GarminConfigEntry, start: date, end: date, partial_day: bool
+) -> dict[str, Any]:
+    """Hourly statistics for heart rate, Body Battery and SpO2, one request per day and series.
+
+    What was collected is written every ``INTRADAY_FLUSH_DAYS`` days, so a stop late in a long
+    range keeps the earlier part. An hour that reaches over a day boundary is only written once
+    both days are known (see ``drop_straddling``); the running hour is never written.
+    """
+    api = entry.runtime_data.api
+    now = dt_util.utcnow()
+    range_start = dt_util.start_of_local_day(start)
+    range_end = dt_util.start_of_local_day(end + timedelta(days=1))
+    points: dict[str, list[tuple[int, float]]] = {key: [] for key in SERIES}
+    hours = dict.fromkeys(SERIES, 0)
+    days_with_data = dict.fromkeys(SERIES, 0)
+    days_failed = dict.fromkeys(SERIES, 0)
+    unreadable: set[str] = set()
+    errors: dict[str, str] = {}
+    written_days: set[date] = set()
+    series_written: set[str] = set()
+    rows = 0
+    stopped: GarminError | None = None
+    last_done: date | None = None
+    days_done = 0
+
+    def flush(final: bool, stop_day: date | None = None) -> None:
+        """Write the collected points; unless final or stopped, keep the newest (possibly unfinished) hour."""
+        nonlocal rows
+        if stop_day is not None:  # the days up to here are known, the following ones are not
+            bounds = (range_start, dt_util.start_of_local_day(stop_day), dt_util.start_of_local_day(stop_day + timedelta(days=1)))
+        else:
+            bounds = (range_start, range_end) if final else (range_start,)
+        for key, spec in SERIES.items():
+            if not points[key]:
+                continue
+            aggregated = closed_hours(hourly_aggregate(points[key]), now)
+            if final or stop_day is not None:
+                points[key] = []
+            else:
+                newest = hour_start(max(ts for ts, _ in points[key]))
+                aggregated = {h: s for h, s in aggregated.items() if h < newest}
+                points[key] = [(ts, v) for ts, v in points[key] if hour_start(ts) >= newest]
+            written = write_hourly(
+                hass, entry.entry_id, entry.title, spec.stat_name, spec.unit, drop_straddling(aggregated, *bounds)
+            )
+            if written:
+                rows += written
+                series_written.add(key)
+                hours[key] += written
+
+    day = start
+    while day <= end and stopped is None:
+        for key, spec in SERIES.items():
+            try:
+                payload = await fetch_series(api, key, day)
+            except (GarminRateLimitError, GarminAuthError) as err:  # asking on would only make it worse
+                stopped = err
+                break
+            except GarminError as err:
+                errors.setdefault(f"{key}_error", str(err))
+                days_failed[key] += 1
+                continue
+            parsed = spec.parse(payload)
+            if parsed is None:
+                note_unknown_format(key)
+                unreadable.add(key)
+                continue
+            if parsed:
+                points[key] = merge_points(points[key], parsed)
+                days_with_data[key] += 1
+                written_days.add(day)
+        if stopped is not None:
+            break
+        last_done = day
+        days_done += 1
+        if days_done % INTRADAY_FLUSH_DAYS == 0:
+            flush(final=False)
+        day += timedelta(days=1)
+    flush(final=stopped is None, stop_day=None if stopped is None else day)
+    if stopped is not None and last_done is None and not rows:
+        raise _failed(ERR_GARMIN_FAILED, error=stopped) from stopped
+    result: dict[str, Any] = {
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "complete": stopped is None,
+        "partial_day_included": partial_day,
+        "days_completed": days_done,
+        "days_with_data": len(written_days),
+        **{f"{key}_hours": n for key, n in hours.items()},
+        **{f"{key}_days_failed": n for key, n in days_failed.items() if n},
+        "statistic_series": len(series_written),
+        "statistic_rows": rows,
+        **errors,
+    }
+    if unreadable:
+        result["unknown_format"] = sorted(unreadable)
+    if stopped is not None:
+        result["error"] = str(stopped)
+        result["last_completed_day"] = last_done.isoformat() if last_done else None
+    return result
+
+
+async def _run_history_backfill(
+    hass: HomeAssistant, entry: GarminConfigEntry, start: date, end: date, series: list[str], confirm: bool
+) -> dict[str, Any]:
+    """Append the real measuring points of each day to the history sensors; never rewrite.
+
+    A point is written only if the ledger (and, for days it does not know, the recorder) has
+    never seen its timestamp. Same timestamp with another value is counted, not written.
+    """
+    api = entry.runtime_data.api
+    for key in series:  # the target must exist, be enabled and recorded, before Garmin is asked
+        try:
+            await check_target(hass, entry, key)
+        except HistoryTargetError as err:
+            if err.key == ERR_HISTORY_SENSOR_MISSING:
+                raise _invalid(ERR_HISTORY_SENSOR_MISSING) from err
+            if err.key == ERR_HISTORY_SENSOR_DISABLED:
+                raise _invalid(ERR_HISTORY_SENSOR_DISABLED, entity_id=err.entity_id) from err
+            raise _invalid(ERR_HISTORY_NOT_RECORDED, entity_id=err.entity_id) from err
+        except HistoryWriteUnsupported as err:
+            raise _failed(ERR_HISTORY_UNSUPPORTED) from err
+    manager = manager_for(hass, entry)
+    ledger = await manager.ledger()
+    write_error: str | None = None
+    totals = {"written": 0, "already": 0, "changed": 0, "adopted": 0}
+    unverified = days_done = 0
+    unreadable: set[str] = set()
+    errors: dict[str, str] = {}
+    stopped: GarminError | None = None
+    last_done: date | None = None
+    day = start
+    while day <= end and stopped is None and write_error is None:
+        for key in series:
+            try:
+                parsed = HISTORY_SERIES[key].parse(await fetch_series(api, key, day))
+            except (GarminRateLimitError, GarminAuthError) as err:
+                stopped = err
+                break
+            except GarminError as err:
+                errors.setdefault(f"{key}_error", str(err))
+                continue
+            if parsed is None:
+                note_unknown_format(key)
+                unreadable.add(key)
+                continue
+            res = await append_points(hass, entry, ledger, key, day, parsed, confirm=confirm)
+            totals["written"] += res.written
+            totals["already"] += res.already
+            totals["changed"] += res.changed
+            totals["adopted"] += res.adopted
+            unverified += res.unverified
+            if res.error is not None:
+                write_error = res.error
+                break
+        if stopped is not None or write_error is not None:
+            break
+        last_done = day
+        days_done += 1
+        await manager.save()
+        day += timedelta(days=1)
+    await manager.save()
+    if stopped is not None and last_done is None and not totals["written"]:
+        raise _failed(ERR_GARMIN_FAILED, error=stopped) from stopped
+    out: dict[str, Any] = {
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "complete": stopped is None and write_error is None,
+        "days_completed": days_done,
+        "points_written": totals["written"],
+        "points_already_written": totals["already"],
+        "changed_values_skipped": totals["changed"],
+        "points_found_in_recorder": totals["adopted"],
+        "days_skipped_unverified": unverified,
+        **errors,
+    }
+    if unreadable:
+        out["unknown_format"] = sorted(unreadable)
+    if stopped is not None:
+        out["error"] = str(stopped)
+        out["last_completed_day"] = last_done.isoformat() if last_done else None
+    if write_error is not None:
+        out["error"] = f"history_write_failed: {write_error}"
+        out["last_completed_day"] = last_done.isoformat() if last_done else None
+    return out
 
 
 SLEEP_FIELDS: dict[str, tuple[str | None, tuple[tuple[str, ...], ...]]] = {
@@ -598,30 +879,10 @@ def _write_series(
     """Store one series of daily values as an external statistic; False if there is nothing to store."""
     if not rows:
         return False
-    from homeassistant.components.recorder.models import StatisticMetaData
     from homeassistant.components.recorder.statistics import async_add_external_statistics
 
-    try:
-        from homeassistant.components.recorder.models import StatisticMeanType
-    except ImportError:  # older Home Assistant
-        StatisticMeanType = None  # noqa: N806
-
-    # Statistic ids and names stay as first released (they differ from the live sensors' keys in
-    # places, e.g. ``sleep_respiration``): renaming would orphan the history already stored.
-    metadata: dict[str, Any] = {
-        "has_sum": False,
-        "name": f"{entry.title} {name.replace('_', ' ')}",
-        "source": DOMAIN,
-        "statistic_id": f"{DOMAIN}:{entry.entry_id.lower()}_{name}",
-        "unit_of_measurement": unit,
-    }
-    if StatisticMeanType is not None:
-        metadata["mean_type"] = StatisticMeanType.ARITHMETIC
-    else:
-        metadata["has_mean"] = True
-    if "unit_class" in getattr(StatisticMetaData, "__annotations__", {}):
-        metadata["unit_class"] = UNIT_CLASSES.get(unit or "")
-    async_add_external_statistics(hass, StatisticMetaData(**metadata), rows)
+    metadata = build_metadata(entry.entry_id, entry.title, name, unit)
+    async_add_external_statistics(hass, metadata, rows)
     if tally is not None:
         tally.series.add(name)
         tally.rows += len(rows)

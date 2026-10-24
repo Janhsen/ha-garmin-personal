@@ -79,6 +79,10 @@ N = {
  "hr_resting_used": ("Resting heart rate (set)", "Ruhepuls (eingestellt)"),
  "hr_lactate_threshold": ("Lactate threshold heart rate", "Laktatschwelle Puls"),
  "key_expires": ("API key expires", "API-Schlüssel läuft ab"),
+ "heart_rate_history": ("Heart rate (history)", "Puls (Verlauf)"),
+ "body_battery_history": ("Body Battery (history)", "Body Battery (Verlauf)"),
+ "spo2_history": ("SpO2 (history)", "SpO2 (Verlauf)"),
+ "hrv_history": ("HRV (history)", "HRV (Verlauf)"),
 }
 
 # ---------------------------------------------------------------------------
@@ -87,6 +91,10 @@ N = {
 
 # Default icon per sensor (icons.json). Sensors without an entry use Home Assistant's default.
 ICONS = {
+    "heart_rate_history": "heart-pulse",
+    "body_battery_history": "battery-clock",
+    "spo2_history": "water-percent",
+    "hrv_history": "heart-flash",
     "steps": "shoe-print",
     "total_calories": "fire",
     "active_calories": "fire",
@@ -166,6 +174,14 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
                          "{path} liegt nicht in einem erlaubten Ordner. Gib {folder} in allowlist_external_dirs frei oder wähle einen Pfad im Medienordner."),
     "path_not_zip": ("The target file {path} must end in .zip.", "Die Zieldatei {path} muss auf .zip enden."),
     "download_failed": ("Could not write {path}: {error}", "{path} konnte nicht geschrieben werden: {error}"),
+    "history_write_unsupported": ("The history sensors cannot be written on this Home Assistant: the registry or the recorder is not reachable. Nothing was requested or written.",
+                                  "Die Verlauf-Sensoren lassen sich auf diesem Home Assistant nicht beschreiben: Registry oder Recorder sind nicht erreichbar. Es wurde nichts abgefragt oder geschrieben."),
+    "history_sensor_missing": ("The history sensor does not exist yet. Reload the integration, then enable the sensor.",
+                               "Der Verlauf-Sensor existiert noch nicht. Lade die Integration neu und aktiviere dann den Sensor."),
+    "history_sensor_disabled": ("The history sensor {entity_id} is disabled. Enable it first (Settings > Devices & services > Entities).",
+                                "Der Verlauf-Sensor {entity_id} ist deaktiviert. Aktiviere ihn zuerst (Einstellungen > Geräte & Dienste > Entitäten)."),
+    "history_not_recorded": ("The recorder does not record {entity_id} (include/exclude settings). Nothing was written.",
+                             "Der Recorder zeichnet {entity_id} nicht auf (Einschluss-/Ausschluss-Einstellungen). Es wurde nichts geschrieben."),
     "backfill_running": ("An import is already running for {title}.", "Für {title} läuft bereits ein Import."),
 }
 
@@ -173,9 +189,9 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
 DATA_DESCRIPTIONS: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
     ("config", "user"): {
         "name": ("Display name of the account, e.g. a first name. It becomes the device name and part of every entity ID "
-                 "(for example sensor.<name>_steps); renaming later does not change existing entity IDs.",
+                 "(for example sensor.jan_steps if the name is Jan); renaming later does not change existing entity IDs.",
                  "Anzeigename des Kontos, z. B. der Vorname. Er wird Gerätename und Teil aller Entitäts-IDs "
-                 "(z. B. sensor.<name>_schritte); späteres Umbenennen ändert bestehende IDs nicht."),
+                 "(z. B. sensor.jan_steps bei dem Namen Jan); späteres Umbenennen ändert bestehende IDs nicht."),
         "api_key": ("The key from Garmin Connect (Settings > Personal API key). Garmin shows it only once.",
                     "Der Schlüssel aus Garmin Connect (Einstellungen > Persönlicher API-Schlüssel). Garmin zeigt ihn nur einmal."),
         "key_validity_days": ("The same duration you chose in Garmin when creating the key. Garmin does not report the expiry date; "
@@ -202,13 +218,27 @@ DATA_DESCRIPTIONS: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
                                 "large, requests extra data from Garmin and the series are not stored in the recorder.",
                                 "Hängt Puls-, Body-Battery- und SpO2-Verläufe als Attribute an die Sensoren. Das macht die Zustandsdaten "
                                 "groß, ruft zusätzliche Daten bei Garmin ab, und die Verläufe werden nicht im Recorder gespeichert."),
+        "hourly_statistics": ("After each new watch sync, writes heart rate, Body Battery and SpO2 as hourly values (minimum, maximum, mean "
+                              "of each completed hour) into the long-term statistics. Independent of the option above; costs one extra "
+                              "request per series and sync (plus one per series for yesterday in the morning).",
+                              "Schreibt nach jeder neuen Uhr-Synchronisierung Puls, Body Battery und SpO2 als Stundenwerte (Minimum, Maximum, "
+                              "Mittelwert jeder abgeschlossenen Stunde) in die Langzeitstatistik. Unabhängig von der Option darüber; kostet "
+                              "je Reihe und Sync eine zusätzliche Anfrage (morgens plus eine je Reihe für gestern)."),
+        "history_auto": ("After each new watch sync, appends the new measuring points of heart rate, Body Battery, SpO2 and HRV as recorded states of their (history) sensors, and fills in the past days up to the recorder's keep days (at most 400), slowly in the background. Only for history sensors that you enabled and that the recorder records. Adds one state per measuring point to the database (about 720 per day for heart rate) until purge_keep_days removes it.",
+                          "Trägt nach jeder neuen Uhr-Synchronisierung die neuen Messpunkte von Puls, Body Battery, SpO2 und HRV als aufgezeichnete Zustände ihrer (Verlauf-)Sensoren nach und füllt die vergangenen Tage bis zur Aufbewahrungsdauer des Recorders (höchstens 400) langsam im Hintergrund auf. Nur für Verlauf-Sensoren, die du aktiviert hast und die der Recorder aufzeichnet. Legt je Messpunkt einen Zustand in der Datenbank ab (beim Puls etwa 720 pro Tag), bis purge_keep_days ihn entfernt."),
         "sync_stale_hours": ("The binary sensor reports a problem when the last watch sync is older than this many hours.",
                              "Der Binärsensor meldet ein Problem, wenn der letzte Uhr-Sync länger als so viele Stunden her ist."),
     },
 }
 
 # Further repair issues: key -> {"title": (en, de), "description": (en, de)} (key_expiring is built in below).
-EXTRA_ISSUES: dict[str, dict[str, tuple[str, str]]] = {}
+EXTRA_ISSUES: dict[str, dict[str, tuple[str, str]]] = {
+    "history_not_recorded": {
+        "title": ("A history sensor is not recorded", "Ein Verlauf-Sensor wird nicht aufgezeichnet"),
+        "description": ("The history sensor for {series} of {account} is enabled, but the recorder excludes it (include/exclude settings), so nothing is written to the history. Allow the entity in the recorder settings or disable the sensor.",
+                        "Der Verlauf-Sensor für {series} von {account} ist aktiviert, aber der Recorder schließt ihn aus (Einschluss-/Ausschluss-Einstellungen), deshalb wird nichts in den Verlauf geschrieben. Erlaube die Entität in den Recorder-Einstellungen oder deaktiviere den Sensor."),
+    },
+}
 
 # Extra service fields: service -> field -> {"name": (en, de), "description": (en, de)}; added to the built-in fields.
 EXTRA_SERVICE_FIELDS: dict[str, dict[str, dict[str, tuple[str, str]]]] = {}
@@ -257,7 +287,7 @@ LABELS = load_labels()
 _DESCRIPTORS = parse_descriptors((ROOT / "sensor.py").read_text())
 if len({k for k, _, _ in _DESCRIPTORS}) != len(_DESCRIPTORS):
     raise GeneratorError("sensor.py: duplicate sensor keys")
-keys = [k for k, _, _ in _DESCRIPTORS] + ["key_expires"]
+keys = [k for k, _, _ in _DESCRIPTORS] + ["key_expires", "heart_rate_history", "body_battery_history", "spo2_history", "hrv_history"]
 _bad_icons = sorted(k for k in ICONS if k not in keys)
 if _bad_icons:
     raise GeneratorError(f"ICONS has entries without a sensor: {_bad_icons}")
@@ -326,6 +356,8 @@ def build(i: int) -> dict:
                     "data": {
                         "daily_interval_minutes": t("Update interval for daily values (minutes)", "Abrufintervall Tageswerte (Minuten)"),
                         "intraday_attributes": t("Add intraday series as attributes (large)", "Tagesverläufe als Attribute anhängen (groß)"),
+                        "hourly_statistics": t("Write hourly statistics (heart rate, Body Battery, SpO2)", "Stundenstatistik schreiben (Puls, Body Battery, SpO2)"),
+                        "history_auto": t("Fill in history automatically (history sensors)", "Verlauf automatisch nachtragen (Verlauf-Sensoren)"),
                         "sync_stale_hours": t("Warn when the watch has not synced for (hours)", "Warnen, wenn die Uhr länger nicht synchronisiert wurde als (Stunden)"),
                     },
                 }
@@ -388,6 +420,22 @@ def build(i: int) -> dict:
                                                "end_date": {"name": t("End date", "Enddatum"), "description": t("Last day to import. Default: yesterday; today only if given explicitly (an incomplete day).", "Letzter Tag des Imports. Standard: gestern; heute nur, wenn ausdrücklich angegeben (unvollständiger Tag).")},
                                                "days": {"name": t("Days", "Tage"), "description": t("Number of days back from the end date (at most 3650). Used when no start date is given.", "Anzahl Tage rückwärts ab Enddatum (höchstens 3650). Wird ohne Startdatum verwendet.")},
                                                "include_third_party_steps": {"name": t("Steps from other apps", "Schritte aus anderen Apps"), "description": t("Also import steps, distance and floors of days that other apps (e.g. RunGap) wrote into Garmin Connect. Calories and heart rate of those days are never imported.", "Schritte, Distanz und Stockwerke von Tagen mitimportieren, die andere Apps (z. B. RunGap) in Garmin Connect geschrieben haben. Kalorien und Puls dieser Tage werden nie importiert.")}}},
+            "backfill_intraday": {"name": t("Import hourly values as statistics", "Stundenwerte als Statistik importieren"),
+                                  "description": t("Writes the day curves of heart rate, Body Battery and SpO2 as hourly values (minimum, maximum, mean of each completed hour) into long-term statistics. One request per day and series; a range may span at most 366 days. Safe to repeat: the same hours are overwritten. The response says whether it completed (complete, last_completed_day, error) and how many hours were written per series.",
+                                                   "Schreibt die Tagesverläufe von Puls, Body Battery und SpO2 als Stundenwerte (Minimum, Maximum, Mittelwert jeder abgeschlossenen Stunde) in die Langzeitstatistik. Eine Anfrage je Tag und Reihe; ein Zeitraum darf höchstens 366 Tage umfassen. Kann gefahrlos wiederholt werden: dieselben Stunden werden überschrieben. Die Antwort sagt, ob alles fertig wurde (complete, last_completed_day, error) und wie viele Stunden je Reihe geschrieben wurden."),
+                                  "fields": {"config_entry_id": {"name": t("Account", "Konto"), "description": t("Garmin account. May be left out only if exactly one account is set up.", "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist.")},
+                                             "start_date": {"name": t("Start date", "Startdatum"), "description": t("Default: days back from the end date.", "Standard: Tage rückwärts ab Enddatum.")},
+                                             "end_date": {"name": t("End date", "Enddatum"), "description": t("Last day to import. Default: today (only completed hours are written, never the running hour).", "Letzter Tag des Imports. Standard: heute (es werden nur abgeschlossene Stunden geschrieben, nie die laufende).")},
+                                             "days": {"name": t("Days", "Tage"), "description": t("Number of days back from the end date (at most 366, default 7). Used when no start date is given.", "Anzahl Tage rückwärts ab Enddatum (höchstens 366, Standard 7). Wird ohne Startdatum verwendet.")}}},
+            "backfill_history": {"name": t("Write history sensors (appending only)", "Verlauf-Sensoren schreiben (nur anhängend)"),
+                                 "description": t("Writes the real measuring points of heart rate, Body Battery, SpO2 and the night's HRV with their own timestamps as recorded states of the (history) sensors, so the History panel shows them. Appends only: points already written are never written again, overwritten or deleted. The sensors must be enabled and recorded. This also runs automatically (option Fill in history automatically); use the service for a specific range.",
+                                                  "Schreibt die echten Messpunkte von Puls, Body Battery, SpO2 und nächtlicher HRV mit ihren eigenen Zeitstempeln als aufgezeichnete Zustände der (Verlauf-)Sensoren, damit der Bereich Verlauf sie zeigt. Nur anhängend: bereits geschriebene Punkte werden nie erneut geschrieben, überschrieben oder gelöscht. Die Sensoren müssen aktiviert und aufgezeichnet sein. Das läuft auch automatisch (Option Verlauf automatisch nachtragen); der Dienst ist für einen bestimmten Zeitraum."),
+                                 "fields": {"config_entry_id": {"name": t("Account", "Konto"), "description": t("Garmin account. May be left out only if exactly one account is set up.", "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist.")},
+                                            "start_date": {"name": t("Start date", "Startdatum"), "description": t("Default: days back from the end date.", "Standard: Tage rückwärts ab Enddatum.")},
+                                            "end_date": {"name": t("End date", "Enddatum"), "description": t("Last day. Default: today.", "Letzter Tag. Standard: heute.")},
+                                            "days": {"name": t("Days", "Tage"), "description": t("Number of days back from the end date (at most 31, default 1).", "Anzahl Tage rückwärts ab Enddatum (höchstens 31, Standard 1).")},
+                                            "series": {"name": t("Series", "Reihen"), "description": t("Any of heart_rate, body_battery, spo2, hrv (default: all).", "Beliebig viele von heart_rate, body_battery, spo2, hrv (Standard: alle).")},
+                                            "confirm_rewrite": {"name": t("Write without check", "Ohne Prüfung schreiben"), "description": t("Only if the record of written points is lost and the recorder cannot be checked: write the requested days anyway. This can duplicate states that exist already.", "Nur wenn das Protokoll der geschriebenen Punkte verloren ist und der Recorder nicht geprüft werden kann: die angeforderten Tage trotzdem schreiben. Das kann bereits vorhandene Zustände verdoppeln.")}}},
         },
         "exceptions": {k: {"message": v[i]} for k, v in EXCEPTIONS.items()},
     }

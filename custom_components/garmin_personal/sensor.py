@@ -32,6 +32,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import OPT_INTRADAY
 from .coordinator import GarminConfigEntry, GarminCoordinator
 from .entity import device_info
+from .history import HISTORY_KEYS, manager_for
 from .labels import LABELS
 from .repairs import key_expires_at
 from .values import (
@@ -64,6 +65,7 @@ KCAL = "kcal"
 STEPS = "steps"
 MINUTES = UnitOfTime.MINUTES
 SECONDS = UnitOfTime.SECONDS
+YEARS = UnitOfTime.YEARS
 
 ATTRIBUTE_TEXT_LIMIT = 255
 AttrsFn = Callable[[Mapping[str, Any]], Mapping[str, Any] | None]
@@ -530,11 +532,11 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("bone_mass", "body", weight_at("boneMass", scale=1000, digits=2, zero_is_none=True), unit=UnitOfMass.KILOGRAMS,
        device_class=SensorDeviceClass.WEIGHT),
     _d("visceral_fat", "body", weight_at("visceralFat"), enabled=False),
-    _d("metabolic_age", "body", weight_at("metabolicAge", digits=0), unit="a", enabled=False),
-    _d("fitness_age", "body", number_at("fitness_age", "fitnessAge", digits=1), unit="a", attrs=_fitness_age_attrs),
-    _d("fitness_age_achievable", "body", number_at("fitness_age", "achievableFitnessAge", digits=1), unit="a",
+    _d("metabolic_age", "body", weight_at("metabolicAge", digits=0), unit=YEARS, enabled=False),
+    _d("fitness_age", "body", number_at("fitness_age", "fitnessAge", digits=1), unit=YEARS, attrs=_fitness_age_attrs),
+    _d("fitness_age_achievable", "body", number_at("fitness_age", "achievableFitnessAge", digits=1), unit=YEARS,
        enabled=False),
-    _d("chronological_age", "body", number_at("fitness_age", "chronologicalAge"), unit="a", enabled=False,
+    _d("chronological_age", "body", number_at("fitness_age", "chronologicalAge"), unit=YEARS, enabled=False,
        category=EntityCategory.DIAGNOSTIC),
     # ---- Activities (group "activities") ----------------------------------------------
     _d("last_activity", "activities", activity_text("activityName"), state_class=NO_CLASS, attrs=_activity_attrs),
@@ -692,6 +694,7 @@ async def async_setup_entry(
         if description.group in runtime.coordinators
     ]
     entities.append(GarminKeyExpirySensor(entry))
+    entities.extend(GarminHistorySensor(entry, key, unit) for key, unit in HISTORY_UNITS.items())
     async_add_entities(entities)
 
 
@@ -800,6 +803,82 @@ class GarminSensor(CoordinatorEntity[GarminCoordinator], RestoreSensor):
             attrs["last_seen"] = self._last_seen
             attrs["held_value"] = self._current() is None
         return attrs or None
+
+
+# translation key of the history sensor -> unit (see history.py)
+HISTORY_UNITS: dict[str, str] = {"heart_rate_history": BPM, "body_battery_history": "%", "spo2_history": "%", "hrv_history": "ms"}
+
+
+class GarminHistorySensor(RestoreSensor):
+    """Carrier of a series' history: recorded states with the real measurement times.
+
+    Disabled by default. The history itself is written by ``backfill_history`` and the automatic
+    filling with their own timestamps. Its own state is the value of the newest point that the
+    forward path (the live filling after a sync) handed over, with ``measured_at`` as its time;
+    the initial load and manual runs for old days never touch it. It is restored after a restart.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_available = True
+
+    def __init__(self, entry: GarminConfigEntry, key: str, unit: str) -> None:
+        """Set up the sensor."""
+        self._entry = entry
+        self._series = next((s for s, k in HISTORY_KEYS.items() if k == key), key)
+        self._attr_translation_key = key
+        self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self._attr_native_unit_of_measurement = unit
+        self._attr_device_info = device_info(entry)
+        self._value: float | None = None
+        self._measured_ms: int | None = None
+
+    @property
+    def native_value(self) -> float | None:
+        """The value of the newest measuring point handed over by the live filling (a real Garmin value)."""
+        return self._value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str] | None:
+        """Time of that measurement (ISO, with zone) and how far back the automatic load has come (a date)."""
+        attrs: dict[str, str] = {}
+        if self._measured_ms is not None:
+            attrs["measured_at"] = dt_util.utc_from_timestamp(self._measured_ms / 1000).isoformat()
+        runtime = getattr(self._entry, "runtime_data", None)
+        manager = getattr(runtime, "history", None)
+        if manager is not None:
+            attrs.update(manager.progress.get(self._series) or {})
+        return attrs or None
+
+    def show_latest(self, ts_ms: int, value: float) -> None:
+        """Take a newer measurement as the state; an older or equal one changes nothing (no new row)."""
+        if self._measured_ms is not None and ts_ms <= self._measured_ms:
+            return
+        self._value, self._measured_ms = value, ts_ms
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the last value and its time, and let the history load report to this sensor."""
+        await super().async_added_to_hass()
+        stored = await self.async_get_last_sensor_data()
+        state = await self.async_get_last_state()
+        measured = getattr(state, "attributes", {}).get("measured_at") if state is not None else None
+        parsed = dt_util.parse_datetime(measured) if isinstance(measured, str) else None
+        value = getattr(stored, "native_value", None)
+        if parsed is not None and isinstance(value, int | float) and not isinstance(value, bool):
+            self._value, self._measured_ms = float(value), round(parsed.timestamp() * 1000)
+        manager = manager_for(self.hass, self._entry)
+        manager.listeners[self._series] = self.async_write_ha_state
+        manager.latest_listeners[self._series] = self.show_latest
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Stop listening."""
+        manager = getattr(getattr(self._entry, "runtime_data", None), "history", None)
+        if manager is not None:
+            manager.listeners.pop(self._series, None)
+            manager.latest_listeners.pop(self._series, None)
 
 
 class GarminKeyExpirySensor(SensorEntity):

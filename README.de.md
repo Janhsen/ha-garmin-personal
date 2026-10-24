@@ -100,14 +100,25 @@ durchschnittliche Höhe, höchste/niedrigste Atmung, niedrigsten/höchsten Durch
 
 Optionen: Abrufintervall der Tageswerte (das ist die Sync-Prüfung), Sync-Warnschwelle, und ob Tagesverläufe
 (Puls, Body Battery, SpO2) als Attribute angehängt werden (groß, nicht im Recorder gespeichert).
-Nur mit dieser Option werden die zusätzlichen Endpunkte für Puls- und Body-Battery-Verlauf abgefragt.
+Nur mit dieser Option werden die zusätzlichen Endpunkte für Puls- und Body-Battery-Verlauf für die Sensoren abgefragt.
+
+Die Option **Stundenstatistik schreiben** (standardmäßig an) ist davon unabhängig: Nach jeder neuen Uhr-Synchronisierung
+schreibt sie Puls, Body Battery und SpO2 als Stundenwerte in die Langzeitstatistik (siehe „Verlauf und
+Langzeitstatistik“). Sie nutzt die ohnehin laufenden Abrufe und fragt sonst je Reihe einmal zusätzlich.
+
+Die Option **Verlauf automatisch nachtragen** (standardmäßig an) hängt die echten Messpunkte an die (Verlauf)-Sensoren,
+die du aktiviert hast; siehe `backfill_history` unten. Ohne aktivierten und aufgezeichneten Verlauf-Sensor tut sie
+nichts.
 
 Einheiten: Distanzen sind in Metern und Dauern in Sekunden (Schlafbedarf in Minuten); die Einheit steht am Sensor,
 und eine Dashboard-Karte kann umrechnen. Viele „heute“-Werte (Schritte, minimaler/maximaler Puls) beginnen um
 Mitternacht neu.
 
 Abrufmenge: etwa 290 Anfragen pro Tag und Konto für die Sync-Prüfung, dazu etwa 9 je Uhr-Sync
-und die Fallbacks, insgesamt grob 400 bis 500 (ohne Tagesverläufe).
+und die Fallbacks, insgesamt grob 400 bis 500 (ohne Tagesverläufe). Die Stundenstatistik fügt etwa 2 Anfragen je
+Uhr-Sync hinzu (Puls und Body Battery von heute; SpO2 wird ohnehin abgefragt) und 3 für gestern beim ersten
+vollständigen Abruf eines Tages und nach jedem Sync vor 10 Uhr Ortszeit, also grob 30 bis 60 mehr pro Tag. Bei
+eingeschalteten Tagesverläufen als Attribute werden die Reihen von heute ohnehin geholt, es bleiben nur die 3 für gestern.
 Garmin nennt für die Personal API keine Limits und bietet keinen Push; es wird nur abgefragt.
 
 Nicht in der Personal API enthalten (und deshalb nicht vorhanden): Training Readiness,
@@ -184,6 +195,62 @@ Fehlermeldung ab, die die Konten auflistet. Alle Service-Fehler sind übersetzt.
   läuft in 31-Tage-Fenstern und pro Konto nur ein Import gleichzeitig. Die Antwort nennt nach einer Unterbrechung
   `complete`, `last_completed_day` und `error`, dazu `days_imported`, `statistic_series` und `statistic_rows`. Tage mit
   dem Wert 0 bei Ruhe-/Minimal-/Maximalpuls, Stress oder Atmung werden nicht geschrieben.
+* `garmin_personal.backfill_intraday` – schreibt die Tagesverläufe von **Puls, Body Battery und SpO2** rückwirkend als
+  **Stundenstatistik** (Minimum, Maximum und Mittelwert je voller Stunde, siehe „Verlauf und Langzeitstatistik“).
+  `days` (Standard 7), `start_date` und `end_date` wie oben; ohne `end_date` endet der Import heute (geschrieben
+  werden nur abgeschlossene Stunden, nie die laufende), höchstens 366 Tage. Eine Anfrage je Tag und Reihe (3 pro Tag,
+  ein Jahr sind also rund 1100 Anfragen: lange Zeiträume in Stücken laufen lassen, falls Garmin mit einem Limit
+  antwortet). Wiederholbar; dieselben Stunden werden überschrieben. Pro Konto nur ein Import gleichzeitig (gemeinsam
+  mit `backfill_statistics`). Die Antwort nennt nach einer Unterbrechung `complete`, `last_completed_day` und `error`,
+  dazu `heart_rate_hours`, `body_battery_hours`, `spo2_hours`, `days_with_data`, `statistic_series` und
+  `statistic_rows`; `unknown_format` listet Reihen, deren Antwort diese Version nicht lesen kann.
+* `garmin_personal.backfill_history` – schreibt die echten Messpunkte von **Puls, Body Battery, SpO2 und nächtlicher HRV** mit ihren
+  eigenen Zeitstempeln als aufgezeichnete Zustände der standardmäßig deaktivierten Diagnose-Sensoren (*Puls (Verlauf)*
+  usw.; die Live-Sensoren bekommen nie alte Werte), damit der Bereich Verlauf sie zeigt. `series` (beliebig viele von `heart_rate`, `body_battery`, `spo2`, `hrv`; Standard
+  alle), `days` (Standard 7, höchstens 31), `start_date`, `end_date` und `config_entry_id` wie oben.
+  Home Assistant kennt keinen unterstützten Weg für historische Zustände: Der Dienst baut `state_changed`-Ereignisse
+  mit historischen Zeitstempeln und legt sie in die Warteschlange des Recorders (keine Automation, kein Logbuch, kein
+  Websocket-Client sieht sie). Der Weg ist undokumentiert und könnte sich mit einem Home-Assistant-Update ändern. Der
+  Sensor muss existieren, aktiviert und aufgezeichnet sein (Einschluss-/Ausschlusseinstellungen des Recorders werden
+  beachtet); alte Zeilen räumt `purge_keep_days` ab. Der Dienst ist nur anhängend: Ein dauerhaftes Protokoll je Reihe
+  und Tag (genaue Zeitstempel und Werte für die letzten 7 Tage, Anzahl/erster/letzter/Prüfsumme für ältere Tage)
+  entscheidet „schon geschrieben?“, nie allein ein letzter Zeitstempel; verspätet synchronisierte ältere Punkte werden
+  nachgetragen, geschriebene Punkte nie neu geschrieben, überschrieben oder gelöscht, ein geänderter Wert zu bekanntem
+  Zeitstempel wird nur gezählt (`changed_values_skipped`). Ist das Protokoll verloren, wird zuerst der Recorder gelesen;
+  ohne diese Prüfung wird nichts geschrieben, außer mit `confirm_rewrite: true` (das kann Zustände verdoppeln). Bricht
+  die Übergabe früh ab, werden nur die wirklich übergebenen Punkte vermerkt, und die Antwort nennt
+  `history_write_failed: …` mit `complete: false`. Läufe teilen die Sperre mit den anderen Importen und der
+  automatischen Variante.
+
+  Jeder Verlauf-Sensor zeigt als Zustand den Wert seines neuesten Messpunkts, die Zeit dieser Messung steht im Attribut
+  `measured_at` (ISO, mit Zeitzone). Nur das laufende Nachtragen nach einer Synchronisierung setzt ihn (und der erste
+  Lauf nach einem Neuladen, wenn das Protokoll schon Punkte enthält), und nur für einen Punkt, der neuer ist als der
+  angezeigte; die Erstladung und Dienstläufe für alte Tage rühren ihn nie an, und nach einem Neustart wird der Wert
+  wiederhergestellt. Das kostet eine zusätzliche Zeile je Synchronisierung, geschrieben zur Sync-Zeit mit dem Wert des
+  neuesten Punkts (eine Ungenauigkeit von wenigen Minuten ist möglich).
+
+  Hinweise zu den Reihen: *HRV (Verlauf)* trägt Garmins nächtliche HRV-Messwerte (etwa alle 5 Minuten, in ms, vom
+  HRV-Endpunkt). Eine Nacht gehört zu dem Tag, an dem du aufwachst; ihre Punkte liegen also am Abend davor und am
+  Morgen dieses Tages. Die heutige Nacht wird nach jeder Synchronisierung neu abgefragt und nur noch nicht
+  geschriebene Punkte werden angehängt, eine spät vollständige Nacht wird also nicht doppelt geschrieben. Für die HRV
+  gibt es keine Stundenstatistik (sie kostete bei jeder Synchronisierung eine weitere Anfrage für reine Nachtdaten).
+  *Body Battery (Verlauf)* hat nur die wenigen Punkte pro Tag (etwa 6), die Garmins Personal API liefert, nicht die
+  dichte Kurve aus Garmin Connect; es wird nichts aufgefüllt. SpO2 liest die Spalte `spo2Level`, die Garmins
+  Descriptor-Liste nennt (die Umgebungsspalte ist kein SpO2 und wird ignoriert).
+
+  **Automatische Variante** (Option *Verlauf automatisch nachtragen*, standardmäßig an): Sie wirkt nur für eine Reihe,
+  deren Verlauf-Sensor aktiviert **und** aufgezeichnet ist (vor jedem Lauf neu geprüft), sonst tut sie still nichts;
+  schließt der Recorder einen aktivierten Verlauf-Sensor aus, weist eine Reparaturmeldung darauf hin. Nach jeder
+  Synchronisierung werden die neuen Punkte von heute (und von gestern beim ersten vollen Abruf des Tages und nach
+  Synchronisierungen vor 10 Uhr) angehängt. Zusätzlich füllt ein Hintergrundlauf die Vergangenheit je Reihe rückwärts ab
+  gestern bis zu `keep_days` des Recorders (10, falls unbekannt, höchstens 400): ein Tag nach dem anderen, etwa 20
+  Sekunden Abstand, 30 Minuten Pause nach einem Limit und Abbruch nach 14 Tagen ohne Daten in Folge. Erledigte Tage
+  werden je Reihe gemerkt, ein Neustart macht also dort weiter, wo er aufgehört hat; heute gilt nie als erledigt, und
+  eine später aktivierte Reihe (oder Lücken nach Ausfalltagen) wird beim Neuladen des Eintrags bis zur Grenze
+  nachgeladen, ohne vollständige Reihen erneut abzufragen. Der Verlauf-Sensor zeigt den Stand im Attribut
+  `history_backfilled_until`. Kosten: eine Anfrage je Reihe und Tag (beim ersten Laden bis zu 3 x `keep_days`, danach
+  rund 3 je Synchronisierung zusammen mit der Stundenstatistik, die dieselben Antworten nutzt); die Datenbank wächst um
+  einen Zustand je Messpunkt (grob 700 je Reihe und Tag), den der Recorder nach `purge_keep_days` abräumt.
 
 ## Übersetzungen
 
@@ -220,6 +287,32 @@ die Werte, die Garmin schickt, nicht bekannt sind; jeder gesehene Wert wird unve
   ```
 * Jeder importierte Tag wird als ein Wert in der ersten Stunde des Tages gespeichert. Mit der Periode *Stunde* zeigt
   eine Karte deshalb eine Spitze um Mitternacht und sonst Lücken; nimm die Periode *Tag*.
+* **Stundenwerte** (Puls, Body Battery, SpO2) sind eigene Statistiken mit einem Wert je voller Stunde: Minimum,
+  Maximum und Mittelwert der echten Garmin-Messpunkte dieser Stunde (der Mittelwert ist das einfache Mittel der Punkte,
+  nicht zeitgewichtet). Sie werden nach jeder neuen Uhr-Synchronisierung geschrieben (Option *Stundenstatistik
+  schreiben*) und rückwirkend mit `backfill_intraday`. IDs: `garmin_personal:<entry_id>_heart_rate_hourly`,
+  `…_body_battery_hourly`, `…_spo2_hourly` (Einheiten bpm, %, %). Gespeichert werden nur abgeschlossene Stunden, nie die
+  laufende; die Stunden von heute und gestern werden nach jedem Sync neu berechnet und überschrieben, spätere
+  Korrekturen von Garmin werden also übernommen. Stunden ohne Messung bleiben leer: es wird nichts interpoliert oder
+  aufgefüllt, Platzhalterwerte (0 oder negativ bei Puls und SpO2, negativ bei Body Battery) werden verworfen. Gemeint
+  sind volle UTC-Stunden. Der Puls hat etwa alle zwei Minuten einen Punkt, eine Stunde also bis zu 30 Punkte; Garmins
+  SpO2-Antwort enthält nur Stundenmittel, Minimum, Maximum und Mittelwert einer SpO2-Stunde sind daher gleich. Zu sehen:
+  in einer *Statistik-Diagramm*-Karte (Statistik wählen, Periode *Stunde* oder *Tag*, `stat_types` `min`, `max`,
+  `mean`) oder unter Entwicklerwerkzeuge → Statistiken. Im Bereich *Verlauf* erscheinen sie **nicht**, denn der zeigt
+  nur Zustände von Entitäten; es sind keine Zustände, sie liegen deshalb weder dort noch in den Attributen.
+  In Zeitzonen, deren Abstand zu UTC keine ganze Stundenzahl ist, wird die Stunde um die lokale Mitternacht am Rand
+  eines abgerufenen Zeitraums ausgelassen, statt sie aus der Hälfte der Messpunkte zu speichern.
+
+  ```yaml
+  type: statistics-graph
+  entities:
+    - garmin_personal:<entry_id>_heart_rate_hourly
+  period: hour
+  stat_types:
+    - min
+    - mean
+    - max
+  ```
 
 ## Änderungen an der Garmin-API erkennen
 
