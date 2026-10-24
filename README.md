@@ -195,9 +195,9 @@ with a translated error that lists the accounts. All service errors are translat
   `complete`, `last_completed_day` and `error` after an interruption, plus `heart_rate_hours`, `body_battery_hours`,
   `spo2_hours`, `days_with_data`, `statistic_series` and `statistic_rows`; `unknown_format` lists series whose
   answer this version cannot read.
-* `garmin_personal.backfill_history` – writes the real measuring points of **heart rate, Body Battery and SpO2** with
+* `garmin_personal.backfill_history` – writes the real measuring points of **heart rate, Body Battery, SpO2 and the night's HRV** with
   their own timestamps as recorded states of the disabled-by-default diagnostic sensors (*Heart rate (history)* and so
-  on; the live sensors never get old values), so that the History panel shows them. `series` (any of the three, default
+  on; the live sensors never get old values), so that the History panel shows them. `series` (any of `heart_rate`, `body_battery`, `spo2`, `hrv`; default
   all), `days` (default 7, at most 31), `start_date`, `end_date` and `config_entry_id` work as above. Home Assistant has
   no supported way to write historic states, so the service builds `state_changed` events with historic timestamps and
   puts them on the recorder's own queue (no automation, logbook or websocket client sees them). The path is
@@ -210,6 +210,20 @@ with a translated error that lists the accounts. All service errors are translat
   that check nothing is written unless `confirm_rewrite` is true (this can duplicate states). If the hand-over stops
   early, only the points really handed over are noted and the response says `history_write_failed: …` with
   `complete: false`. Runs share the lock with the other imports and with the automatic variant.
+
+  Each history sensor shows the value of its newest measuring point as its state, with the time of that measurement
+  in the attribute `measured_at` (ISO, with zone). Only the live filling after a sync sets it (and the first run after
+  a reload if the record already holds points), and only for a point newer than the one shown; the initial load and
+  runs of the service for old days never touch it, and the value is restored after a restart. This costs one extra row
+  per sync, written at sync time with the value of the newest point (a few minutes of inaccuracy are possible).
+
+  Notes on the series: *HRV (history)* carries Garmin's nightly HRV readings (one value about every 5 minutes, in ms,
+  from the HRV endpoint). A night belongs to the day you wake up, so its points lie in the evening before and the
+  morning of that day; today's night is fetched again after each sync and only the points not written before are
+  appended, so a night that completes late is not duplicated. There is no hourly statistic for HRV (it would cost one
+  more request on every sync for night-only data). *Body Battery (history)* only has the few points per day that
+  Garmin's Personal API delivers (about 6), not Garmin Connect's dense curve; nothing is filled in. SpO2 uses the
+  `spo2Level` column named by Garmin's descriptor list (the environment column is not SpO2 and is ignored).
 
   **Automatic variant** (option *Fill history automatically*, on by default): it only acts for a series whose history
   sensor is enabled **and** recorded (checked again before every run), otherwise it silently does nothing; if the

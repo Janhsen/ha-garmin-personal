@@ -3,6 +3,22 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## Unreleased
+
+### Added
+- New history series **HRV (history)** (`hrv_history`, diagnostic, disabled by default, ms): the nightly HRV readings
+  (about every 5 minutes) from the HRV endpoint, time from `readingTimeGMT` (UTC). A night belongs to the day of waking
+  up; the ledger works with exact timestamps, so today's night is fetched again after each sync and only new points are
+  appended. Available in `backfill_history` (`series: hrv`), the automatic live filling and the initial load, with the
+  same per-series resume and re-load rules as heart rate. No hourly statistic for HRV.
+
+### Changed
+- Each history sensor now shows the value of its newest point as state, with `measured_at` (ISO, with zone) as
+  attribute. Only the live filling sets it (point newer than the shown one; no new row otherwise); the initial load and
+  old-day service runs never do. Restored after a restart; the progress attribute keeps the value.
+- The SpO2 parser takes the `spo2Level` column from Garmin's descriptor list (column 1 as before if there is none);
+  the environment column is never read.
+
 ## 0.5.2
 
 ### Added

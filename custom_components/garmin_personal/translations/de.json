@@ -69,7 +69,7 @@
           "daily_interval_minutes": "Wie oft die Tageswerte abgefragt werden. Die übrigen Daten werden nur nach einer neuen Uhr-Synchronisierung oder seltener geholt.",
           "intraday_attributes": "Hängt Puls-, Body-Battery- und SpO2-Verläufe als Attribute an die Sensoren. Das macht die Zustandsdaten groß, ruft zusätzliche Daten bei Garmin ab, und die Verläufe werden nicht im Recorder gespeichert.",
           "hourly_statistics": "Schreibt nach jeder neuen Uhr-Synchronisierung Puls, Body Battery und SpO2 als Stundenwerte (Minimum, Maximum, Mittelwert jeder abgeschlossenen Stunde) in die Langzeitstatistik. Unabhängig von der Option darüber; kostet je Reihe und Sync eine zusätzliche Anfrage (morgens plus eine je Reihe für gestern).",
-          "history_auto": "Trägt nach jeder neuen Uhr-Synchronisierung die neuen Messpunkte von Puls, Body Battery und SpO2 als aufgezeichnete Zustände ihrer (Verlauf-)Sensoren nach und füllt die vergangenen Tage bis zur Aufbewahrungsdauer des Recorders (höchstens 400) langsam im Hintergrund auf. Nur für Verlauf-Sensoren, die du aktiviert hast und die der Recorder aufzeichnet. Legt je Messpunkt einen Zustand in der Datenbank ab (beim Puls etwa 720 pro Tag), bis purge_keep_days ihn entfernt.",
+          "history_auto": "Trägt nach jeder neuen Uhr-Synchronisierung die neuen Messpunkte von Puls, Body Battery, SpO2 und HRV als aufgezeichnete Zustände ihrer (Verlauf-)Sensoren nach und füllt die vergangenen Tage bis zur Aufbewahrungsdauer des Recorders (höchstens 400) langsam im Hintergrund auf. Nur für Verlauf-Sensoren, die du aktiviert hast und die der Recorder aufzeichnet. Legt je Messpunkt einen Zustand in der Datenbank ab (beim Puls etwa 720 pro Tag), bis purge_keep_days ihn entfernt.",
           "sync_stale_hours": "Der Binärsensor meldet ein Problem, wenn der letzte Uhr-Sync länger als so viele Stunden her ist."
         }
       }
@@ -625,6 +625,9 @@
       },
       "spo2_history": {
         "name": "SpO2 (Verlauf)"
+      },
+      "hrv_history": {
+        "name": "HRV (Verlauf)"
       }
     },
     "binary_sensor": {
@@ -789,7 +792,7 @@
     },
     "backfill_history": {
       "name": "Verlauf-Sensoren schreiben (nur anhängend)",
-      "description": "Schreibt die echten Messpunkte von Puls, Body Battery und SpO2 mit ihren eigenen Zeitstempeln als aufgezeichnete Zustände der (Verlauf-)Sensoren, damit der Bereich Verlauf sie zeigt. Nur anhängend: bereits geschriebene Punkte werden nie erneut geschrieben, überschrieben oder gelöscht. Die Sensoren müssen aktiviert und aufgezeichnet sein. Das läuft auch automatisch (Option Verlauf automatisch nachtragen); der Dienst ist für einen bestimmten Zeitraum.",
+      "description": "Schreibt die echten Messpunkte von Puls, Body Battery, SpO2 und nächtlicher HRV mit ihren eigenen Zeitstempeln als aufgezeichnete Zustände der (Verlauf-)Sensoren, damit der Bereich Verlauf sie zeigt. Nur anhängend: bereits geschriebene Punkte werden nie erneut geschrieben, überschrieben oder gelöscht. Die Sensoren müssen aktiviert und aufgezeichnet sein. Das läuft auch automatisch (Option Verlauf automatisch nachtragen); der Dienst ist für einen bestimmten Zeitraum.",
       "fields": {
         "config_entry_id": {
           "name": "Konto",
@@ -809,7 +812,7 @@
         },
         "series": {
           "name": "Reihen",
-          "description": "Beliebig viele von heart_rate, body_battery, spo2 (Standard: alle)."
+          "description": "Beliebig viele von heart_rate, body_battery, spo2, hrv (Standard: alle)."
         },
         "confirm_rewrite": {
           "name": "Ohne Prüfung schreiben",

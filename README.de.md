@@ -204,10 +204,10 @@ Fehlermeldung ab, die die Konten auflistet. Alle Service-Fehler sind übersetzt.
   mit `backfill_statistics`). Die Antwort nennt nach einer Unterbrechung `complete`, `last_completed_day` und `error`,
   dazu `heart_rate_hours`, `body_battery_hours`, `spo2_hours`, `days_with_data`, `statistic_series` und
   `statistic_rows`; `unknown_format` listet Reihen, deren Antwort diese Version nicht lesen kann.
-* `garmin_personal.backfill_history` – schreibt die echten Messpunkte von **Puls, Body Battery und SpO2** mit ihren
+* `garmin_personal.backfill_history` – schreibt die echten Messpunkte von **Puls, Body Battery, SpO2 und nächtlicher HRV** mit ihren
   eigenen Zeitstempeln als aufgezeichnete Zustände der standardmäßig deaktivierten Diagnose-Sensoren (*Puls (Verlauf)*
-  usw.; die Live-Sensoren bekommen nie alte Werte), damit der Bereich Verlauf sie zeigt. `series` (beliebig viele der
-  drei, Standard alle), `days` (Standard 7, höchstens 31), `start_date`, `end_date` und `config_entry_id` wie oben.
+  usw.; die Live-Sensoren bekommen nie alte Werte), damit der Bereich Verlauf sie zeigt. `series` (beliebig viele von `heart_rate`, `body_battery`, `spo2`, `hrv`; Standard
+  alle), `days` (Standard 7, höchstens 31), `start_date`, `end_date` und `config_entry_id` wie oben.
   Home Assistant kennt keinen unterstützten Weg für historische Zustände: Der Dienst baut `state_changed`-Ereignisse
   mit historischen Zeitstempeln und legt sie in die Warteschlange des Recorders (keine Automation, kein Logbuch, kein
   Websocket-Client sieht sie). Der Weg ist undokumentiert und könnte sich mit einem Home-Assistant-Update ändern. Der
@@ -221,6 +221,22 @@ Fehlermeldung ab, die die Konten auflistet. Alle Service-Fehler sind übersetzt.
   die Übergabe früh ab, werden nur die wirklich übergebenen Punkte vermerkt, und die Antwort nennt
   `history_write_failed: …` mit `complete: false`. Läufe teilen die Sperre mit den anderen Importen und der
   automatischen Variante.
+
+  Jeder Verlauf-Sensor zeigt als Zustand den Wert seines neuesten Messpunkts, die Zeit dieser Messung steht im Attribut
+  `measured_at` (ISO, mit Zeitzone). Nur das laufende Nachtragen nach einer Synchronisierung setzt ihn (und der erste
+  Lauf nach einem Neuladen, wenn das Protokoll schon Punkte enthält), und nur für einen Punkt, der neuer ist als der
+  angezeigte; die Erstladung und Dienstläufe für alte Tage rühren ihn nie an, und nach einem Neustart wird der Wert
+  wiederhergestellt. Das kostet eine zusätzliche Zeile je Synchronisierung, geschrieben zur Sync-Zeit mit dem Wert des
+  neuesten Punkts (eine Ungenauigkeit von wenigen Minuten ist möglich).
+
+  Hinweise zu den Reihen: *HRV (Verlauf)* trägt Garmins nächtliche HRV-Messwerte (etwa alle 5 Minuten, in ms, vom
+  HRV-Endpunkt). Eine Nacht gehört zu dem Tag, an dem du aufwachst; ihre Punkte liegen also am Abend davor und am
+  Morgen dieses Tages. Die heutige Nacht wird nach jeder Synchronisierung neu abgefragt und nur noch nicht
+  geschriebene Punkte werden angehängt, eine spät vollständige Nacht wird also nicht doppelt geschrieben. Für die HRV
+  gibt es keine Stundenstatistik (sie kostete bei jeder Synchronisierung eine weitere Anfrage für reine Nachtdaten).
+  *Body Battery (Verlauf)* hat nur die wenigen Punkte pro Tag (etwa 6), die Garmins Personal API liefert, nicht die
+  dichte Kurve aus Garmin Connect; es wird nichts aufgefüllt. SpO2 liest die Spalte `spo2Level`, die Garmins
+  Descriptor-Liste nennt (die Umgebungsspalte ist kein SpO2 und wird ignoriert).
 
   **Automatische Variante** (Option *Verlauf automatisch nachtragen*, standardmäßig an): Sie wirkt nur für eine Reihe,
   deren Verlauf-Sensor aktiviert **und** aufgezeichnet ist (vor jedem Lauf neu geprüft), sonst tut sie still nichts;

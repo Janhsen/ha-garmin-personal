@@ -337,9 +337,13 @@ class RestoreSensor:
 
     _stored = None
     _stored_state = None
+    state_writes = 0
 
     async def async_added_to_hass(self):
         return None
+
+    def async_write_ha_state(self):
+        self.state_writes += 1
 
     async def async_get_last_sensor_data(self):
         return self._stored
@@ -633,7 +637,9 @@ def install() -> None:
     stub("homeassistant.util")
     stub("homeassistant.util.dt",
          now=lambda: datetime.now(UTC), utcnow=lambda: datetime.now(UTC),
-         start_of_local_day=lambda d: datetime(d.year, d.month, d.day, tzinfo=UTC))
+         start_of_local_day=lambda d: datetime(d.year, d.month, d.day, tzinfo=UTC),
+         utc_from_timestamp=lambda t: datetime.fromtimestamp(t, tz=UTC),
+         parse_datetime=lambda text: datetime.fromisoformat(text))
     # `from homeassistant.helpers import ... entity_registry as er` braucht Attribute am Paket
     helpers = sys.modules["homeassistant.helpers"]
     for sub in ("config_validation", "entity_registry"):

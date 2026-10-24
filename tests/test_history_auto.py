@@ -10,7 +10,7 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).parent))
 import stubs  # noqa: E402
 import test_intraday_coordinator as tic  # noqa: E402
-from intraday_fakes import hr_payload, ms, spo2_payload  # noqa: E402
+from intraday_fakes import hr_payload, hrv_payload, ms, spo2_payload  # noqa: E402
 
 logging.disable(logging.CRITICAL)
 hs = sys.modules["gp_full.history"]
@@ -39,9 +39,12 @@ class Env(unittest.TestCase):
         self.recorder_rows = {}
         self.today = D
         self.write_error = None
+        self.hrv_on = False  # the HRV sensor stays disabled unless a test enables it
 
         async def check(hass, entry, series):
             key = self.target_errors.get(series)
+            if series == "hrv" and not self.hrv_on:
+                key = "history_sensor_disabled"
             if key:
                 raise hs.HistoryTargetError(key, "sensor.x")
             return f"sensor.alex_{series}_history"
@@ -89,6 +92,9 @@ class BackfillApi:
 
     async def get_spo2(self, day):
         return self._go("spo2", self.spo2, day)
+
+    async def get_hrv(self, day):
+        return self._go("hrv", getattr(self, "hrv", {}), day)
 
     async def get_body_battery(self, a, b):
         return self._go("body_battery", {}, a)
@@ -263,7 +269,7 @@ class InitialLoad(Env):
         self.target_errors = {"heart_rate": "history_not_recorded", "spo2": "history_sensor_disabled",
                               "body_battery": "history_sensor_missing"}
         stubs.run(mgr.active_series())
-        self.assertEqual(dict(self.issues), {"heart_rate": True, "spo2": False, "body_battery": False})
+        self.assertEqual(dict(self.issues), {"heart_rate": True, "spo2": False, "body_battery": False, "hrv": False})
 
     def test_progress_attribute_is_small_and_on_the_sensor(self):
         api = BackfillApi()
@@ -316,7 +322,7 @@ class KeepDays(unittest.TestCase):
         self.assertEqual(real(object()), 10)
 
 
-class Live(Env, tic.Base):
+class LiveBase(Env, tic.Base):
     def setUp(self):
         tic.Base.setUp(self)
         Env.setUp(self)
@@ -340,6 +346,9 @@ class Live(Env, tic.Base):
     def hist(self, series):
         return [ts for s, tss in self.written for ts in tss if s == series]
 
+
+
+class Live(LiveBase):
     def test_new_points_of_today_and_yesterday_are_appended(self):
         self.cycle(self.make())
         hr = self.hist("heart_rate")
@@ -404,6 +413,220 @@ class Live(Env, tic.Base):
         data = self.cycle(self.make())
         self.assertIn("summary", data)
         self.assertTrue(self.rows("heart_rate_hourly"))
+
+
+def night(day, n=3, first=(22, 0)):
+    """An invented HRV night that ends on the morning of ``day``: readings from the evening before into the morning."""
+    prev = day - timedelta(days=1)
+    start = datetime(prev.year, prev.month, prev.day, *first)
+    rows = []
+    for i in range(n):
+        t = start + timedelta(minutes=5 * i + 60 * (i // 2))
+        rows.append((t.strftime("%Y-%m-%dT%H:%M:%S.0"), 40 + i))
+    return rows
+
+
+class HrvHistory(Env):
+    def only_hrv(self):
+        self.hrv_on = True
+        self.target_errors = {"heart_rate": "history_sensor_disabled", "spo2": "history_sensor_disabled",
+                              "body_battery": "history_sensor_disabled"}
+
+    def test_window_of_a_night_is_noon_to_noon_of_the_wake_day(self):
+        a, b = hs.series_window("hrv", D)
+        self.assertEqual((a, b), (datetime(2026, 10, 23, 12, tzinfo=UTC), datetime(2026, 10, 24, 12, tzinfo=UTC)))
+        a, b = hs.series_window("heart_rate", D)
+        self.assertEqual((a, b), (datetime(2026, 10, 24, tzinfo=UTC), datetime(2026, 10, 25, tzinfo=UTC)))
+        self.assertEqual(hs._unit_of("hrv"), "ms")
+
+    def test_initial_load_writes_whole_nights_under_the_wake_day(self):
+        self.only_hrv()
+        self.keep = 2
+        api = BackfillApi()
+        api.hrv = {D - timedelta(days=n): hrv_payload(night(D - timedelta(days=n))) for n in (1, 2)}
+        mgr, _ = make_manager(self, api)
+        stubs.run(mgr.run_backfill(api))
+        self.assertEqual([d for s, d in api.requests], [D - timedelta(days=1), D - timedelta(days=2)])
+        stamps = [t for s, ts in self.written if s == "hrv" for t in ts]
+        self.assertEqual(len(stamps), 6)
+        led = stubs.run(mgr.ledger())
+        wake = (D - timedelta(days=1)).isoformat()
+        self.assertTrue(led.knows("hrv", wake) and led.is_done("hrv", wake))
+        self.assertTrue(any(t < ms(2026, 10, 23, 0, 0) for t in stamps))  # the evening before the wake day
+        self.assertFalse(led.knows("hrv", D.isoformat()))
+        self.assertEqual(mgr.progress["hrv"], {"history_backfilled_until": (D - timedelta(days=2)).isoformat()})
+
+    def test_service_and_recorder_check_use_the_night_window(self):
+        self.only_hrv()
+        seen = []
+
+        async def reader(hass, entry, series, day):
+            seen.append((series, day))
+            return {ms(2026, 10, 23, 22, 0): 40.0}  # already in the recorder (from the evening before)
+
+        self.patch(hs, "recorded_points", reader)
+        api = BackfillApi()
+        api.hrv = {D: hrv_payload(night(D))}
+        mgr, entry = make_manager(self, api)
+        led = stubs.run(mgr.ledger())
+        res = stubs.run(hs.append_points(mgr.hass, entry, led, "hrv", D, hs.HISTORY_SERIES["hrv"].parse(api.hrv[D])))
+        self.assertEqual((res.adopted, res.already, res.written), (1, 1, 2))
+        self.assertEqual(seen, [("hrv", D)])
+
+    def test_enabling_hrv_later_loads_it_to_the_limit_without_asking_heart_rate_again(self):
+        self.keep = 3
+        api = BackfillApi()
+        for n in range(0, 8):
+            day = D - timedelta(days=n)
+            api.hr[day] = hr_payload([(ms(day.year, day.month, day.day, 8, 0), 60)])
+            api.hrv = {**getattr(api, "hrv", {}), day: hrv_payload(night(day))}
+        mgr, _ = make_manager(self, api)
+        self.target_errors = {"spo2": "history_sensor_disabled", "body_battery": "history_sensor_disabled"}
+        stubs.run(mgr.run_backfill(api))  # heart rate only (hrv disabled)
+        self.assertEqual((api.n("heart_rate"), api.n("hrv")), (3, 0))
+        self.today = D + timedelta(days=2)
+        self.hrv_on = True
+        api.requests.clear()
+        stubs.run(mgr.run_backfill(api))
+        today = self.today
+        self.assertEqual(sorted(d for s, d in api.requests if s == "hrv"), [today - timedelta(days=n) for n in (3, 2, 1)])
+        self.assertEqual(sorted(d for s, d in api.requests if s == "heart_rate"),
+                         [today - timedelta(days=2), today - timedelta(days=1)])
+        api.requests.clear()
+        stubs.run(mgr.run_backfill(api))
+        self.assertEqual(api.requests, [])  # everything is done
+
+
+class HrvLive(LiveBase):
+    def setUp(self):
+        super().setUp()
+        self.hrv_on = True
+        self.target_errors = dict.fromkeys(("heart_rate", "spo2", "body_battery"), "history_sensor_disabled")
+
+    def test_the_night_is_completed_by_later_syncs_and_only_new_points_are_appended(self):
+        day, prev = tic.TODAY, tic.YESTERDAY
+        self.api.hrv[prev] = hrv_payload(night(prev, 4))
+        self.api.hrv[day] = hrv_payload(night(day, 2))  # woke up, not complete yet
+        c = self.make()
+        self.cycle(c)
+        first = self.hist("hrv")
+        self.assertEqual(len(first), 4 + 2)
+        self.api.hrv[day] = hrv_payload(night(day, 5))  # the full night arrives later
+        self.api.sync = "t2"
+        self.cycle(c)
+        later = self.hist("hrv")[len(first):]
+        self.assertEqual(len(later), 3)
+        self.assertEqual(len(set(self.hist("hrv"))), len(self.hist("hrv")))  # nothing twice
+        led = stubs.run(self.mgr.ledger())
+        self.assertTrue(led.knows("hrv", day.isoformat()))
+        self.assertFalse(led.is_done("hrv", day.isoformat()))
+        self.api.sync = "t3"
+        self.cycle(c)
+        self.assertEqual(len(self.hist("hrv")), len(first) + 3)
+
+    def test_no_hrv_requests_without_an_enabled_history_sensor_and_no_hourly_statistic(self):
+        self.hrv_on = False
+        self.cycle(self.make())
+        self.assertEqual(self.api.n("hrv"), 0)
+        self.hrv_on = True
+        self.api.calls.clear()
+        self.cycle(self.make(hourly=True, auto=True))
+        self.assertGreater(self.api.n("hrv"), 0)
+        self.assertEqual([r for r in stubs.RECORDED if "hrv" in str(r)], [])
+
+
+class LatestValue(LiveBase):
+    """The history sensor shows the newest point of the forward path (state_writes counts rows)."""
+
+    def sensor(self, series="heart_rate"):
+        key = hs.HISTORY_KEYS[series]
+        sensor = sn.GarminHistorySensor(self.entry, key, "bpm")
+        sensor.hass = self.hass
+        stubs.run(sensor.async_added_to_hass())
+        return sensor
+
+    def test_forward_path_sets_value_and_time_and_writes_a_row_only_for_a_newer_point(self):
+        c = self.make()
+        sensor = self.sensor()
+        self.assertIsNone(sensor.native_value)
+        self.cycle(c)
+        newest = max(ms(2026, 10, 24, 12, 10), ms(2026, 10, 24, 11, 50))
+        self.assertEqual(sensor.native_value, 99.0)
+        self.assertEqual(sensor.extra_state_attributes["measured_at"], "2026-10-24T12:10:00+00:00")
+        self.assertEqual(sensor._measured_ms, newest)
+        rows = sensor.state_writes
+        self.api.sync = "t2"
+        self.cycle(c)  # nothing new
+        self.assertEqual(sensor.state_writes, rows)
+        self.api.hr[tic.TODAY] = hr_payload([(ms(2026, 10, 24, 12, 10), 99), (ms(2026, 10, 24, 12, 40), 77)])
+        self.api.sync = "t3"
+        self.cycle(c)
+        self.assertEqual((sensor.native_value, sensor.state_writes), (77.0, rows + 1))
+
+    def test_late_older_point_does_not_move_the_state(self):
+        c = self.make()
+        sensor = self.sensor()
+        self.cycle(c)
+        rows = sensor.state_writes
+        self.api.hr[tic.TODAY] = hr_payload([(ms(2026, 10, 24, 12, 10), 99), (ms(2026, 10, 24, 3, 0), 55)])
+        self.api.sync = "t2"
+        self.cycle(c)
+        self.assertEqual((sensor.native_value, sensor.state_writes), (99.0, rows))
+
+    def test_old_days_never_touch_the_state(self):
+        api = BackfillApi()
+        day = D - timedelta(days=1)
+        api.hr[day] = hr_payload([(ms(day.year, day.month, day.day, 8, 0), 60)])
+        mgr, entry = make_manager(self, api)
+        self.entry, self.hass = entry, mgr.hass
+        sensor = self.sensor()
+        self.target_errors = {"spo2": "history_sensor_disabled", "body_battery": "history_sensor_disabled"}
+        stubs.run(mgr.run_backfill(api))  # initial load
+        self.assertEqual(self.written[0][0], "heart_rate")
+        self.assertIsNone(sensor.native_value)
+        led = stubs.run(mgr.ledger())
+        res = stubs.run(hs.append_points(mgr.hass, entry, led, "heart_rate", day - timedelta(days=1),
+                                         [(ms(2026, 10, 22, 8, 0), 58.0)]))  # a service run for an old day
+        self.assertEqual((res.written, sensor.native_value), (1, None))
+
+    def test_progress_updates_keep_the_value(self):
+        c = self.make()
+        sensor = self.sensor()
+        self.cycle(c)
+        self.mgr.progress["heart_rate"] = {"history_backfilled_until": "2026-10-20"}
+        self.mgr.listeners["heart_rate"]()
+        self.assertEqual(sensor.native_value, 99.0)
+        self.assertEqual(sensor.extra_state_attributes["history_backfilled_until"], "2026-10-20")
+        self.assertIn("measured_at", sensor.extra_state_attributes)
+
+    def test_first_run_with_a_filled_ledger_shows_the_newest_point(self):
+        c = self.make()
+        self.cycle(c)
+        saved = stubs.Store.instances[-1].saved[-1]
+        stubs.Store.preset = saved  # reload: the ledger already holds the points
+        c2 = self.make()
+        sensor = self.sensor()
+        self.api.sync = "t9"
+        self.written.clear()
+        self.cycle(c2)
+        self.assertEqual(self.written, [])  # nothing written again
+        self.assertEqual(sensor.native_value, 99.0)
+
+    def test_restore_after_restart(self):
+        self.make()
+        sensor = sn.GarminHistorySensor(self.entry, "heart_rate_history", "bpm")
+        sensor.hass = self.hass
+        sensor._stored = SimpleNamespace(native_value=71.0)
+        sensor._stored_state = SimpleNamespace(state="71.0", attributes={"measured_at": "2026-10-24T08:00:00+00:00"})
+        stubs.run(sensor.async_added_to_hass())
+        self.assertEqual(sensor.native_value, 71.0)
+        self.assertEqual(sensor.extra_state_attributes["measured_at"], "2026-10-24T08:00:00+00:00")
+        sensor.show_latest(ms(2026, 10, 24, 7, 0), 50.0)  # older than the restored point
+        self.assertEqual(sensor.native_value, 71.0)
+        empty = sn.GarminHistorySensor(self.entry, "spo2_history", "%")
+        empty.hass = self.hass
+        stubs.run(empty.async_added_to_hass())
+        self.assertIsNone(empty.native_value)
 
 
 TODAY_ISO = "2026-10-24"

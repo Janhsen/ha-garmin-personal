@@ -35,8 +35,8 @@ class Entities(unittest.TestCase):
 
     def test_ids_units_and_keys(self):
         es = self.make()
-        self.assertEqual([e._attr_unique_id for e in es], ["E1_heart_rate_history", "E1_body_battery_history", "E1_spo2_history"])
-        self.assertEqual([e._attr_native_unit_of_measurement for e in es], ["bpm", "%", "%"])
+        self.assertEqual([e._attr_unique_id for e in es], ["E1_heart_rate_history", "E1_body_battery_history", "E1_spo2_history", "E1_hrv_history"])
+        self.assertEqual([e._attr_native_unit_of_measurement for e in es], ["bpm", "%", "%", "ms"])
         self.assertEqual(set(hs.HISTORY_KEYS.values()), set(sn.HISTORY_UNITS))
 
 
@@ -120,6 +120,9 @@ class FakeApi:
     async def get_spo2(self, day):
         self.calls += 1
 
+    async def get_hrv(self, day):
+        self.calls += 1
+
 
 class ServiceTests(unittest.TestCase):
     def setUp(self):
@@ -178,7 +181,7 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(self.api.calls, 3)
         self.api.calls = 0
         self.call({"series": None})
-        self.assertEqual(self.api.calls, 3)
+        self.assertEqual(self.api.calls, 4)  # all four series
 
     def test_target_problem_stops_before_any_request(self):
         async def missing(hass, entry, series):

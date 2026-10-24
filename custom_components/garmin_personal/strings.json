@@ -69,7 +69,7 @@
           "daily_interval_minutes": "How often the daily values are requested. The other data is fetched only after a new watch sync or less often.",
           "intraday_attributes": "Adds heart rate, Body Battery and SpO2 series to the sensors as attributes. This makes the state data large, requests extra data from Garmin and the series are not stored in the recorder.",
           "hourly_statistics": "After each new watch sync, writes heart rate, Body Battery and SpO2 as hourly values (minimum, maximum, mean of each completed hour) into the long-term statistics. Independent of the option above; costs one extra request per series and sync (plus one per series for yesterday in the morning).",
-          "history_auto": "After each new watch sync, appends the new measuring points of heart rate, Body Battery and SpO2 as recorded states of their (history) sensors, and fills in the past days up to the recorder's keep days (at most 400), slowly in the background. Only for history sensors that you enabled and that the recorder records. Adds one state per measuring point to the database (about 720 per day for heart rate) until purge_keep_days removes it.",
+          "history_auto": "After each new watch sync, appends the new measuring points of heart rate, Body Battery, SpO2 and HRV as recorded states of their (history) sensors, and fills in the past days up to the recorder's keep days (at most 400), slowly in the background. Only for history sensors that you enabled and that the recorder records. Adds one state per measuring point to the database (about 720 per day for heart rate) until purge_keep_days removes it.",
           "sync_stale_hours": "The binary sensor reports a problem when the last watch sync is older than this many hours."
         }
       }
@@ -625,6 +625,9 @@
       },
       "spo2_history": {
         "name": "SpO2 (history)"
+      },
+      "hrv_history": {
+        "name": "HRV (history)"
       }
     },
     "binary_sensor": {
@@ -789,7 +792,7 @@
     },
     "backfill_history": {
       "name": "Write history sensors (appending only)",
-      "description": "Writes the real measuring points of heart rate, Body Battery and SpO2 with their own timestamps as recorded states of the (history) sensors, so the History panel shows them. Appends only: points already written are never written again, overwritten or deleted. The sensors must be enabled and recorded. This also runs automatically (option Fill in history automatically); use the service for a specific range.",
+      "description": "Writes the real measuring points of heart rate, Body Battery, SpO2 and the night's HRV with their own timestamps as recorded states of the (history) sensors, so the History panel shows them. Appends only: points already written are never written again, overwritten or deleted. The sensors must be enabled and recorded. This also runs automatically (option Fill in history automatically); use the service for a specific range.",
       "fields": {
         "config_entry_id": {
           "name": "Account",
@@ -809,7 +812,7 @@
         },
         "series": {
           "name": "Series",
-          "description": "Any of heart_rate, body_battery, spo2 (default: all)."
+          "description": "Any of heart_rate, body_battery, spo2, hrv (default: all)."
         },
         "confirm_rewrite": {
           "name": "Write without check",

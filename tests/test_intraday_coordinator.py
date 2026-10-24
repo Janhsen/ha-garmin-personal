@@ -27,7 +27,7 @@ class FakeApi:
     def __init__(self):
         self.calls = []
         self.sync = "t1"
-        self.hr, self.bb, self.spo2 = {}, {}, {}
+        self.hr, self.bb, self.spo2, self.hrv = {}, {}, {}, {}
         self.fail = {}
 
     def _log(self, name, day):
@@ -53,6 +53,10 @@ class FakeApi:
     async def get_spo2(self, day):
         self._log("spo2", day)
         return self.spo2.get(day)
+
+    async def get_hrv(self, day):
+        self._log("hrv", day)
+        return self.hrv.get(day)
 
     def n(self, name=None, day=None):
         return len([c for c in self.calls if (name is None or c[0] == name) and (day is None or c[1] == day)])
