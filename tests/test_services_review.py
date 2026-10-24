@@ -2,6 +2,7 @@
 Nullwerte, Rueckgabewerte, unit_class, Download-Pfade, Datenschutz im Log (nur erfundene Beispielzahlen)."""
 
 import asyncio
+import itertools
 import logging
 import os
 import sys
@@ -230,7 +231,7 @@ class BackfillRange(Base):
         self.assertEqual(len(windows), 3)
         self.assertEqual(windows[0][0], date(2026, 8, 15))
         self.assertEqual(windows[-1][1], date(2026, 10, 23))
-        for (_, a_end), (b_start, _) in zip(windows, windows[1:], strict=False):
+        for (_, a_end), (b_start, _) in itertools.pairwise(windows):
             self.assertEqual((b_start - a_end).days, 1)  # lueckenlos, ohne Ueberlapp
 
 
@@ -545,9 +546,11 @@ class Download(Base):
         from unittest import mock
 
         os.makedirs(self.media)
-        with mock.patch.object(sv.os, "replace", side_effect=OSError(13, "Permission denied")):
-            with self.assertRaises(HA_ERR) as ctx:
-                self.call("download_activity", {"activity_id": 1, "path": os.path.join(self.media, "a.zip")})
+        with (
+            mock.patch.object(sv.os, "replace", side_effect=OSError(13, "Permission denied")),
+            self.assertRaises(HA_ERR) as ctx,
+        ):
+            self.call("download_activity", {"activity_id": 1, "path": os.path.join(self.media, "a.zip")})
         self.assertEqual(ctx.exception.translation_key, "download_failed")
         self.assertEqual(ctx.exception.translation_placeholders["error"], "Permission denied")
         self.assertEqual(os.listdir(self.media), [])  # keine .part-Datei zurueck
