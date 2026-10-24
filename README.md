@@ -100,6 +100,9 @@ The option **Write hourly statistics** (on by default) is independent of that: a
 heart rate, Body Battery and SpO2 as hourly values into the long-term statistics (see "History and long-term
 statistics"). It reuses the requests that run anyway and otherwise asks once more per series.
 
+The option **Fill history automatically** (on by default) appends the real measuring points to the (history) sensors
+that you enabled; see `backfill_history` below. Without an enabled and recorded history sensor it does nothing.
+
 Units: distances are in meters and durations in seconds (sleep need in minutes); the unit is shown on each sensor,
 and a dashboard card can convert it. Many "today" values (steps, minimum/maximum heart rate) start again at midnight.
 
@@ -192,22 +195,35 @@ with a translated error that lists the accounts. All service errors are translat
   `complete`, `last_completed_day` and `error` after an interruption, plus `heart_rate_hours`, `body_battery_hours`,
   `spo2_hours`, `days_with_data`, `statistic_series` and `statistic_rows`; `unknown_format` lists series whose
   answer this version cannot read.
-* `garmin_personal.backfill_history` – **experimental.** Writes the real measuring points of **one** series (heart
-  rate, Body Battery or SpO2) with their own timestamps as recorded states of its disabled-by-default diagnostic sensor
-  (*Heart rate (history)* and so on; the live sensors never get old values), so that the History panel shows them.
-  Home Assistant has no supported way to do this. The service builds `state_changed` events with historic timestamps
-  and puts them directly on the recorder's own queue, so no automation, logbook or websocket client sees them. That
-  route is undocumented, was only tested against fakes and may break with a Home Assistant update. Therefore: you must
-  set `confirm_experimental: true` (otherwise the service answers `history_write_unsupported` and does nothing), one
-  call takes exactly one `series` and at most 2 days, the sensor must be enabled and recorded (recorder include/exclude
-  settings are respected), and old rows are removed again by `purge_keep_days`. Start with one series and one day and
-  look at the History panel. It is append-only: a persistent record per series and day (exact timestamps and values
-  for the last 7 days, count/first/last/checksum for older days) decides "written already?", never just a last
-  timestamp; late-synced older points are added, written points are never rewritten, overwritten or deleted, and a
-  changed value for a known timestamp is only counted (`changed_values_skipped`). If the record is lost, the recorder
-  is read first; without that check nothing is written unless `confirm_rewrite` is true (this can duplicate states).
-  If the hand-over stops early, only the points really handed over are noted and the response says
-  `history_write_failed: …` with `complete: false`. There is no automatic variant and no option.
+* `garmin_personal.backfill_history` – writes the real measuring points of **heart rate, Body Battery and SpO2** with
+  their own timestamps as recorded states of the disabled-by-default diagnostic sensors (*Heart rate (history)* and so
+  on; the live sensors never get old values), so that the History panel shows them. `series` (any of the three, default
+  all), `days` (default 7, at most 31), `start_date`, `end_date` and `config_entry_id` work as above. Home Assistant has
+  no supported way to write historic states, so the service builds `state_changed` events with historic timestamps and
+  puts them on the recorder's own queue (no automation, logbook or websocket client sees them). The path is
+  undocumented and could change with a Home Assistant update. The sensor must exist, be enabled and be recorded
+  (recorder include/exclude settings are respected); old rows are removed by `purge_keep_days`. The service is
+  append-only: a persistent record per series and day (exact timestamps and values for the last 7 days,
+  count/first/last/checksum for older days) decides "written already?", never just a last timestamp; late-synced older
+  points are added, written points are never rewritten, overwritten or deleted, and a changed value for a known
+  timestamp is only counted (`changed_values_skipped`). If the record is lost, the recorder is read first; without
+  that check nothing is written unless `confirm_rewrite` is true (this can duplicate states). If the hand-over stops
+  early, only the points really handed over are noted and the response says `history_write_failed: …` with
+  `complete: false`. Runs share the lock with the other imports and with the automatic variant.
+
+  **Automatic variant** (option *Fill history automatically*, on by default): it only acts for a series whose history
+  sensor is enabled **and** recorded (checked again before every run), otherwise it silently does nothing; if the
+  recorder excludes an enabled history sensor, a repair hint says so. After each sync the new points of today (and of
+  yesterday on the first full refresh of a day and after syncs before 10:00) are appended. In addition a background
+  load fills the past, per series, backwards from yesterday up to the recorder's `keep_days` (10 if unknown, never
+  more than 400): one day at a time, about 20 seconds apart, a 30-minute pause after a rate limit, and a stop after
+  14 consecutive days without data. Days already done are remembered per series, so a restart continues where it
+  stopped, today is never marked done, and a series that is enabled later (or has gaps after days of downtime) is
+  loaded up to the limit when the entry reloads, without asking again for series that are complete. The history sensor
+  shows how far it got in the attribute `history_backfilled_until`. Cost: one request per series and day (up to
+  3 x `keep_days` for the first load, then about 3 per sync together with the hourly statistics, which share the
+  answers); the database grows by one state per measuring point (roughly 700 per series and day), which the recorder
+  purges after `purge_keep_days`.
 
 ## Translations
 

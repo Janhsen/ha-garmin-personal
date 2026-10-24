@@ -106,6 +106,10 @@ Die Option **Stundenstatistik schreiben** (standardmäßig an) ist davon unabhä
 schreibt sie Puls, Body Battery und SpO2 als Stundenwerte in die Langzeitstatistik (siehe „Verlauf und
 Langzeitstatistik“). Sie nutzt die ohnehin laufenden Abrufe und fragt sonst je Reihe einmal zusätzlich.
 
+Die Option **Verlauf automatisch nachtragen** (standardmäßig an) hängt die echten Messpunkte an die (Verlauf)-Sensoren,
+die du aktiviert hast; siehe `backfill_history` unten. Ohne aktivierten und aufgezeichneten Verlauf-Sensor tut sie
+nichts.
+
 Einheiten: Distanzen sind in Metern und Dauern in Sekunden (Schlafbedarf in Minuten); die Einheit steht am Sensor,
 und eine Dashboard-Karte kann umrechnen. Viele „heute“-Werte (Schritte, minimaler/maximaler Puls) beginnen um
 Mitternacht neu.
@@ -200,24 +204,37 @@ Fehlermeldung ab, die die Konten auflistet. Alle Service-Fehler sind übersetzt.
   mit `backfill_statistics`). Die Antwort nennt nach einer Unterbrechung `complete`, `last_completed_day` und `error`,
   dazu `heart_rate_hours`, `body_battery_hours`, `spo2_hours`, `days_with_data`, `statistic_series` und
   `statistic_rows`; `unknown_format` listet Reihen, deren Antwort diese Version nicht lesen kann.
-* `garmin_personal.backfill_history` – **experimentell.** Schreibt die echten Messpunkte **einer** Reihe (Puls, Body
-  Battery oder SpO2) mit ihren eigenen Zeitstempeln als aufgezeichnete Zustände ihres standardmäßig deaktivierten
-  Diagnose-Sensors (*Puls (Verlauf)* usw.; die Live-Sensoren bekommen nie alte Werte), damit der Bereich Verlauf sie
-  zeigt. Home Assistant kennt dafür keinen unterstützten Weg. Der Dienst baut `state_changed`-Ereignisse mit
-  historischen Zeitstempeln und legt sie direkt in die Warteschlange des Recorders, sodass keine Automation, kein
-  Logbuch und kein Websocket-Client sie sieht. Dieser Weg ist undokumentiert, wurde nur gegen Fakes getestet und kann
-  mit einem Home-Assistant-Update brechen. Deshalb: `confirm_experimental: true` ist Pflicht (sonst antwortet der Dienst
-  `history_write_unsupported` und tut nichts), ein Aufruf nimmt genau eine `series` und höchstens 2 Tage, der Sensor muss
-  aktiviert und aufgezeichnet sein (Einschluss-/Ausschlusseinstellungen des Recorders werden beachtet), und alte Zeilen
-  räumt `purge_keep_days` wieder ab. Fang mit einer Reihe und einem Tag an und sieh im Bereich Verlauf nach. Der Dienst
-  ist nur anhängend: Ein dauerhaftes Protokoll je Reihe und Tag (genaue Zeitstempel und Werte für die letzten 7 Tage,
-  Anzahl/erster/letzter/Prüfsumme für ältere Tage) entscheidet „schon geschrieben?“, nie allein ein letzter Zeitstempel;
-  verspätet synchronisierte ältere Punkte werden nachgetragen, geschriebene Punkte nie neu geschrieben, überschrieben
-  oder gelöscht, ein geänderter Wert zu bekanntem Zeitstempel wird nur gezählt (`changed_values_skipped`). Ist das
-  Protokoll verloren, wird zuerst der Recorder gelesen; ohne diese Prüfung wird nichts geschrieben, außer mit
-  `confirm_rewrite: true` (das kann Zustände verdoppeln). Bricht die Übergabe früh ab, werden nur die wirklich
-  übergebenen Punkte vermerkt, und die Antwort nennt `history_write_failed: …` mit `complete: false`. Es gibt keine
-  automatische Variante und keine Option.
+* `garmin_personal.backfill_history` – schreibt die echten Messpunkte von **Puls, Body Battery und SpO2** mit ihren
+  eigenen Zeitstempeln als aufgezeichnete Zustände der standardmäßig deaktivierten Diagnose-Sensoren (*Puls (Verlauf)*
+  usw.; die Live-Sensoren bekommen nie alte Werte), damit der Bereich Verlauf sie zeigt. `series` (beliebig viele der
+  drei, Standard alle), `days` (Standard 7, höchstens 31), `start_date`, `end_date` und `config_entry_id` wie oben.
+  Home Assistant kennt keinen unterstützten Weg für historische Zustände: Der Dienst baut `state_changed`-Ereignisse
+  mit historischen Zeitstempeln und legt sie in die Warteschlange des Recorders (keine Automation, kein Logbuch, kein
+  Websocket-Client sieht sie). Der Weg ist undokumentiert und könnte sich mit einem Home-Assistant-Update ändern. Der
+  Sensor muss existieren, aktiviert und aufgezeichnet sein (Einschluss-/Ausschlusseinstellungen des Recorders werden
+  beachtet); alte Zeilen räumt `purge_keep_days` ab. Der Dienst ist nur anhängend: Ein dauerhaftes Protokoll je Reihe
+  und Tag (genaue Zeitstempel und Werte für die letzten 7 Tage, Anzahl/erster/letzter/Prüfsumme für ältere Tage)
+  entscheidet „schon geschrieben?“, nie allein ein letzter Zeitstempel; verspätet synchronisierte ältere Punkte werden
+  nachgetragen, geschriebene Punkte nie neu geschrieben, überschrieben oder gelöscht, ein geänderter Wert zu bekanntem
+  Zeitstempel wird nur gezählt (`changed_values_skipped`). Ist das Protokoll verloren, wird zuerst der Recorder gelesen;
+  ohne diese Prüfung wird nichts geschrieben, außer mit `confirm_rewrite: true` (das kann Zustände verdoppeln). Bricht
+  die Übergabe früh ab, werden nur die wirklich übergebenen Punkte vermerkt, und die Antwort nennt
+  `history_write_failed: …` mit `complete: false`. Läufe teilen die Sperre mit den anderen Importen und der
+  automatischen Variante.
+
+  **Automatische Variante** (Option *Verlauf automatisch nachtragen*, standardmäßig an): Sie wirkt nur für eine Reihe,
+  deren Verlauf-Sensor aktiviert **und** aufgezeichnet ist (vor jedem Lauf neu geprüft), sonst tut sie still nichts;
+  schließt der Recorder einen aktivierten Verlauf-Sensor aus, weist eine Reparaturmeldung darauf hin. Nach jeder
+  Synchronisierung werden die neuen Punkte von heute (und von gestern beim ersten vollen Abruf des Tages und nach
+  Synchronisierungen vor 10 Uhr) angehängt. Zusätzlich füllt ein Hintergrundlauf die Vergangenheit je Reihe rückwärts ab
+  gestern bis zu `keep_days` des Recorders (10, falls unbekannt, höchstens 400): ein Tag nach dem anderen, etwa 20
+  Sekunden Abstand, 30 Minuten Pause nach einem Limit und Abbruch nach 14 Tagen ohne Daten in Folge. Erledigte Tage
+  werden je Reihe gemerkt, ein Neustart macht also dort weiter, wo er aufgehört hat; heute gilt nie als erledigt, und
+  eine später aktivierte Reihe (oder Lücken nach Ausfalltagen) wird beim Neuladen des Eintrags bis zur Grenze
+  nachgeladen, ohne vollständige Reihen erneut abzufragen. Der Verlauf-Sensor zeigt den Stand im Attribut
+  `history_backfilled_until`. Kosten: eine Anfrage je Reihe und Tag (beim ersten Laden bis zu 3 x `keep_days`, danach
+  rund 3 je Synchronisierung zusammen mit der Stundenstatistik, die dieselben Antworten nutzt); die Datenbank wächst um
+  einen Zustand je Messpunkt (grob 700 je Reihe und Tag), den der Recorder nach `purge_keep_days` abräumt.
 
 ## Übersetzungen
 

@@ -62,12 +62,14 @@
           "daily_interval_minutes": "Abrufintervall Tageswerte (Minuten)",
           "intraday_attributes": "Tagesverläufe als Attribute anhängen (groß)",
           "hourly_statistics": "Stundenstatistik schreiben (Puls, Body Battery, SpO2)",
+          "history_auto": "Verlauf automatisch nachtragen (Verlauf-Sensoren)",
           "sync_stale_hours": "Warnen, wenn die Uhr länger nicht synchronisiert wurde als (Stunden)"
         },
         "data_description": {
           "daily_interval_minutes": "Wie oft die Tageswerte abgefragt werden. Die übrigen Daten werden nur nach einer neuen Uhr-Synchronisierung oder seltener geholt.",
           "intraday_attributes": "Hängt Puls-, Body-Battery- und SpO2-Verläufe als Attribute an die Sensoren. Das macht die Zustandsdaten groß, ruft zusätzliche Daten bei Garmin ab, und die Verläufe werden nicht im Recorder gespeichert.",
           "hourly_statistics": "Schreibt nach jeder neuen Uhr-Synchronisierung Puls, Body Battery und SpO2 als Stundenwerte (Minimum, Maximum, Mittelwert jeder abgeschlossenen Stunde) in die Langzeitstatistik. Unabhängig von der Option darüber; kostet je Reihe und Sync eine zusätzliche Anfrage (morgens plus eine je Reihe für gestern).",
+          "history_auto": "Trägt nach jeder neuen Uhr-Synchronisierung die neuen Messpunkte von Puls, Body Battery und SpO2 als aufgezeichnete Zustände ihrer (Verlauf-)Sensoren nach und füllt die vergangenen Tage bis zur Aufbewahrungsdauer des Recorders (höchstens 400) langsam im Hintergrund auf. Nur für Verlauf-Sensoren, die du aktiviert hast und die der Recorder aufzeichnet. Legt je Messpunkt einen Zustand in der Datenbank ab (beim Puls etwa 720 pro Tag), bis purge_keep_days ihn entfernt.",
           "sync_stale_hours": "Der Binärsensor meldet ein Problem, wenn der letzte Uhr-Sync länger als so viele Stunden her ist."
         }
       }
@@ -656,6 +658,10 @@
     "key_expired": {
       "title": "Garmin-Schlüssel für {account} abgelaufen",
       "description": "Der API-Schlüssel für {account} ist laut deiner Angabe seit {expires} abgelaufen. Erzeuge einen neuen Schlüssel in Garmin Connect und trage ihn über „Neu konfigurieren“ ein."
+    },
+    "history_not_recorded": {
+      "title": "Ein Verlauf-Sensor wird nicht aufgezeichnet",
+      "description": "Der Verlauf-Sensor für {series} von {account} ist aktiviert, aber der Recorder schließt ihn aus (Einschluss-/Ausschluss-Einstellungen), deshalb wird nichts in den Verlauf geschrieben. Erlaube die Entität in den Recorder-Einstellungen oder deaktiviere den Sensor."
     }
   },
   "services": {
@@ -783,7 +789,7 @@
     },
     "backfill_history": {
       "name": "Verlauf-Sensoren schreiben (nur anhängend)",
-      "description": "EXPERIMENTELL. Schreibt die echten Messpunkte einer Reihe (Puls, Body Battery oder SpO2) mit ihren eigenen Zeitstempeln als aufgezeichnete Zustände ihres (Verlauf-)Sensors, damit der Bereich Verlauf sie zeigt. Nur anhängend: bereits geschriebene Punkte werden nie erneut geschrieben, überschrieben oder gelöscht. Braucht confirm_experimental; eine Reihe und höchstens 2 Tage pro Aufruf. Siehe README.",
+      "description": "Schreibt die echten Messpunkte von Puls, Body Battery und SpO2 mit ihren eigenen Zeitstempeln als aufgezeichnete Zustände der (Verlauf-)Sensoren, damit der Bereich Verlauf sie zeigt. Nur anhängend: bereits geschriebene Punkte werden nie erneut geschrieben, überschrieben oder gelöscht. Die Sensoren müssen aktiviert und aufgezeichnet sein. Das läuft auch automatisch (Option Verlauf automatisch nachtragen); der Dienst ist für einen bestimmten Zeitraum.",
       "fields": {
         "config_entry_id": {
           "name": "Konto",
@@ -799,18 +805,14 @@
         },
         "days": {
           "name": "Tage",
-          "description": "Anzahl Tage rückwärts ab Enddatum (solange experimentell höchstens 2, Standard 1)."
+          "description": "Anzahl Tage rückwärts ab Enddatum (höchstens 31, Standard 1)."
         },
         "series": {
           "name": "Reihen",
-          "description": "Genau eine von heart_rate, body_battery, spo2."
-        },
-        "confirm_experimental": {
-          "name": "Experimentelles Schreiben bestätigen",
-          "description": "Muss true sein, damit geschrieben wird. Der Weg in den Recorder wird von Home Assistant nicht unterstützt und wurde nur gegen Fakes getestet; probiere erst eine Reihe und einen Tag."
+          "description": "Beliebig viele von heart_rate, body_battery, spo2 (Standard: alle)."
         },
         "confirm_rewrite": {
-          "name": "Ohne Prüfung bestätigen",
+          "name": "Ohne Prüfung schreiben",
           "description": "Nur wenn das Protokoll der geschriebenen Punkte verloren ist und der Recorder nicht geprüft werden kann: die angeforderten Tage trotzdem schreiben. Das kann bereits vorhandene Zustände verdoppeln."
         }
       }
@@ -854,10 +856,7 @@
       "message": "{path} konnte nicht geschrieben werden: {error}"
     },
     "history_write_unsupported": {
-      "message": "Das Schreiben der Verlauf-Sensoren ist experimentell und standardmäßig aus. Setze confirm_experimental auf true, um es zu nutzen (eine Reihe, höchstens 2 Tage pro Aufruf). Es wurde nichts abgefragt oder geschrieben."
-    },
-    "history_limits": {
-      "message": "Solange es experimentell ist, braucht ein Aufruf genau eine Reihe und umfasst höchstens {max_days} Tage."
+      "message": "Die Verlauf-Sensoren lassen sich auf diesem Home Assistant nicht beschreiben: Registry oder Recorder sind nicht erreichbar. Es wurde nichts abgefragt oder geschrieben."
     },
     "history_sensor_missing": {
       "message": "Der Verlauf-Sensor existiert noch nicht. Lade die Integration neu und aktiviere dann den Sensor."

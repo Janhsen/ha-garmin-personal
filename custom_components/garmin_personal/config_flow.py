@@ -51,6 +51,7 @@ from .const import (
     KEY_CREATE_URL,
     KEY_VALIDITY_CHOICES,
     OPT_DAILY_INTERVAL,
+    OPT_HISTORY_AUTO,
     OPT_HOURLY_STATS,
     OPT_INTRADAY,
     OPT_SYNC_STALE_HOURS,
@@ -294,6 +295,7 @@ class GarminOptionsFlow(OptionsFlowWithReload):
                     OPT_DAILY_INTERVAL: int(user_input[OPT_DAILY_INTERVAL]),
                     OPT_INTRADAY: user_input[OPT_INTRADAY],
                     OPT_HOURLY_STATS: user_input.get(OPT_HOURLY_STATS, True),
+                    OPT_HISTORY_AUTO: user_input.get(OPT_HISTORY_AUTO, True),
                     OPT_SYNC_STALE_HOURS: int(user_input[OPT_SYNC_STALE_HOURS]),
                 }
             )
@@ -308,6 +310,7 @@ class GarminOptionsFlow(OptionsFlowWithReload):
                 ),
                 vol.Required(OPT_INTRADAY, default=options.get(OPT_INTRADAY, False)): bool,
                 vol.Required(OPT_HOURLY_STATS, default=options.get(OPT_HOURLY_STATS, True)): bool,
+                vol.Required(OPT_HISTORY_AUTO, default=options.get(OPT_HISTORY_AUTO, True)): bool,
                 vol.Required(
                     OPT_SYNC_STALE_HOURS, default=options.get(OPT_SYNC_STALE_HOURS, DEFAULT_SYNC_STALE_HOURS)
                 ): NumberSelector(
