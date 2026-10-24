@@ -3,6 +3,16 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## Unreleased
+
+### Added
+- EXPERIMENTAL: `backfill_history` now writes. The real measuring points of one series are put into the recorder as
+  states of the (history) sensor with their own timestamps, via the recorder's own queue (not supported by Home
+  Assistant, only tested against fakes). Requires `confirm_experimental: true` (default false: the service answers
+  `history_write_unsupported` and does nothing), exactly one `series` and at most 2 days per call. The sensor must
+  exist, be enabled and be recorded; each point's `old_state` is the previous point; a failed hand-over stops at once
+  and only the points really handed over enter the ledger. No automatic variant, no option.
+
 ## 0.5.0
 
 ### Added

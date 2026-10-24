@@ -136,13 +136,17 @@ class ServiceTests(unittest.TestCase):
 
         async def writer(hass, entry, series, points):
             self.written.append((series, list(points)))
-            return len(points)
+            return len(points), None
 
         async def reader(hass, entry, series, day):
             if (series, day) not in self.recorded:
                 raise hs.HistoryWriteUnsupported("no")
             return self.recorded[(series, day)]
 
+        async def target(hass, entry, series):
+            return f"sensor.alex_{series}_history"
+
+        self.patch(sv, "check_target", target)
         self.patch(sv, "write_history_states", writer)
         self.patch(sv, "recorded_points", reader)
         for name in ("now", "utcnow"):
@@ -155,17 +159,54 @@ class ServiceTests(unittest.TestCase):
 
     def call(self, data=None):
         handler = self.hass.services.registered[(DOMAIN, "backfill_history")]["handler"]
-        return stubs.run(handler(stubs.FakeCall({"series": ["heart_rate"], **(data or {})})))
+        return stubs.run(handler(stubs.FakeCall({"series": ["heart_rate"], "confirm_experimental": True, **(data or {})})))
 
     def feed(self, day, rows):
         self.api.hr[day] = hr_payload(rows)
 
-    def test_unsupported_writer_stops_before_any_request(self):
-        self.patch(hs, "WRITE_SUPPORTED", False)
-        with self.assertRaises(stubs.HomeAssistantError) as ctx:
+    def test_without_confirmation_or_support_nothing_is_requested(self):
+        for patched, data in ((True, {"confirm_experimental": False}), (False, {})):
+            self.patch(hs, "WRITE_SUPPORTED", patched)
+            with self.assertRaises(stubs.HomeAssistantError) as ctx:
+                self.call(data)
+            self.assertEqual(ctx.exception.translation_key, "history_write_unsupported")
+            self.assertEqual((self.api.calls, self.written, stubs.Store.instances), (0, [], []))
+
+    def test_limits_while_experimental(self):
+        for data in ({"series": ["heart_rate", "spo2"]}, {"series": []}):
+            with self.assertRaises(stubs.ServiceValidationError) as ctx:
+                self.call(data)
+            self.assertEqual(ctx.exception.translation_key, "history_limits")
+        with self.assertRaises(stubs.ServiceValidationError) as ctx:
+            self.call({"days": 3})
+        self.assertEqual(ctx.exception.translation_key, "date_range_too_long")
+        self.assertEqual(self.api.calls, 0)
+
+    def test_target_problem_stops_before_any_request(self):
+        async def missing(hass, entry, series):
+            raise hs.HistoryTargetError("history_sensor_disabled", "sensor.x")
+
+        self.patch(sv, "check_target", missing)
+        with self.assertRaises(stubs.ServiceValidationError) as ctx:
             self.call()
-        self.assertEqual(ctx.exception.translation_key, "history_write_unsupported")
-        self.assertEqual((self.api.calls, self.written, stubs.Store.instances), (0, [], []))
+        self.assertEqual(ctx.exception.translation_key, "history_sensor_disabled")
+        self.assertEqual(ctx.exception.translation_placeholders["entity_id"], "sensor.x")
+        self.assertEqual(self.api.calls, 0)
+
+    def test_partial_write_notes_only_what_was_handed_over(self):
+        t = [ms(2026, 10, 24, 8, m) for m in (0, 2, 4)]
+        self.recorded[("heart_rate", D2)] = {}
+        self.feed(D2, [(x, 60 + i) for i, x in enumerate(t)])
+
+        async def flaky(hass, entry, series, points):
+            return 2, "boom"
+
+        self.patch(sv, "write_history_states", flaky)
+        out = self.call()
+        self.assertIs(out["complete"], False)
+        self.assertEqual((out["points_written"], out["error"]), (2, "history_write_failed: boom"))
+        saved = stubs.Store.instances[-1].saved[-1]["series"]["heart_rate"]["2026-10-24"]["p"]
+        self.assertEqual(sorted(saved), [str(t[0]), str(t[1])])  # the third point stays open
 
     def test_writes_points_oldest_first_with_real_timestamps_and_drops_placeholders(self):
         t1, t2, t3 = ms(2026, 10, 24, 8, 4), ms(2026, 10, 24, 8, 0), ms(2026, 10, 24, 8, 2)

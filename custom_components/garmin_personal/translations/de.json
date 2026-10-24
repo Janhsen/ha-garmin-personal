@@ -783,7 +783,7 @@
     },
     "backfill_history": {
       "name": "Verlauf-Sensoren schreiben (nur anhängend)",
-      "description": "Schreibt die echten Messpunkte von Puls, Body Battery und SpO2 mit ihren eigenen Zeitstempeln als aufgezeichnete Zustände der (Verlauf-)Sensoren, damit der Bereich Verlauf sie zeigt. Nur anhängend: bereits geschriebene Punkte werden nie erneut geschrieben, überschrieben oder gelöscht. Noch nicht verfügbar; siehe README.",
+      "description": "EXPERIMENTELL. Schreibt die echten Messpunkte einer Reihe (Puls, Body Battery oder SpO2) mit ihren eigenen Zeitstempeln als aufgezeichnete Zustände ihres (Verlauf-)Sensors, damit der Bereich Verlauf sie zeigt. Nur anhängend: bereits geschriebene Punkte werden nie erneut geschrieben, überschrieben oder gelöscht. Braucht confirm_experimental; eine Reihe und höchstens 2 Tage pro Aufruf. Siehe README.",
       "fields": {
         "config_entry_id": {
           "name": "Konto",
@@ -799,11 +799,15 @@
         },
         "days": {
           "name": "Tage",
-          "description": "Anzahl Tage rückwärts ab Enddatum (höchstens 366, Standard 1)."
+          "description": "Anzahl Tage rückwärts ab Enddatum (solange experimentell höchstens 2, Standard 1)."
         },
         "series": {
           "name": "Reihen",
-          "description": "heart_rate, body_battery, spo2 (Standard: alle)."
+          "description": "Genau eine von heart_rate, body_battery, spo2."
+        },
+        "confirm_experimental": {
+          "name": "Experimentelles Schreiben bestätigen",
+          "description": "Muss true sein, damit geschrieben wird. Der Weg in den Recorder wird von Home Assistant nicht unterstützt und wurde nur gegen Fakes getestet; probiere erst eine Reihe und einen Tag."
         },
         "confirm_rewrite": {
           "name": "Ohne Prüfung bestätigen",
@@ -850,7 +854,19 @@
       "message": "{path} konnte nicht geschrieben werden: {error}"
     },
     "history_write_unsupported": {
-      "message": "Das Schreiben der Verlauf-Sensoren ist noch nicht verfügbar: Home Assistant bietet keinen unterstützten Weg, Zustände mit vergangenen Zeitstempeln zu speichern, und der nicht unterstützte Weg ist noch nicht geprüft. Es wurde nichts abgefragt oder geschrieben."
+      "message": "Das Schreiben der Verlauf-Sensoren ist experimentell und standardmäßig aus. Setze confirm_experimental auf true, um es zu nutzen (eine Reihe, höchstens 2 Tage pro Aufruf). Es wurde nichts abgefragt oder geschrieben."
+    },
+    "history_limits": {
+      "message": "Solange es experimentell ist, braucht ein Aufruf genau eine Reihe und umfasst höchstens {max_days} Tage."
+    },
+    "history_sensor_missing": {
+      "message": "Der Verlauf-Sensor existiert noch nicht. Lade die Integration neu und aktiviere dann den Sensor."
+    },
+    "history_sensor_disabled": {
+      "message": "Der Verlauf-Sensor {entity_id} ist deaktiviert. Aktiviere ihn zuerst (Einstellungen > Geräte & Dienste > Entitäten)."
+    },
+    "history_not_recorded": {
+      "message": "Der Recorder zeichnet {entity_id} nicht auf (Einschluss-/Ausschluss-Einstellungen). Es wurde nichts geschrieben."
     },
     "backfill_running": {
       "message": "Für {title} läuft bereits ein Import."
