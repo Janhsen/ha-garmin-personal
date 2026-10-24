@@ -5,7 +5,7 @@ Garmin Connect Personal API bereitstellt: als Sensoren für die Standardwerte un
 als Services für alles andere. Es werden keine Werte berechnet oder erfunden –
 was Garmin nicht liefert, bleibt leer (`unbekannt`).
 
-> **Stand:** v0.2.0, läuft gegen einen echten Garmin-Account in Home Assistant.
+> **Stand:** v0.3.2, läuft gegen einen echten Garmin-Account in Home Assistant.
 > Die Logik (Token, Retry, Zeitfenster, Filter, Wert-Extraktion, Sensorliste) ist
 > mit simulierten Antworten getestet. Die Feldnamen stammen aus dem Swagger, den
 > dokumentierten Modellen und echten Antworten. Sensoren, die dauerhaft leer
@@ -81,6 +81,21 @@ Trainingsstatus, VO2max als Tageswert, Race Predictions. VO2max gibt es nur je A
   und Puls werden übersprungen, ebenso Gewichtseinträge, die nur eine Profiländerung sind. Mit
   `include_third_party_steps` werden zusätzlich Schritte, Distanz und Stockwerke von Tagen übernommen, die
   andere Apps (z. B. RunGap) in Garmin Connect geschrieben haben. Wiederholbar, überschreibt dieselben Tage.
+
+## Übersetzungen
+
+Alle Namen, Services, Dialoge und Hinweise gibt es auf Deutsch und Englisch (`strings.json`, `translations/`,
+erzeugt mit `scripts/gen_translations.py`). Feste Wortlisten von Garmin (Bewertung EXCELLENT/GOOD/FAIR/POOR,
+HRV-Status, Stressstufe, Aktivitätstyp, Schlaf-Teilwerte) sind ENUM-Sensoren: Der Zustand bleibt der englische
+Schlüssel (z. B. `fair`), die Anzeige wird übersetzt. Unbekannte Werte erscheinen unübersetzt, nichts wird
+erfunden. Die Satztexte (Schlaf-Feedback, Einsicht, HRV-Feedback) sind nicht übersetzt, weil ihre Schlüssel
+nicht bekannt sind.
+
+## Verlauf und Langzeitstatistik
+
+* Live-Sensoren erscheinen im Verlauf erst ab dem Zeitpunkt, an dem sie angelegt wurden.
+* Rückwirkend importierte Tageswerte (`backfill_statistics`) sind externe Statistiken. Der Bereich *Verlauf* zeigt
+  sie nicht; sie erscheinen in einer *Statistik-Diagramm*-Karte und unter Entwicklerwerkzeuge → Statistiken.
 
 ## Datenschutz
 
