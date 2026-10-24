@@ -30,6 +30,7 @@ ENTRY_MINOR_VERSION: Final = 2
 # Options
 OPT_DAILY_INTERVAL: Final = "daily_interval_minutes"
 OPT_INTRADAY: Final = "intraday_attributes"
+OPT_HOURLY_STATS: Final = "hourly_statistics"
 OPT_SYNC_STALE_HOURS: Final = "sync_stale_hours"
 
 # The daily group only asks for the (cheap) daily summary this often; the other
@@ -81,6 +82,7 @@ SERVICE_FETCH: Final = "fetch"
 SERVICE_SEARCH_ACTIVITIES: Final = "search_activities"
 SERVICE_DOWNLOAD_ACTIVITY: Final = "download_activity"
 SERVICE_BACKFILL: Final = "backfill_statistics"
+SERVICE_BACKFILL_INTRADAY: Final = "backfill_intraday"
 
 ATTR_CONFIG_ENTRY_ID: Final = "config_entry_id"
 

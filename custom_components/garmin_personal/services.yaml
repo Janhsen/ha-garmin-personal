@@ -130,3 +130,26 @@ backfill_statistics:
       default: false
       selector:
         boolean:
+backfill_intraday:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: garmin_personal
+    start_date:
+      example: "2026-10-01"
+      selector:
+        date:
+    end_date:
+      example: "2026-10-23"
+      selector:
+        date:
+    days:
+      default: 7
+      example: 30
+      selector:
+        number:
+          min: 1
+          max: 366
+          unit_of_measurement: d
+          mode: box

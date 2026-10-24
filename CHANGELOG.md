@@ -3,6 +3,26 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## Unreleased
+
+### Added
+- Hourly statistics for heart rate, Body Battery and SpO2: minimum, maximum and mean of the real Garmin measurements
+  per full UTC hour, as external long-term statistics `garmin_personal:<entry_id>_heart_rate_hourly`,
+  `…_body_battery_hourly` and `…_spo2_hourly` (bpm, %, %). Hours without measurements stay empty; placeholder values
+  (0 or negative) are dropped; nothing is interpolated.
+- New option **Write hourly statistics** (on by default, independent of the intraday attributes): after each new
+  watch sync the completed hours of today are written, and those of yesterday on the first full refresh of a day and
+  after syncs before 10:00 local time. Same statistic and hour overwrite each other, so later corrections by Garmin are
+  taken over; the running hour is never written. Costs about 2 extra requests per sync (heart rate and Body Battery;
+  SpO2 is reused) and 3 for yesterday (see README, request volume).
+- New service `garmin_personal.backfill_intraday`: writes the hourly statistics retroactively (`days`, `start_date`,
+  `end_date`, `config_entry_id`; at most 366 days, one request per day and series, one run per account at a time,
+  partial result with `complete`, `last_completed_day` and `error` after an interruption).
+
+### Changed
+- The metadata of external statistics is now built in one place (`stats_writer.py`); the existing daily statistics are
+  unchanged.
+
 ## 0.4.0
 
 Requires Home Assistant 2025.10.0 or newer (`hacs.json`).

@@ -202,6 +202,12 @@ DATA_DESCRIPTIONS: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
                                 "large, requests extra data from Garmin and the series are not stored in the recorder.",
                                 "Hängt Puls-, Body-Battery- und SpO2-Verläufe als Attribute an die Sensoren. Das macht die Zustandsdaten "
                                 "groß, ruft zusätzliche Daten bei Garmin ab, und die Verläufe werden nicht im Recorder gespeichert."),
+        "hourly_statistics": ("After each new watch sync, writes heart rate, Body Battery and SpO2 as hourly values (minimum, maximum, mean "
+                              "of each completed hour) into the long-term statistics. Independent of the option above; costs one extra "
+                              "request per series and sync (plus one per series for yesterday in the morning).",
+                              "Schreibt nach jeder neuen Uhr-Synchronisierung Puls, Body Battery und SpO2 als Stundenwerte (Minimum, Maximum, "
+                              "Mittelwert jeder abgeschlossenen Stunde) in die Langzeitstatistik. Unabhängig von der Option darüber; kostet "
+                              "je Reihe und Sync eine zusätzliche Anfrage (morgens plus eine je Reihe für gestern)."),
         "sync_stale_hours": ("The binary sensor reports a problem when the last watch sync is older than this many hours.",
                              "Der Binärsensor meldet ein Problem, wenn der letzte Uhr-Sync länger als so viele Stunden her ist."),
     },
@@ -326,6 +332,7 @@ def build(i: int) -> dict:
                     "data": {
                         "daily_interval_minutes": t("Update interval for daily values (minutes)", "Abrufintervall Tageswerte (Minuten)"),
                         "intraday_attributes": t("Add intraday series as attributes (large)", "Tagesverläufe als Attribute anhängen (groß)"),
+                        "hourly_statistics": t("Write hourly statistics (heart rate, Body Battery, SpO2)", "Stundenstatistik schreiben (Puls, Body Battery, SpO2)"),
                         "sync_stale_hours": t("Warn when the watch has not synced for (hours)", "Warnen, wenn die Uhr länger nicht synchronisiert wurde als (Stunden)"),
                     },
                 }
@@ -388,6 +395,13 @@ def build(i: int) -> dict:
                                                "end_date": {"name": t("End date", "Enddatum"), "description": t("Last day to import. Default: yesterday; today only if given explicitly (an incomplete day).", "Letzter Tag des Imports. Standard: gestern; heute nur, wenn ausdrücklich angegeben (unvollständiger Tag).")},
                                                "days": {"name": t("Days", "Tage"), "description": t("Number of days back from the end date (at most 3650). Used when no start date is given.", "Anzahl Tage rückwärts ab Enddatum (höchstens 3650). Wird ohne Startdatum verwendet.")},
                                                "include_third_party_steps": {"name": t("Steps from other apps", "Schritte aus anderen Apps"), "description": t("Also import steps, distance and floors of days that other apps (e.g. RunGap) wrote into Garmin Connect. Calories and heart rate of those days are never imported.", "Schritte, Distanz und Stockwerke von Tagen mitimportieren, die andere Apps (z. B. RunGap) in Garmin Connect geschrieben haben. Kalorien und Puls dieser Tage werden nie importiert.")}}},
+            "backfill_intraday": {"name": t("Import hourly values as statistics", "Stundenwerte als Statistik importieren"),
+                                  "description": t("Writes the day curves of heart rate, Body Battery and SpO2 as hourly values (minimum, maximum, mean of each completed hour) into long-term statistics. One request per day and series; a range may span at most 366 days. Safe to repeat: the same hours are overwritten. The response says whether it completed (complete, last_completed_day, error) and how many hours were written per series.",
+                                                   "Schreibt die Tagesverläufe von Puls, Body Battery und SpO2 als Stundenwerte (Minimum, Maximum, Mittelwert jeder abgeschlossenen Stunde) in die Langzeitstatistik. Eine Anfrage je Tag und Reihe; ein Zeitraum darf höchstens 366 Tage umfassen. Kann gefahrlos wiederholt werden: dieselben Stunden werden überschrieben. Die Antwort sagt, ob alles fertig wurde (complete, last_completed_day, error) und wie viele Stunden je Reihe geschrieben wurden."),
+                                  "fields": {"config_entry_id": {"name": t("Account", "Konto"), "description": t("Garmin account. May be left out only if exactly one account is set up.", "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist.")},
+                                             "start_date": {"name": t("Start date", "Startdatum"), "description": t("Default: days back from the end date.", "Standard: Tage rückwärts ab Enddatum.")},
+                                             "end_date": {"name": t("End date", "Enddatum"), "description": t("Last day to import. Default: today (only completed hours are written, never the running hour).", "Letzter Tag des Imports. Standard: heute (es werden nur abgeschlossene Stunden geschrieben, nie die laufende).")},
+                                             "days": {"name": t("Days", "Tage"), "description": t("Number of days back from the end date (at most 366, default 7). Used when no start date is given.", "Anzahl Tage rückwärts ab Enddatum (höchstens 366, Standard 7). Wird ohne Startdatum verwendet.")}}},
         },
         "exceptions": {k: {"message": v[i]} for k, v in EXCEPTIONS.items()},
     }

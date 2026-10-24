@@ -100,14 +100,21 @@ durchschnittliche Höhe, höchste/niedrigste Atmung, niedrigsten/höchsten Durch
 
 Optionen: Abrufintervall der Tageswerte (das ist die Sync-Prüfung), Sync-Warnschwelle, und ob Tagesverläufe
 (Puls, Body Battery, SpO2) als Attribute angehängt werden (groß, nicht im Recorder gespeichert).
-Nur mit dieser Option werden die zusätzlichen Endpunkte für Puls- und Body-Battery-Verlauf abgefragt.
+Nur mit dieser Option werden die zusätzlichen Endpunkte für Puls- und Body-Battery-Verlauf für die Sensoren abgefragt.
+
+Die Option **Stundenstatistik schreiben** (standardmäßig an) ist davon unabhängig: Nach jeder neuen Uhr-Synchronisierung
+schreibt sie Puls, Body Battery und SpO2 als Stundenwerte in die Langzeitstatistik (siehe „Verlauf und
+Langzeitstatistik“). Sie nutzt die ohnehin laufenden Abrufe und fragt sonst je Reihe einmal zusätzlich.
 
 Einheiten: Distanzen sind in Metern und Dauern in Sekunden (Schlafbedarf in Minuten); die Einheit steht am Sensor,
 und eine Dashboard-Karte kann umrechnen. Viele „heute“-Werte (Schritte, minimaler/maximaler Puls) beginnen um
 Mitternacht neu.
 
 Abrufmenge: etwa 290 Anfragen pro Tag und Konto für die Sync-Prüfung, dazu etwa 9 je Uhr-Sync
-und die Fallbacks, insgesamt grob 400 bis 500 (ohne Tagesverläufe).
+und die Fallbacks, insgesamt grob 400 bis 500 (ohne Tagesverläufe). Die Stundenstatistik fügt etwa 2 Anfragen je
+Uhr-Sync hinzu (Puls und Body Battery von heute; SpO2 wird ohnehin abgefragt) und 3 für gestern beim ersten
+vollständigen Abruf eines Tages und nach jedem Sync vor 10 Uhr Ortszeit, also grob 30 bis 60 mehr pro Tag. Bei
+eingeschalteten Tagesverläufen als Attribute werden die Reihen von heute ohnehin geholt, es bleiben nur die 3 für gestern.
 Garmin nennt für die Personal API keine Limits und bietet keinen Push; es wird nur abgefragt.
 
 Nicht in der Personal API enthalten (und deshalb nicht vorhanden): Training Readiness,
@@ -184,6 +191,15 @@ Fehlermeldung ab, die die Konten auflistet. Alle Service-Fehler sind übersetzt.
   läuft in 31-Tage-Fenstern und pro Konto nur ein Import gleichzeitig. Die Antwort nennt nach einer Unterbrechung
   `complete`, `last_completed_day` und `error`, dazu `days_imported`, `statistic_series` und `statistic_rows`. Tage mit
   dem Wert 0 bei Ruhe-/Minimal-/Maximalpuls, Stress oder Atmung werden nicht geschrieben.
+* `garmin_personal.backfill_intraday` – schreibt die Tagesverläufe von **Puls, Body Battery und SpO2** rückwirkend als
+  **Stundenstatistik** (Minimum, Maximum und Mittelwert je voller Stunde, siehe „Verlauf und Langzeitstatistik“).
+  `days` (Standard 7), `start_date` und `end_date` wie oben; ohne `end_date` endet der Import heute (geschrieben
+  werden nur abgeschlossene Stunden, nie die laufende), höchstens 366 Tage. Eine Anfrage je Tag und Reihe (3 pro Tag,
+  ein Jahr sind also rund 1100 Anfragen: lange Zeiträume in Stücken laufen lassen, falls Garmin mit einem Limit
+  antwortet). Wiederholbar; dieselben Stunden werden überschrieben. Pro Konto nur ein Import gleichzeitig (gemeinsam
+  mit `backfill_statistics`). Die Antwort nennt nach einer Unterbrechung `complete`, `last_completed_day` und `error`,
+  dazu `heart_rate_hours`, `body_battery_hours`, `spo2_hours`, `days_with_data`, `statistic_series` und
+  `statistic_rows`; `unknown_format` listet Reihen, deren Antwort diese Version nicht lesen kann.
 
 ## Übersetzungen
 
@@ -220,6 +236,32 @@ die Werte, die Garmin schickt, nicht bekannt sind; jeder gesehene Wert wird unve
   ```
 * Jeder importierte Tag wird als ein Wert in der ersten Stunde des Tages gespeichert. Mit der Periode *Stunde* zeigt
   eine Karte deshalb eine Spitze um Mitternacht und sonst Lücken; nimm die Periode *Tag*.
+* **Stundenwerte** (Puls, Body Battery, SpO2) sind eigene Statistiken mit einem Wert je voller Stunde: Minimum,
+  Maximum und Mittelwert der echten Garmin-Messpunkte dieser Stunde (der Mittelwert ist das einfache Mittel der Punkte,
+  nicht zeitgewichtet). Sie werden nach jeder neuen Uhr-Synchronisierung geschrieben (Option *Stundenstatistik
+  schreiben*) und rückwirkend mit `backfill_intraday`. IDs: `garmin_personal:<entry_id>_heart_rate_hourly`,
+  `…_body_battery_hourly`, `…_spo2_hourly` (Einheiten bpm, %, %). Gespeichert werden nur abgeschlossene Stunden, nie die
+  laufende; die Stunden von heute und gestern werden nach jedem Sync neu berechnet und überschrieben, spätere
+  Korrekturen von Garmin werden also übernommen. Stunden ohne Messung bleiben leer: es wird nichts interpoliert oder
+  aufgefüllt, Platzhalterwerte (0 oder negativ bei Puls und SpO2, negativ bei Body Battery) werden verworfen. Gemeint
+  sind volle UTC-Stunden. Der Puls hat etwa alle zwei Minuten einen Punkt, eine Stunde also bis zu 30 Punkte; Garmins
+  SpO2-Antwort enthält nur Stundenmittel, Minimum, Maximum und Mittelwert einer SpO2-Stunde sind daher gleich. Zu sehen:
+  in einer *Statistik-Diagramm*-Karte (Statistik wählen, Periode *Stunde* oder *Tag*, `stat_types` `min`, `max`,
+  `mean`) oder unter Entwicklerwerkzeuge → Statistiken. Im Bereich *Verlauf* erscheinen sie **nicht**, denn der zeigt
+  nur Zustände von Entitäten; es sind keine Zustände, sie liegen deshalb weder dort noch in den Attributen.
+  In Zeitzonen, deren Abstand zu UTC keine ganze Stundenzahl ist, wird die Stunde um die lokale Mitternacht am Rand
+  eines abgerufenen Zeitraums ausgelassen, statt sie aus der Hälfte der Messpunkte zu speichern.
+
+  ```yaml
+  type: statistics-graph
+  entities:
+    - garmin_personal:<entry_id>_heart_rate_hourly
+  period: hour
+  stat_types:
+    - min
+    - mean
+    - max
+  ```
 
 ## Änderungen an der Garmin-API erkennen
 

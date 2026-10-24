@@ -61,11 +61,13 @@
         "data": {
           "daily_interval_minutes": "Abrufintervall Tageswerte (Minuten)",
           "intraday_attributes": "Tagesverläufe als Attribute anhängen (groß)",
+          "hourly_statistics": "Stundenstatistik schreiben (Puls, Body Battery, SpO2)",
           "sync_stale_hours": "Warnen, wenn die Uhr länger nicht synchronisiert wurde als (Stunden)"
         },
         "data_description": {
           "daily_interval_minutes": "Wie oft die Tageswerte abgefragt werden. Die übrigen Daten werden nur nach einer neuen Uhr-Synchronisierung oder seltener geholt.",
           "intraday_attributes": "Hängt Puls-, Body-Battery- und SpO2-Verläufe als Attribute an die Sensoren. Das macht die Zustandsdaten groß, ruft zusätzliche Daten bei Garmin ab, und die Verläufe werden nicht im Recorder gespeichert.",
+          "hourly_statistics": "Schreibt nach jeder neuen Uhr-Synchronisierung Puls, Body Battery und SpO2 als Stundenwerte (Minimum, Maximum, Mittelwert jeder abgeschlossenen Stunde) in die Langzeitstatistik. Unabhängig von der Option darüber; kostet je Reihe und Sync eine zusätzliche Anfrage (morgens plus eine je Reihe für gestern).",
           "sync_stale_hours": "Der Binärsensor meldet ein Problem, wenn der letzte Uhr-Sync länger als so viele Stunden her ist."
         }
       }
@@ -745,6 +747,28 @@
         "include_third_party_steps": {
           "name": "Schritte aus anderen Apps",
           "description": "Schritte, Distanz und Stockwerke von Tagen mitimportieren, die andere Apps (z. B. RunGap) in Garmin Connect geschrieben haben. Kalorien und Puls dieser Tage werden nie importiert."
+        }
+      }
+    },
+    "backfill_intraday": {
+      "name": "Stundenwerte als Statistik importieren",
+      "description": "Schreibt die Tagesverläufe von Puls, Body Battery und SpO2 als Stundenwerte (Minimum, Maximum, Mittelwert jeder abgeschlossenen Stunde) in die Langzeitstatistik. Eine Anfrage je Tag und Reihe; ein Zeitraum darf höchstens 366 Tage umfassen. Kann gefahrlos wiederholt werden: dieselben Stunden werden überschrieben. Die Antwort sagt, ob alles fertig wurde (complete, last_completed_day, error) und wie viele Stunden je Reihe geschrieben wurden.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist."
+        },
+        "start_date": {
+          "name": "Startdatum",
+          "description": "Standard: Tage rückwärts ab Enddatum."
+        },
+        "end_date": {
+          "name": "Enddatum",
+          "description": "Letzter Tag des Imports. Standard: heute (es werden nur abgeschlossene Stunden geschrieben, nie die laufende)."
+        },
+        "days": {
+          "name": "Tage",
+          "description": "Anzahl Tage rückwärts ab Enddatum (höchstens 366, Standard 7). Wird ohne Startdatum verwendet."
         }
       }
     }

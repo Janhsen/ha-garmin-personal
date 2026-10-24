@@ -51,6 +51,7 @@ from .const import (
     KEY_CREATE_URL,
     KEY_VALIDITY_CHOICES,
     OPT_DAILY_INTERVAL,
+    OPT_HOURLY_STATS,
     OPT_INTRADAY,
     OPT_SYNC_STALE_HOURS,
 )
@@ -280,7 +281,7 @@ class GarminConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class GarminOptionsFlow(OptionsFlowWithReload):
-    """Update interval, intraday attributes and the sync-stale threshold.
+    """Update interval, intraday attributes, hourly statistics and the sync-stale threshold.
 
     Reloads the entry by itself when the options change.
     """
@@ -292,6 +293,7 @@ class GarminOptionsFlow(OptionsFlowWithReload):
                 data={
                     OPT_DAILY_INTERVAL: int(user_input[OPT_DAILY_INTERVAL]),
                     OPT_INTRADAY: user_input[OPT_INTRADAY],
+                    OPT_HOURLY_STATS: user_input.get(OPT_HOURLY_STATS, True),
                     OPT_SYNC_STALE_HOURS: int(user_input[OPT_SYNC_STALE_HOURS]),
                 }
             )
@@ -305,6 +307,7 @@ class GarminOptionsFlow(OptionsFlowWithReload):
                                          unit_of_measurement="min")
                 ),
                 vol.Required(OPT_INTRADAY, default=options.get(OPT_INTRADAY, False)): bool,
+                vol.Required(OPT_HOURLY_STATS, default=options.get(OPT_HOURLY_STATS, True)): bool,
                 vol.Required(
                     OPT_SYNC_STALE_HOURS, default=options.get(OPT_SYNC_STALE_HOURS, DEFAULT_SYNC_STALE_HOURS)
                 ): NumberSelector(
