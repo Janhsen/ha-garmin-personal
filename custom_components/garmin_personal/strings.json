@@ -133,7 +133,14 @@
         "name": "Maximum stress"
       },
       "stress_qualifier": {
-        "name": "Stress level"
+        "name": "Stress level",
+        "state": {
+          "calm": "Calm",
+          "balanced": "Balanced",
+          "stressful": "Stressful",
+          "very_stressful": "Very stressful",
+          "unknown": "Unknown"
+        }
       },
       "stress_rest_time": {
         "name": "Rest time"
@@ -220,16 +227,40 @@
         "name": "Sleep score"
       },
       "sleep_score_duration": {
-        "name": "Sleep score: duration"
+        "name": "Sleep score: duration",
+        "state": {
+          "excellent": "Excellent",
+          "good": "Good",
+          "fair": "Fair",
+          "poor": "Poor"
+        }
       },
       "sleep_score_stress": {
-        "name": "Sleep score: stress"
+        "name": "Sleep score: stress",
+        "state": {
+          "excellent": "Excellent",
+          "good": "Good",
+          "fair": "Fair",
+          "poor": "Poor"
+        }
       },
       "sleep_score_restlessness": {
-        "name": "Sleep score: restlessness"
+        "name": "Sleep score: restlessness",
+        "state": {
+          "excellent": "Excellent",
+          "good": "Good",
+          "fair": "Fair",
+          "poor": "Poor"
+        }
       },
       "sleep_score_awake_count": {
-        "name": "Sleep score: awakenings"
+        "name": "Sleep score: awakenings",
+        "state": {
+          "excellent": "Excellent",
+          "good": "Good",
+          "fair": "Fair",
+          "poor": "Poor"
+        }
       },
       "sleep_score_rem": {
         "name": "Sleep score: REM"
@@ -289,7 +320,14 @@
         "name": "HRV 5 min high"
       },
       "hrv_status": {
-        "name": "HRV status"
+        "name": "HRV status",
+        "state": {
+          "balanced": "Balanced",
+          "unbalanced": "Unbalanced",
+          "low": "Low",
+          "poor": "Poor",
+          "none": "No status"
+        }
       },
       "hrv_feedback": {
         "name": "HRV feedback"
@@ -331,7 +369,44 @@
         "name": "Last activity"
       },
       "last_activity_type": {
-        "name": "Last activity type"
+        "name": "Last activity type",
+        "state": {
+          "running": "Running",
+          "trail_running": "Trail running",
+          "treadmill_running": "Treadmill running",
+          "walking": "Walking",
+          "hiking": "Hiking",
+          "cycling": "Cycling",
+          "road_biking": "Road cycling",
+          "gravel_cycling": "Gravel cycling",
+          "mountain_biking": "Mountain biking",
+          "e_bike_fitness": "E-bike",
+          "e_bike_mountain": "E-mountain bike",
+          "indoor_cycling": "Indoor cycling",
+          "virtual_ride": "Virtual ride",
+          "strength_training": "Strength training",
+          "indoor_cardio": "Indoor cardio",
+          "hiit": "HIIT",
+          "yoga": "Yoga",
+          "pilates": "Pilates",
+          "elliptical": "Elliptical",
+          "stair_stepper": "Stair stepper",
+          "rowing": "Rowing",
+          "indoor_rowing": "Indoor rowing",
+          "swimming": "Swimming",
+          "lap_swimming": "Pool swimming",
+          "open_water_swimming": "Open water swimming",
+          "cross_country_skiing_ws": "Cross-country skiing",
+          "resort_skiing_snowboarding_ws": "Skiing / snowboarding",
+          "backcountry_skiing_snowboarding_ws": "Backcountry skiing",
+          "inline_skating": "Inline skating",
+          "stand_up_paddleboarding_v2": "Stand-up paddling",
+          "kayaking_v2": "Kayaking",
+          "golf": "Golf",
+          "tennis_v2": "Tennis",
+          "multi_sport": "Multisport",
+          "other": "Other"
+        }
       },
       "last_activity_start": {
         "name": "Last activity start"

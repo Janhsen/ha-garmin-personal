@@ -133,7 +133,14 @@
         "name": "Maximaler Stress"
       },
       "stress_qualifier": {
-        "name": "Stressstufe"
+        "name": "Stressstufe",
+        "state": {
+          "calm": "Ruhig",
+          "balanced": "Ausgeglichen",
+          "stressful": "Stressig",
+          "very_stressful": "Sehr stressig",
+          "unknown": "Unbekannt"
+        }
       },
       "stress_rest_time": {
         "name": "Ruhezeit (Stress)"
@@ -220,16 +227,40 @@
         "name": "Schlafwert"
       },
       "sleep_score_duration": {
-        "name": "Schlafwert: Dauer"
+        "name": "Schlafwert: Dauer",
+        "state": {
+          "excellent": "Ausgezeichnet",
+          "good": "Gut",
+          "fair": "Mittelmäßig",
+          "poor": "Schlecht"
+        }
       },
       "sleep_score_stress": {
-        "name": "Schlafwert: Stress"
+        "name": "Schlafwert: Stress",
+        "state": {
+          "excellent": "Ausgezeichnet",
+          "good": "Gut",
+          "fair": "Mittelmäßig",
+          "poor": "Schlecht"
+        }
       },
       "sleep_score_restlessness": {
-        "name": "Schlafwert: Unruhe"
+        "name": "Schlafwert: Unruhe",
+        "state": {
+          "excellent": "Ausgezeichnet",
+          "good": "Gut",
+          "fair": "Mittelmäßig",
+          "poor": "Schlecht"
+        }
       },
       "sleep_score_awake_count": {
-        "name": "Schlafwert: Aufwachen"
+        "name": "Schlafwert: Aufwachen",
+        "state": {
+          "excellent": "Ausgezeichnet",
+          "good": "Gut",
+          "fair": "Mittelmäßig",
+          "poor": "Schlecht"
+        }
       },
       "sleep_score_rem": {
         "name": "Schlafwert: REM"
@@ -289,7 +320,14 @@
         "name": "HRV 5-Min-Höchstwert"
       },
       "hrv_status": {
-        "name": "HRV-Status"
+        "name": "HRV-Status",
+        "state": {
+          "balanced": "Ausgeglichen",
+          "unbalanced": "Unausgeglichen",
+          "low": "Niedrig",
+          "poor": "Schlecht",
+          "none": "Kein Status"
+        }
       },
       "hrv_feedback": {
         "name": "HRV-Feedback"
@@ -331,7 +369,44 @@
         "name": "Letzte Aktivität"
       },
       "last_activity_type": {
-        "name": "Letzte Aktivität: Typ"
+        "name": "Letzte Aktivität: Typ",
+        "state": {
+          "running": "Laufen",
+          "trail_running": "Trailrunning",
+          "treadmill_running": "Laufband",
+          "walking": "Gehen",
+          "hiking": "Wandern",
+          "cycling": "Radfahren",
+          "road_biking": "Rennrad",
+          "gravel_cycling": "Gravel",
+          "mountain_biking": "Mountainbike",
+          "e_bike_fitness": "E-Bike",
+          "e_bike_mountain": "E-Mountainbike",
+          "indoor_cycling": "Indoor-Radfahren",
+          "virtual_ride": "Virtuelle Fahrt",
+          "strength_training": "Krafttraining",
+          "indoor_cardio": "Cardio indoor",
+          "hiit": "HIIT",
+          "yoga": "Yoga",
+          "pilates": "Pilates",
+          "elliptical": "Crosstrainer",
+          "stair_stepper": "Treppensteiger",
+          "rowing": "Rudern",
+          "indoor_rowing": "Rudergerät",
+          "swimming": "Schwimmen",
+          "lap_swimming": "Bahnenschwimmen",
+          "open_water_swimming": "Freiwasserschwimmen",
+          "cross_country_skiing_ws": "Skilanglauf",
+          "resort_skiing_snowboarding_ws": "Ski / Snowboard",
+          "backcountry_skiing_snowboarding_ws": "Skitour",
+          "inline_skating": "Inlineskaten",
+          "stand_up_paddleboarding_v2": "Stand-up-Paddling",
+          "kayaking_v2": "Kajak",
+          "golf": "Golf",
+          "tennis_v2": "Tennis",
+          "multi_sport": "Multisport",
+          "other": "Sonstiges"
+        }
       },
       "last_activity_start": {
         "name": "Letzte Aktivität: Beginn"

@@ -53,10 +53,11 @@ class SensorEntityDescription:
     entity_category: object = None
     icon: str | None = None
     suggested_display_precision: int | None = None
+    options: object = None
 
 
 def install_stubs():
-    dc = make_enum("SensorDeviceClass", "DISTANCE", "DURATION", "TIMESTAMP", "VOLUME", "WEIGHT")
+    dc = make_enum("SensorDeviceClass", "DISTANCE", "DURATION", "ENUM", "TIMESTAMP", "VOLUME", "WEIGHT")
     sc = make_enum("SensorStateClass", "MEASUREMENT", "TOTAL", "TOTAL_INCREASING")
     stub("homeassistant")
     stub("homeassistant.components")
@@ -309,6 +310,52 @@ class SyncGatingTests(unittest.TestCase):
         self.cycle(c)
         self.assertEqual((n["spo2"], n["hydration"]), (2, 2))
         self.assertEqual(n["refresh"], 0)  # no new sync -> followers not woken
+
+
+class LabelTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.sensor = load_sensor()
+        cls.labels = sys.modules[f"{PKG.name}.labels"] if f"{PKG.name}.labels" in sys.modules else None
+
+    def by_key(self):
+        return {d.key: d for d in self.sensor.SENSOR_DESCRIPTIONS}
+
+    def test_label_sensors_are_enums_with_lowercase_state(self):
+        by = self.by_key()
+        for key in ("stress_qualifier", "hrv_status", "last_activity_type", "sleep_score_stress"):
+            self.assertEqual(by[key].device_class.value, "enum", key)
+            self.assertIsNone(by[key].state_class, key)
+            self.assertTrue(by[key].options, key)
+        data = {"daily": DATA["daily"], "sleep": DATA["sleep"], "activities": DATA["activities"]}
+        self.assertEqual(by["stress_qualifier"].value_fn(data["daily"]), "balanced")
+        self.assertEqual(by["hrv_status"].value_fn(data["sleep"]), "balanced")
+        self.assertEqual(by["last_activity_type"].value_fn(data["activities"]), "running")
+
+    def test_every_word_list_has_both_languages(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("labels_check", PKG / "labels.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        for name, entries in mod.LABELS.items():
+            for key, (en, de) in entries.items():
+                self.assertEqual(key, key.lower(), (name, key))
+                self.assertTrue(en and de, (name, key))
+        for d in self.sensor.SENSOR_DESCRIPTIONS:
+            if d.labels:
+                self.assertIn(d.labels, mod.LABELS)
+                self.assertEqual(list(d.options), sorted(mod.LABELS[d.labels]))
+
+    def test_unlisted_value_is_kept_in_options(self):
+        by = self.by_key()
+        desc = by["last_activity_type"]
+        coordinator = type("C", (), {"data": {"activities": [{"activityId": 2, "activityType": {"typeKey": "Curling"}}]}})()
+        entity = self.sensor.GarminSensor.__new__(self.sensor.GarminSensor)
+        entity.entity_description = desc
+        entity.coordinator = coordinator
+        self.assertEqual(entity.native_value, "curling")
+        self.assertIn("curling", entity.options)
+        self.assertIn("running", entity.options)
 
 
 if __name__ == "__main__":

@@ -74,6 +74,14 @@ missing = [k for k in keys if k not in N]
 extra = [k for k in N if k not in keys]
 assert not missing and not extra, (missing, extra)
 
+import importlib.util
+_spec = importlib.util.spec_from_file_location("labels", ROOT / "labels.py")
+_labels = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_labels)
+LABELS = _labels.LABELS
+# sensor key -> word list, read from the labels= arguments in sensor.py
+LABEL_OF = dict(re.findall(r'_d\("([a-z0-9_]+)",[^\n]*?labels="([a-z_]+)"', (ROOT / "sensor.py").read_text()))
+
 def build(i: int) -> dict:
     de = i == 1
     t = (lambda en, d: d if de else en)
@@ -132,7 +140,7 @@ def build(i: int) -> dict:
             "key_validity": {"options": {d: t(f"{d} days", f"{d} Tage") for d in ("30", "90", "180", "365")}},
         },
         "entity": {
-            "sensor": {k: {"name": N[k][i]} for k in keys},
+            "sensor": {k: ({"name": N[k][i]} | ({"state": {v: names[i] for v, names in LABELS[LABEL_OF[k]].items()}} if k in LABEL_OF else {})) for k in keys},
             "binary_sensor": {"sync_stale": {"name": t("Watch sync overdue", "Uhr-Synchronisation überfällig")}},
             "event": {"activity": {"name": t("Activity", "Aktivität"),
                                    "state_attributes": {"event_type": {"state": {"activity_finished": t("Activity finished", "Aktivität beendet")}}}}},

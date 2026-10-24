@@ -28,6 +28,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import OPT_INTRADAY
 from .coordinator import GarminConfigEntry, GarminCoordinator
 from .entity import device_info
+from .labels import LABELS
 from .repairs import key_expires_at
 from .values import (
     ValueFn,
@@ -68,6 +69,7 @@ class GarminSensorDescription(SensorEntityDescription):
     value_fn: ValueFn
     attrs_fn: AttrsFn | None = None
     intraday: bool = False
+    labels: str | None = None
 
 
 def _d(
@@ -84,9 +86,21 @@ def _d(
     intraday: bool = False,
     icon: str | None = None,
     precision: int | None = None,
+    labels: str | None = None,
 ) -> GarminSensorDescription:
     if unit == MINUTES and device_class is None:
         device_class = DURATION
+    options = None
+    if labels is not None:
+        # A fixed word list: shown translated, state is the lower-case Garmin key.
+        device_class = SensorDeviceClass.ENUM
+        state_class = None
+        options = sorted(LABELS[labels])
+        inner = value_fn
+
+        def value_fn(data: Mapping[str, Any], inner: ValueFn = inner) -> str | None:  # noqa: F811
+            raw = inner(data)
+            return None if raw is None else str(raw).lower()
     return GarminSensorDescription(
         key=key,
         translation_key=key,
@@ -101,6 +115,8 @@ def _d(
         intraday=intraday,
         icon=icon,
         suggested_display_precision=precision,
+        labels=labels,
+        options=options,
     )
 
 
@@ -313,7 +329,7 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
        attrs=_hr_intraday, intraday=True),
     _d("stress_average", "daily", _summary("averageStressLevel"), icon="mdi:emoticon-neutral"),
     _d("stress_max", "daily", _summary("maxStressLevel"), enabled=False),
-    _d("stress_qualifier", "daily", _stress_qualifier, state_class=NO_CLASS),
+    _d("stress_qualifier", "daily", _stress_qualifier, labels="stress"),
     _d("stress_rest_time", "daily", _summary("restStressDuration"), unit=SECONDS, device_class=DURATION, enabled=False),
     _d("stress_low_time", "daily", _summary("lowStressDuration"), unit=SECONDS, device_class=DURATION, enabled=False),
     _d("stress_medium_time", "daily", _summary("mediumStressDuration"), unit=SECONDS, device_class=DURATION, enabled=False),
@@ -359,10 +375,10 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("nap_duration", "sleep", number_at("sleep", "napTimeSeconds"), unit=SECONDS, device_class=DURATION,
        state_class=NO_CLASS, enabled=False),
     _d("sleep_score", "sleep", _sleep_score("overall"), attrs=_sleep_score_attrs("overall"), icon="mdi:sleep"),
-    _d("sleep_score_duration", "sleep", _sleep_score_label("totalDuration"), state_class=NO_CLASS, attrs=_sleep_score_attrs("totalDuration"), enabled=False),
-    _d("sleep_score_stress", "sleep", _sleep_score_label("stress"), state_class=NO_CLASS, attrs=_sleep_score_attrs("stress"), enabled=False),
-    _d("sleep_score_restlessness", "sleep", _sleep_score_label("restlessness"), state_class=NO_CLASS, attrs=_sleep_score_attrs("restlessness"), enabled=False),
-    _d("sleep_score_awake_count", "sleep", _sleep_score_label("awakeCount"), state_class=NO_CLASS, attrs=_sleep_score_attrs("awakeCount"), enabled=False),
+    _d("sleep_score_duration", "sleep", _sleep_score_label("totalDuration"), labels="rating", attrs=_sleep_score_attrs("totalDuration"), enabled=False),
+    _d("sleep_score_stress", "sleep", _sleep_score_label("stress"), labels="rating", attrs=_sleep_score_attrs("stress"), enabled=False),
+    _d("sleep_score_restlessness", "sleep", _sleep_score_label("restlessness"), labels="rating", attrs=_sleep_score_attrs("restlessness"), enabled=False),
+    _d("sleep_score_awake_count", "sleep", _sleep_score_label("awakeCount"), labels="rating", attrs=_sleep_score_attrs("awakeCount"), enabled=False),
     _d("sleep_score_rem", "sleep", _sleep_score("remPercentage"), unit=PERCENTAGE, attrs=_sleep_score_attrs("remPercentage"), enabled=False),
     _d("sleep_score_light", "sleep", _sleep_score("lightPercentage"), unit=PERCENTAGE, attrs=_sleep_score_attrs("lightPercentage"), enabled=False),
     _d("sleep_score_deep", "sleep", _sleep_score("deepPercentage"), unit=PERCENTAGE, attrs=_sleep_score_attrs("deepPercentage"), enabled=False),
@@ -387,7 +403,7 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("hrv_last_night", "sleep", _hrv("lastNightAvg"), unit="ms", icon="mdi:heart-flash", attrs=_hrv_attrs),
     _d("hrv_weekly", "sleep", _hrv("weeklyAvg"), unit="ms", icon="mdi:heart-flash"),
     _d("hrv_5min_high", "sleep", _hrv("lastNight5MinHigh"), unit="ms", enabled=False),
-    _d("hrv_status", "sleep", _hrv_text("status"), state_class=NO_CLASS),
+    _d("hrv_status", "sleep", _hrv_text("status"), labels="hrv_status"),
     _d("hrv_feedback", "sleep", _hrv_text("feedbackPhrase"), state_class=NO_CLASS, enabled=False),
     # ---- Body (group "body") ----------------------------------------------------------
     _d("weight", "body", weight_at("weight", scale=1000, digits=2), unit=UnitOfMass.KILOGRAMS,
@@ -410,7 +426,7 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     # ---- Activities (group "activities") ----------------------------------------------
     _d("last_activity", "activities", activity_text("activityName"), state_class=NO_CLASS, attrs=_activity_attrs,
        icon="mdi:run"),
-    _d("last_activity_type", "activities", activity_text("activityType", "typeKey"), state_class=NO_CLASS),
+    _d("last_activity_type", "activities", activity_text("activityType", "typeKey"), labels="activity_type"),
     _d("last_activity_start", "activities", activity_timestamp("startTimeGMT"), device_class=TIMESTAMP,
        state_class=NO_CLASS),
     _d("last_activity_distance", "activities", activity_number("distance"), unit=UnitOfLength.METERS,
@@ -552,6 +568,18 @@ class GarminSensor(CoordinatorEntity[GarminCoordinator], SensorEntity):
         if not self.coordinator.data:
             return None
         return self.entity_description.value_fn(self.coordinator.data)
+
+    @property
+    def options(self) -> list[str] | None:
+        """Known keys plus the current one, so an unlisted Garmin value is shown instead of failing."""
+        listed = self.entity_description.options
+        if listed is None:
+            return None
+        current = self.native_value
+        keys = list(listed)
+        if isinstance(current, str) and current not in keys:
+            keys.append(current)
+        return keys
 
     @property
     def extra_state_attributes(self) -> Mapping[str, Any] | None:

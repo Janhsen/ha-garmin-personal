@@ -280,6 +280,7 @@ class SensorEntityDescription:
     entity_category: object = None
     icon: str | None = None
     suggested_display_precision: int | None = None
+    options: object = None
 
 
 # --------------------------------------------------------------------------- recorder
@@ -430,7 +431,7 @@ class FakeCall:
 # --------------------------------------------------------------------------- install + load
 def install() -> None:
     Platform = make_enum("Platform", "SENSOR", "BINARY_SENSOR", "EVENT")
-    sensor_dc = make_enum("SensorDeviceClass", "DISTANCE", "DURATION", "TIMESTAMP", "VOLUME", "WEIGHT")
+    sensor_dc = make_enum("SensorDeviceClass", "DISTANCE", "DURATION", "ENUM", "TIMESTAMP", "VOLUME", "WEIGHT")
     sensor_sc = make_enum("SensorStateClass", "MEASUREMENT", "TOTAL", "TOTAL_INCREASING")
 
     stub("voluptuous", Schema=Schema, Required=Required, Optional=Optional, In=In, All=All,
