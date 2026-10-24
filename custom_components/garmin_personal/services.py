@@ -30,6 +30,7 @@ from .const import (
     SERVICE_SEARCH_ACTIVITIES,
 )
 from .coordinator import GarminConfigEntry
+from .values import first_number
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -83,21 +84,27 @@ BACKFILL_SCHEMA = vol.Schema(
     }
 )
 
-# statistic id suffix -> (daily summary field, unit)
-BACKFILL_FIELDS: dict[str, tuple[str, str | None]] = {
-    "steps": ("totalSteps", "steps"),
-    "distance": ("totalDistanceMeters", "m"),
-    "active_calories": ("activeKilocalories", "kcal"),
-    "total_calories": ("totalKilocalories", "kcal"),
-    "resting_heart_rate": ("restingHeartRate", "bpm"),
-    "min_heart_rate": ("minHeartRate", "bpm"),
-    "max_heart_rate": ("maxHeartRate", "bpm"),
-    "stress_average": ("averageStressLevel", None),
-    "body_battery_high": ("bodyBatteryHighestValue", "%"),
-    "body_battery_low": ("bodyBatteryLowestValue", "%"),
-    "moderate_intensity_minutes": ("moderateIntensityMinutes", "min"),
-    "vigorous_intensity_minutes": ("vigorousIntensityMinutes", "min"),
-    "floors_ascended": ("floorsAscended", None),
+# statistic id suffix -> (unit, candidate paths). The daily-summaries range endpoint
+# is nested ("movement.steps.value"); the flat names are the single-day format.
+BACKFILL_FIELDS: dict[str, tuple[str | None, tuple[tuple[str, ...], ...]]] = {
+    "steps": ("steps", (("movement", "steps", "value"), ("totalSteps",))),
+    "distance": ("m", (("movement", "steps", "distanceInMeters"), ("totalDistanceMeters",))),
+    "active_calories": ("kcal", (("calories", "burnedActive"), ("activeKilocalories",))),
+    "resting_calories": ("kcal", (("calories", "burnedResting"), ("bmrKilocalories",))),
+    "total_calories": ("kcal", (("calories", "burnedTotal"), ("totalKilocalories",))),
+    "resting_heart_rate": ("bpm", (("heartRate", "restingValue"), ("restingHeartRate",))),
+    "min_heart_rate": ("bpm", (("heartRate", "minValue"), ("minHeartRate",))),
+    "max_heart_rate": ("bpm", (("heartRate", "maxValue"), ("maxHeartRate",))),
+    "stress_average": (None, (("stress", "avgLevel"), ("averageStressLevel",))),
+    "stress_max": (None, (("stress", "maxLevel"), ("maxStressLevel",))),
+    "body_battery_high": ("%", (("bodyBattery", "maxValue"), ("bodyBatteryHighestValue",))),
+    "body_battery_low": ("%", (("bodyBattery", "minValue"), ("bodyBatteryLowestValue",))),
+    "body_battery_charged": ("%", (("bodyBattery", "chargedValue"), ("bodyBatteryChargedValue",))),
+    "body_battery_drained": ("%", (("bodyBattery", "drainedValue"), ("bodyBatteryDrainedValue",))),
+    "moderate_intensity_minutes": ("min", (("intensityMinutes", "moderate"), ("moderateIntensityMinutes",))),
+    "vigorous_intensity_minutes": ("min", (("intensityMinutes", "vigorous"), ("vigorousIntensityMinutes",))),
+    "floors_ascended": (None, (("movement", "floorsAscended", "value"), ("floorsAscended",))),
+    "respiration_average": ("brpm", (("respiration", "avgValue"), ("avgWakingRespirationValue",))),
 }
 
 
@@ -246,14 +253,14 @@ def _import_statistics(hass: HomeAssistant, entry: GarminConfigEntry, summaries:
         StatisticMeanType = None  # noqa: N806
 
     count = 0
-    for name, (field, unit) in BACKFILL_FIELDS.items():
+    for name, (unit, paths) in BACKFILL_FIELDS.items():
         rows: list[StatisticData] = []
         for summary in summaries:
             if not isinstance(summary, dict):
                 continue
-            value = summary.get(field)
+            value = first_number(summary, *paths)
             day = summary.get("calendarDate")
-            if isinstance(value, bool) or not isinstance(value, int | float) or not day:
+            if value is None or not day:
                 continue
             try:
                 start = dt_util.start_of_local_day(date.fromisoformat(str(day)))

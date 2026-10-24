@@ -70,5 +70,24 @@ class Domain(unittest.TestCase):
         self.assertEqual(v.series_pairs(None), [])
 
 
+class RangeShape(unittest.TestCase):
+    # Same structure as Garmin's daily-summaries range endpoint, invented numbers.
+    NESTED = {"calendarDate": "2026-01-02", "movement": {"steps": {"value": 1234, "distanceInMeters": 999}},
+              "calories": {"burnedActive": 10}, "heartRate": {"restingValue": 50}, "hydration": {}}
+
+    def test_nested_and_flat(self):
+        self.assertEqual(v.first_number(self.NESTED, ("movement", "steps", "value"), ("totalSteps",)), 1234)
+        self.assertEqual(v.first_number({"totalSteps": 5}, ("movement", "steps", "value"), ("totalSteps",)), 5)
+        self.assertIsNone(v.first_number(self.NESTED, ("hydration", "value"), ("nothing",)))
+        self.assertIsNone(v.first_number({"x": True}, ("x",)))
+
+    def test_backfill_table_resolves_on_nested(self):
+        import re
+
+        src = (Path(__file__).parent.parent / "custom_components" / "garmin_personal" / "services.py").read_text()
+        self.assertIn('("movement", "steps", "value")', src)
+        self.assertIsNotNone(re.search(r'"steps": \("steps"', src))
+
+
 if __name__ == "__main__":
     unittest.main()

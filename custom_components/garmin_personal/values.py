@@ -237,3 +237,12 @@ def series_pairs(rows: Any, value_index: int = 1) -> list[list[float]]:
             if timestamp is not None and value is not None:
                 pairs.append([timestamp, value])
     return pairs
+
+
+def first_number(data: Any, *paths: tuple[str | int, ...]) -> float | int | None:
+    """The first path that holds a number (used where Garmin's shapes differ)."""
+    for path in paths:
+        number = to_number(dig(data, *path))
+        if number is not None:
+            return number
+    return None
