@@ -80,6 +80,11 @@ def install_stubs():
     stub("homeassistant.exceptions", ConfigEntryAuthFailed=Exception)
     stub("homeassistant.util")
     stub("homeassistant.util.dt")
+    from datetime import datetime as _dt
+    from datetime import UTC as _UTC
+
+    sys.modules["homeassistant.util.dt"].now = lambda: _dt.now(_UTC).astimezone()
+    sys.modules["homeassistant.util.dt"].utcnow = lambda: _dt.now(_UTC)
     sys.modules["homeassistant.util"].dt = sys.modules["homeassistant.util.dt"]
     sys.modules["homeassistant.helpers"].issue_registry = sys.modules["homeassistant.helpers.issue_registry"]
 
@@ -223,6 +228,87 @@ class CallBuilderTests(unittest.TestCase):
         self.assertNotIn("hrv", calls)
         self.assertNotIn("weight_goals", calls)
         self.assertIn("hrv_summaries", calls)
+
+
+class SyncGatingTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        load_sensor()
+        cls.coordinator = sys.modules["gp_under_test.coordinator"]
+
+    def make(self, sync_values):
+        """A daily coordinator whose summary reports successive sync times."""
+        import asyncio
+
+        c = self.coordinator.GarminDailyCoordinator.__new__(self.coordinator.GarminDailyCoordinator)
+        counts = {"summary": 0, "spo2": 0, "hydration": 0, "refresh": 0}
+        syncs = iter(sync_values)
+
+        async def summary():
+            counts["summary"] += 1
+            return {"lastSyncTimestampGMT": next(syncs), "totalSteps": 1}
+
+        async def spo2():
+            counts["spo2"] += 1
+            return {"averageSpO2": 95}
+
+        async def hydration():
+            counts["hydration"] += 1
+            return [{"valueInML": 1}]
+
+        class Follower:
+            async def async_request_refresh(self_inner):
+                counts["refresh"] += 1
+
+        class Hass:
+            def async_create_task(self_inner, coro):
+                asyncio.get_event_loop().create_task(coro)
+
+        c.group, c.api, c._sticky, c._warned = "daily", None, (), set()
+        c._build_calls = lambda api, today: {"summary": summary, "spo2": spo2, "hydration": hydration}
+        c.data = {}
+        c.hass = Hass()
+        c.followers = [Follower(), Follower()]
+        c._last_sync = None
+        c._last_full = None
+        return c, counts
+
+    def cycle(self, c):
+        import asyncio
+
+        async def run():
+            c.data = await c._async_update_data()
+            await asyncio.sleep(0)  # let follower refresh tasks run
+            await asyncio.sleep(0)
+
+        asyncio.run(run())
+
+    def test_unchanged_sync_asks_only_for_summary(self):
+        c, n = self.make(["t1", "t1", "t1"])
+        self.cycle(c)
+        self.assertEqual((n["summary"], n["spo2"], n["hydration"]), (1, 1, 1))  # first run: everything
+        self.cycle(c)
+        self.cycle(c)
+        self.assertEqual((n["summary"], n["spo2"], n["hydration"]), (3, 1, 1))
+        self.assertEqual(n["refresh"], 0)
+        self.assertEqual(c.data["spo2"], {"averageSpO2": 95})  # carried over
+
+    def test_new_sync_fetches_everything_and_wakes_followers(self):
+        c, n = self.make(["t1", "t2"])
+        self.cycle(c)
+        self.cycle(c)
+        self.assertEqual((n["summary"], n["spo2"], n["hydration"]), (2, 2, 2))
+        self.assertEqual(n["refresh"], 2)
+
+    def test_hourly_fallback(self):
+        from datetime import timedelta
+
+        c, n = self.make(["t1", "t1"])
+        self.cycle(c)
+        c._last_full = c._last_full - timedelta(minutes=61)
+        self.cycle(c)
+        self.assertEqual((n["spo2"], n["hydration"]), (2, 2))
+        self.assertEqual(n["refresh"], 0)  # no new sync -> followers not woken
 
 
 if __name__ == "__main__":

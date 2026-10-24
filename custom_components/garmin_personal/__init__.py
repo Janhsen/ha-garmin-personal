@@ -29,6 +29,7 @@ from .coordinator import (
     GarminActivityCoordinator,
     GarminConfigEntry,
     GarminCoordinator,
+    GarminDailyCoordinator,
     GarminProfileCoordinator,
     GarminRuntimeData,
     activity_calls,
@@ -61,7 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GarminConfigEntry) -> bo
 
     daily_minutes = entry.options.get(OPT_DAILY_INTERVAL, DEFAULT_DAILY_INTERVAL)
     runtime.coordinators = {
-        "daily": GarminCoordinator(
+        "daily": GarminDailyCoordinator(
             hass, entry, api, "daily", timedelta(minutes=daily_minutes),
             make_daily_calls(bool(entry.options.get(OPT_INTRADAY, False))),
         ),
@@ -102,6 +103,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: GarminConfigEntry) -> bo
             sticky=("profile", "hr_zones"),
         ),
     }
+    daily = runtime.coordinators["daily"]
+    assert isinstance(daily, GarminDailyCoordinator)  # noqa: S101
+    daily.followers = [runtime.coordinators[n] for n in ("sleep", "body", "activities")]
     entry.runtime_data = runtime
 
     # The daily group decides whether setup works at all (bad key -> reauth,

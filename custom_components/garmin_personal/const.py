@@ -21,10 +21,14 @@ OPT_DAILY_INTERVAL: Final = "daily_interval_minutes"
 OPT_INTRADAY: Final = "intraday_attributes"
 OPT_SYNC_STALE_HOURS: Final = "sync_stale_hours"
 
-DEFAULT_DAILY_INTERVAL: Final = 15
-DEFAULT_SLEEP_INTERVAL: Final = 60
+# The daily group only asks for the (cheap) daily summary this often; the other
+# endpoints are fetched when its last-sync time changes. The other intervals are
+# fallbacks for data that can change without a watch sync (scale, app entries).
+DEFAULT_DAILY_INTERVAL: Final = 5
+DEFAULT_SLEEP_INTERVAL: Final = 120
 DEFAULT_BODY_INTERVAL: Final = 60
-DEFAULT_ACTIVITY_INTERVAL: Final = 30
+DEFAULT_ACTIVITY_INTERVAL: Final = 60
+DAILY_FULL_REFRESH: Final = timedelta(minutes=60)
 DEFAULT_PROFILE_INTERVAL: Final = 24 * 60
 DEFAULT_SYNC_STALE_HOURS: Final = 12
 

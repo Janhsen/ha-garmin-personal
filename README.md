@@ -33,14 +33,19 @@ vorher abgelehnt, startet Home Assistant automatisch die Neu-Anmeldung.
 
 ## Sensoren (~100)
 
-Gruppiert nach Abrufintervall (Standard in Klammern):
+Abruf: Der Tageswert (mit der Zeit des letzten Uhr-Syncs) wird alle 5 Minuten abgefragt, das ist eine
+einzige Anfrage. Nur wenn sich die Sync-Zeit ändert, werden SpO2, Trinkmenge, Schlaf, Körperwerte und
+Aktivitäten geholt. Zusätzlich gibt es einen Fallback (Tageswerte stündlich, Schlaf alle 2 Stunden,
+Körperwerte und Aktivitäten stündlich) für Daten, die ohne Uhr-Sync entstehen, z. B. Waage oder App-Einträge.
+
+Gruppen (Fallback-Intervall in Klammern):
 
 | Gruppe | Inhalt |
 |---|---|
-| Tageswerte (15 min) | Schritte, Distanz, Kalorien, Intensitätsminuten, Stockwerke, Puls (Ruhe/Min/Max), Stress, Body Battery, SpO2, Atmung, Trinkmenge, letzte Synchronisation |
-| Schlaf & HRV (60 min) | Dauer, Phasen, Schlafwert + Teilwerte, Beginn/Ende, Schlafbedarf, HRV letzte Nacht/Woche/Status |
-| Körper (60 min) | Gewicht, BMI, Körperfett/-wasser, Muskel-/Knochenmasse, Fitnessalter |
-| Aktivitäten (30 min) | Letzte Aktivität (Name, Typ, Start, Distanz, Dauer, Kalorien, Puls, Trainingseffekt, Belastung, VO2max, Höhenmeter), Wellness-Aktivitäten |
+| Tageswerte (Tageswert 5 min, Rest bei neuem Sync / stündlich) | Schritte, Distanz, Kalorien, Intensitätsminuten, Stockwerke, Puls (Ruhe/Min/Max), Stress, Body Battery, SpO2, Atmung, Trinkmenge, letzte Synchronisation |
+| Schlaf & HRV (bei neuem Sync, sonst 2 h) | Dauer, Phasen, Schlafwert + Teilwerte, Beginn/Ende, Schlafbedarf, HRV letzte Nacht/Woche/Status |
+| Körper (bei neuem Sync, sonst 1 h) | Gewicht, BMI, Körperfett/-wasser, Muskel-/Knochenmasse, Fitnessalter |
+| Aktivitäten (bei neuem Sync, sonst 1 h) | Letzte Aktivität (Name, Typ, Start, Distanz, Dauer, Kalorien, Puls, Trainingseffekt, Belastung, VO2max, Höhenmeter), Wellness-Aktivitäten |
 | Profil (24 h) | Konto, eingestellte Herzfrequenzzonen |
 
 Viele Detailsensoren sind standardmäßig **deaktiviert** und können einzeln aktiviert werden.
@@ -51,11 +56,12 @@ bleiben unberührt. Wieder einschalten geht jederzeit unter Einstellungen → En
 Zusätzlich: Binary-Sensor *Uhr-Synchronisation überfällig* und Event-Entität *Aktivität*
 (feuert `activity_finished` bei jeder neuen Aktivität, nicht beim ersten Start).
 
-Optionen: Intervall der Tageswerte, Sync-Warnschwelle, und ob Tagesverläufe
+Optionen: Intervall der Sync-Prüfung, Sync-Warnschwelle, und ob Tagesverläufe
 (Puls, Body Battery, SpO2) als Attribute angehängt werden (groß, nicht im Recorder gespeichert).
 Nur mit dieser Option werden die zusätzlichen Endpunkte für Puls- und Body-Battery-Verlauf abgefragt.
 
-Abrufmenge mit den Standardwerten: etwa 480 Anfragen pro Tag und Konto (ohne Tagesverläufe).
+Abrufmenge: etwa 290 Anfragen pro Tag und Konto für die Sync-Prüfung, dazu etwa 9 je Uhr-Sync
+und die Fallbacks, insgesamt grob 400 bis 500 (ohne Tagesverläufe).
 Garmin nennt für die Personal API keine Limits und bietet keinen Push; es wird nur abgefragt.
 
 Nicht in der Personal API enthalten (und deshalb nicht vorhanden): Training Readiness,

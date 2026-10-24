@@ -21,8 +21,9 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .api import GarminAuthError, GarminError, GarminPersonalApi, GarminRateLimitError
-from .const import DOMAIN
+from .const import DAILY_FULL_REFRESH, DOMAIN
 from .repairs import update_key_expiry_issue
+from .values import dig
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,12 +92,27 @@ class GarminCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._sticky = sticky
         self._warned: set[str] = set()
 
+    async def _skip(self, key: str, results: dict[str, Any]) -> bool:
+        """Hook: skip one endpoint this cycle (its last value is carried over)."""
+        return False
+
+    async def _after_update(self, results: dict[str, Any], skipped: bool) -> None:
+        """Hook: called with the finished results."""
+
     async def _async_update_data(self) -> dict[str, Any]:
         today = dt_util.now().date()
         calls = self._build_calls(self.api, today)
+        previous = self.data or {}
         results: dict[str, Any] = {}
         failures: list[str] = []
+        executed = 0
+        skipped = False
         for key, call in calls.items():
+            if await self._skip(key, results):
+                skipped = True
+                results[key] = previous.get(key)
+                continue
+            executed += 1
             try:
                 results[key] = await call()
             except GarminAuthError as err:
@@ -113,16 +129,55 @@ class GarminCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 results[key] = None
             else:
                 self._warned.discard(key)
-        if calls and len(failures) == len(calls):
+        if executed and len(failures) == executed:
             raise UpdateFailed("; ".join(failures))
         if "sleep" in results:
             results["sleep"] = unwrap_sleep(results["sleep"])
-        previous = self.data or {}
         for key in self._sticky:
             if _is_empty(results.get(key)) and not _is_empty(previous.get(key)):
                 results[key] = previous[key]
         results["_day"] = today.isoformat()
+        await self._after_update(results, skipped)
         return results
+
+
+class GarminDailyCoordinator(GarminCoordinator):
+    """Polls the daily summary often and the rest only after a new watch sync.
+
+    The summary carries ``lastSyncTimestampGMT``. When it changes, the remaining
+    daily endpoints are fetched and the follower groups (sleep, body, activities)
+    are asked to refresh. Without a change the rest is refreshed at most hourly.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Set up the coordinator; ``followers`` are filled in after creation."""
+        super().__init__(*args, **kwargs)
+        self.followers: list[GarminCoordinator] = []
+        self._last_sync: Any = None
+        self._last_full: Any = None
+
+    async def _skip(self, key: str, results: dict[str, Any]) -> bool:
+        if key == "summary":
+            return False
+        if "summary" not in results or results["summary"] is None:
+            return self._last_full is not None  # no summary: connectivity trouble, do not pile on
+        sync = dig(results["summary"], "lastSyncTimestampGMT")
+        changed = sync != self._last_sync
+        due = self._last_full is None or dt_util.utcnow() - self._last_full >= DAILY_FULL_REFRESH
+        return not (changed or due)
+
+    async def _after_update(self, results: dict[str, Any], skipped: bool) -> None:
+        sync = dig(results.get("summary"), "lastSyncTimestampGMT")
+        if sync is None and results.get("summary") is None:
+            return
+        changed = self._last_sync is not None and sync != self._last_sync
+        self._last_sync = sync
+        if not skipped:
+            self._last_full = dt_util.utcnow()
+        if changed:
+            _LOGGER.debug("New watch sync (%s): refreshing follower groups", sync)
+            for follower in self.followers:
+                self.hass.async_create_task(follower.async_request_refresh())
 
 
 class GarminActivityCoordinator(GarminCoordinator):
