@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -22,7 +23,7 @@ from homeassistant.const import (
     UnitOfTime,
     UnitOfVolume,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
@@ -40,16 +41,19 @@ from .values import (
     activity_timestamp,
     default_hr_zones,
     dig,
+    finish_number,
     first_item,
     from_garmin,
     hr_zone_at,
     item_number,
-    last_item,
+    latest_hrv,
     latest_weight,
     number_at,
+    parse_timestamp,
     series_pairs,
     text_at,
     timestamp_at,
+    to_number,
     weight_at,
 )
 
@@ -61,6 +65,7 @@ STEPS = "steps"
 MINUTES = UnitOfTime.MINUTES
 SECONDS = UnitOfTime.SECONDS
 
+ATTRIBUTE_TEXT_LIMIT = 255
 AttrsFn = Callable[[Mapping[str, Any]], Mapping[str, Any] | None]
 
 
@@ -87,23 +92,25 @@ def _d(
     category: EntityCategory | None = None,
     attrs: AttrsFn | None = None,
     intraday: bool = False,
-    icon: str | None = None,
     precision: int | None = None,
     labels: str | None = None,
+    open_enum: bool = False,
 ) -> GarminSensorDescription:
     if unit == MINUTES and device_class is None:
         device_class = DURATION
+    if group == "sleep" and _is_night_value(key):
+        # A night with a duration of 0 or less was not measured: no value, so the last night is held.
+        value_fn = _measured_night(value_fn)
+        if attrs is not None:
+            attrs = _measured_night(attrs)
     options = None
-    if labels is not None:
-        # A fixed word list: shown translated, state is the lower-case Garmin key.
+    if labels is not None or open_enum:
+        # A word list: shown translated, state is the lower-case Garmin key. ``open_enum`` has no list
+        # yet (Garmin's values are not known): every value seen is added to the options and logged once.
         device_class = SensorDeviceClass.ENUM
         state_class = None
-        options = sorted(LABELS[labels])
-        inner = value_fn
-
-        def value_fn(data: Mapping[str, Any], inner: ValueFn = inner) -> str | None:  # noqa: F811
-            raw = inner(data)
-            return None if raw is None else str(raw).lower()
+        options = sorted(LABELS[labels]) if labels is not None else []
+        value_fn = _enum_value(value_fn)
     return GarminSensorDescription(
         key=key,
         translation_key=key,
@@ -116,11 +123,33 @@ def _d(
         entity_category=category,
         attrs_fn=attrs,
         intraday=intraday,
-        icon=icon,
         suggested_display_precision=precision,
         labels=labels,
         options=options,
     )
+
+
+def _enum_value(inner: ValueFn) -> ValueFn:
+    def value(data: Mapping[str, Any]) -> str | None:
+        raw = inner(data)
+        text = None if raw is None else str(raw).lower()
+        # "unknown" is Home Assistant's own state for "no value": a Garmin "UNKNOWN" is the same thing.
+        return None if text in (None, "unknown", "unavailable") else text
+
+    return value
+
+
+def _is_night_value(key: str) -> bool:
+    """Sleep sensors that read the night record (not HRV, not naps, which can exist without a night)."""
+    return key.startswith("sleep_")
+
+
+def _measured_night(inner: Callable[[Mapping[str, Any]], Any]) -> Callable[[Mapping[str, Any]], Any]:
+    def value(data: Mapping[str, Any]) -> Any:
+        duration = to_number(dig(data, "sleep", "sleepTimeSeconds"))
+        return None if duration is not None and duration <= 0 else inner(data)
+
+    return value
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -210,7 +239,7 @@ def _body_battery_events(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
 
 
 def _hrv_attrs(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
-    item = last_item(data, "hrv_summaries")
+    item = latest_hrv(data)
     baseline = item.get("baseline") if item else None
     if not isinstance(baseline, Mapping):
         return None
@@ -224,12 +253,19 @@ def _hrv_attrs(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
 
 
 def _hrv(key: str) -> ValueFn:
-    return item_number("hrv_summaries", key)
+    """A number from the newest HRV day that has a night average (same day as the attributes)."""
+
+    def value(data: Mapping[str, Any]) -> float | int | None:
+        item = latest_hrv(data)
+        number = to_number(item.get(key)) if item else None
+        return None if number is None else finish_number(number)
+
+    return value
 
 
 def _hrv_text(key: str) -> ValueFn:
     def value(data: Mapping[str, Any]) -> str | None:
-        item = last_item(data, "hrv_summaries")
+        item = latest_hrv(data)
         raw = item.get(key) if item else None
         return None if raw is None else str(raw)[:255]
 
@@ -241,13 +277,19 @@ def _hr_intraday(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
 
 
 def _body_battery_intraday(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """The body battery series; the column of the level is looked up in Garmin's descriptor list."""
     report = first_item(data, "body_battery")
-    descriptors = dig(report, "bodyBatteryValueDescriptorDTOList") or []
-    index = 1
+    descriptors = dig(report, "bodyBatteryValueDescriptorDTOList")
+    index: int | None = None
     for descriptor in descriptors if isinstance(descriptors, list) else []:
         if isinstance(descriptor, Mapping) and descriptor.get("bodyBatteryValueDescriptorKey") == "bodyBatteryLevel":
-            index = descriptor.get("bodyBatteryValueDescriptorIndex", descriptor.get("index", 1))
-    return {"values": series_pairs(dig(report, "bodyBatteryValuesArray"), int(index))}
+            raw = descriptor.get("bodyBatteryValueDescriptorIndex", descriptor.get("index"))
+            number = to_number(raw)
+            index = int(number) if number is not None and number >= 0 else None
+            break
+    if index is None:
+        return {"values": []}  # column unknown: no series rather than a guessed column
+    return {"values": series_pairs(dig(report, "bodyBatteryValuesArray"), index)}
 
 
 def _spo2_intraday(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -287,6 +329,8 @@ def _activity_attrs(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
         "avgRespirationRate",
     )
     attrs: dict[str, Any] = {k: activity[k] for k in keys if k in activity}
+    if isinstance(attrs.get("description"), str):
+        attrs["description"] = attrs["description"][:ATTRIBUTE_TEXT_LIMIT]
     attrs["activity_type"] = dig(activity, "activityType", "typeKey")
     attrs["event_type"] = dig(activity, "eventType", "typeKey")
     return attrs
@@ -348,23 +392,23 @@ def _fitness_age_attrs(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
 
 SENSORS: tuple[GarminSensorDescription, ...] = (
     # ---- Daily activity tracker (group "daily") -------------------------------------
-    _d("steps", "daily", _summary("totalSteps"), unit=STEPS, state_class=TOTAL, icon="mdi:shoe-print"),
+    _d("steps", "daily", _summary("totalSteps"), unit=STEPS, state_class=TOTAL),
     _d("step_goal", "daily", _summary("dailyStepGoal"), unit=STEPS, category=EntityCategory.DIAGNOSTIC),
     _d("distance", "daily", _summary("totalDistanceMeters"), unit=UnitOfLength.METERS,
        device_class=SensorDeviceClass.DISTANCE, state_class=TOTAL, precision=0),
-    _d("total_calories", "daily", _summary("totalKilocalories"), unit=KCAL, state_class=TOTAL, icon="mdi:fire"),
-    _d("active_calories", "daily", _summary("activeKilocalories"), unit=KCAL, state_class=TOTAL, icon="mdi:fire"),
-    _d("resting_calories", "daily", _summary("bmrKilocalories"), unit=KCAL, state_class=TOTAL, icon="mdi:fire"),
+    _d("total_calories", "daily", _summary("totalKilocalories"), unit=KCAL, state_class=TOTAL),
+    _d("active_calories", "daily", _summary("activeKilocalories"), unit=KCAL, state_class=TOTAL),
+    _d("resting_calories", "daily", _summary("bmrKilocalories"), unit=KCAL, state_class=TOTAL),
     _d("consumed_calories", "daily", _summary("consumedKilocalories"), unit=KCAL, state_class=TOTAL, enabled=False),
-    _d("remaining_calories", "daily", _summary("remainingKilocalories"), unit=KCAL, enabled=False),
+    _d("remaining_calories", "daily", _summary("remainingKilocalories", allow_negative=True), unit=KCAL, enabled=False),
     _d("moderate_intensity_minutes", "daily", _summary("moderateIntensityMinutes"), unit=MINUTES,
-       state_class=TOTAL, icon="mdi:run-fast"),
+       state_class=TOTAL),
     _d("vigorous_intensity_minutes", "daily", _summary("vigorousIntensityMinutes"), unit=MINUTES,
-       state_class=TOTAL, icon="mdi:run-fast"),
+       state_class=TOTAL),
     _d("intensity_minutes_goal", "daily", _summary("intensityMinutesGoal"), unit=MINUTES,
        category=EntityCategory.DIAGNOSTIC, enabled=False),
-    _d("floors_ascended", "daily", _summary("floorsAscended", digits=0), state_class=TOTAL, icon="mdi:stairs-up"),
-    _d("floors_descended", "daily", _summary("floorsDescended", digits=0), state_class=TOTAL, icon="mdi:stairs-down"),
+    _d("floors_ascended", "daily", _summary("floorsAscended", digits=0), state_class=TOTAL),
+    _d("floors_descended", "daily", _summary("floorsDescended", digits=0), state_class=TOTAL),
     _d("floors_goal", "daily", _summary("userFloorsAscendedGoal"), category=EntityCategory.DIAGNOSTIC, enabled=False),
     _d("highly_active_time", "daily", _summary("highlyActiveSeconds"), unit=SECONDS, device_class=DURATION,
        state_class=TOTAL, enabled=False),
@@ -372,34 +416,38 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
        state_class=TOTAL, enabled=False),
     _d("sedentary_time", "daily", _summary("sedentarySeconds"), unit=SECONDS, device_class=DURATION,
        state_class=TOTAL, enabled=False),
-    _d("heart_rate_resting", "daily", _summary("restingHeartRate"), unit=BPM, icon="mdi:heart-pulse"),
-    _d("heart_rate_resting_7d", "daily", _summary("lastSevenDaysAvgRestingHeartRate"), unit=BPM, icon="mdi:heart-pulse"),
-    _d("heart_rate_min", "daily", _summary("minHeartRate"), unit=BPM, icon="mdi:heart-pulse"),
-    _d("heart_rate_max", "daily", _summary("maxHeartRate"), unit=BPM, icon="mdi:heart-pulse",
+    _d("heart_rate_resting", "daily", _summary("restingHeartRate", zero_is_none=True), unit=BPM),
+    _d("heart_rate_resting_7d", "daily", _summary("lastSevenDaysAvgRestingHeartRate", zero_is_none=True), unit=BPM),
+    _d("heart_rate_min", "daily", _summary("minHeartRate", zero_is_none=True), unit=BPM),
+    _d("heart_rate_max", "daily", _summary("maxHeartRate", zero_is_none=True), unit=BPM,
        attrs=_hr_intraday, intraday=True),
-    _d("stress_average", "daily", _summary("averageStressLevel"), icon="mdi:emoticon-neutral"),
+    _d("stress_average", "daily", _summary("averageStressLevel")),
     _d("stress_max", "daily", _summary("maxStressLevel"), enabled=False),
     _d("stress_qualifier", "daily", _stress_qualifier, labels="stress"),
-    _d("stress_rest_time", "daily", _summary("restStressDuration"), unit=SECONDS, device_class=DURATION, enabled=False),
-    _d("stress_low_time", "daily", _summary("lowStressDuration"), unit=SECONDS, device_class=DURATION, enabled=False),
-    _d("stress_medium_time", "daily", _summary("mediumStressDuration"), unit=SECONDS, device_class=DURATION, enabled=False),
-    _d("stress_high_time", "daily", _summary("highStressDuration"), unit=SECONDS, device_class=DURATION, enabled=False),
-    _d("body_battery", "daily", _summary("bodyBatteryMostRecentValue"), unit=PERCENTAGE, icon="mdi:battery-heart-variant",
+    _d("stress_rest_time", "daily", _summary("restStressDuration"), unit=SECONDS, device_class=DURATION, state_class=TOTAL,
+       enabled=False),
+    _d("stress_low_time", "daily", _summary("lowStressDuration"), unit=SECONDS, device_class=DURATION, state_class=TOTAL,
+       enabled=False),
+    _d("stress_medium_time", "daily", _summary("mediumStressDuration"), unit=SECONDS, device_class=DURATION, state_class=TOTAL,
+       enabled=False),
+    _d("stress_high_time", "daily", _summary("highStressDuration"), unit=SECONDS, device_class=DURATION, state_class=TOTAL,
+       enabled=False),
+    _d("body_battery", "daily", _summary("bodyBatteryMostRecentValue"), unit=PERCENTAGE,
        attrs=_body_battery_intraday, intraday=True),
     _d("body_battery_level", "daily", _body_battery_level, labels="body_battery_level", state_class=NO_CLASS,
-       attrs=_body_battery_events, enabled=False, icon="mdi:battery-heart-variant"),
-    _d("body_battery_high", "daily", _summary("bodyBatteryHighestValue"), unit=PERCENTAGE, icon="mdi:battery-heart-variant"),
-    _d("body_battery_low", "daily", _summary("bodyBatteryLowestValue"), unit=PERCENTAGE, icon="mdi:battery-heart-variant"),
+       attrs=_body_battery_events, enabled=False),
+    _d("body_battery_high", "daily", _summary("bodyBatteryHighestValue"), unit=PERCENTAGE),
+    _d("body_battery_low", "daily", _summary("bodyBatteryLowestValue"), unit=PERCENTAGE),
     _d("body_battery_charged", "daily", _summary("bodyBatteryChargedValue"), unit=PERCENTAGE, state_class=TOTAL,
        enabled=False),
     _d("body_battery_drained", "daily", _summary("bodyBatteryDrainedValue"), unit=PERCENTAGE, state_class=TOTAL,
        enabled=False),
     _d("body_battery_at_wake", "daily", _summary("bodyBatteryAtWakeTime"), unit=PERCENTAGE, enabled=False),
     _d("body_battery_during_sleep", "daily", _summary("bodyBatteryDuringSleep"), unit=PERCENTAGE, enabled=False),
-    _d("spo2_average", "daily", number_at("spo2", "averageSpO2"), unit=PERCENTAGE, icon="mdi:water-percent",
+    _d("spo2_average", "daily", number_at("spo2", "averageSpO2", zero_is_none=True), unit=PERCENTAGE,
        attrs=_spo2_intraday, intraday=True),
-    _d("spo2_lowest", "daily", number_at("spo2", "lowestSpO2"), unit=PERCENTAGE, icon="mdi:water-percent"),
-    _d("spo2_latest", "daily", number_at("spo2", "latestSpO2"), unit=PERCENTAGE, icon="mdi:water-percent"),
+    _d("spo2_lowest", "daily", number_at("spo2", "lowestSpO2", zero_is_none=True), unit=PERCENTAGE),
+    _d("spo2_latest", "daily", number_at("spo2", "latestSpO2", zero_is_none=True), unit=PERCENTAGE),
     _d("spo2_7d", "daily", number_at("spo2", "lastSevenDaysAvgSpO2"), unit=PERCENTAGE, enabled=False),
     _d("stress_percentage", "daily", _summary("stressPercentage"), unit=PERCENTAGE, enabled=False),
     _d("stress_rest_percentage", "daily", _summary("restStressPercentage"), unit=PERCENTAGE, enabled=False),
@@ -407,27 +455,25 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("stress_low_percentage", "daily", _summary("lowStressPercentage"), unit=PERCENTAGE, enabled=False),
     _d("stress_medium_percentage", "daily", _summary("mediumStressPercentage"), unit=PERCENTAGE, enabled=False),
     _d("stress_high_percentage", "daily", _summary("highStressPercentage"), unit=PERCENTAGE, enabled=False),
-    _d("altitude_average", "daily", _summary("averageMonitoringEnvironmentAltitude"), unit="m",
-       device_class=SensorDeviceClass.DISTANCE, enabled=False, icon="mdi:altimeter"),
-    _d("respiration_highest", "daily", _summary("highestRespirationValue"), unit="brpm", enabled=False, icon="mdi:lungs"),
-    _d("respiration_lowest", "daily", _summary("lowestRespirationValue"), unit="brpm", enabled=False, icon="mdi:lungs"),
-    _d("heart_rate_avg_min", "daily", _summary("minAvgHeartRate"), unit=BPM, enabled=False, icon="mdi:heart-pulse"),
-    _d("heart_rate_avg_max", "daily", _summary("maxAvgHeartRate"), unit=BPM, enabled=False, icon="mdi:heart-pulse"),
-    _d("respiration_waking", "daily", _summary("avgWakingRespirationValue"), unit="brpm", enabled=False,
-       icon="mdi:lungs"),
-    _d("respiration_latest", "daily", _summary("latestRespirationValue"), unit="brpm", enabled=False,
-       icon="mdi:lungs"),
+    _d("altitude_average", "daily", _summary("averageMonitoringEnvironmentAltitude", allow_negative=True), unit="m",
+       device_class=SensorDeviceClass.DISTANCE, enabled=False),
+    _d("respiration_highest", "daily", _summary("highestRespirationValue", zero_is_none=True), unit="brpm", enabled=False),
+    _d("respiration_lowest", "daily", _summary("lowestRespirationValue", zero_is_none=True), unit="brpm", enabled=False),
+    _d("heart_rate_avg_min", "daily", _summary("minAvgHeartRate", zero_is_none=True), unit=BPM, enabled=False),
+    _d("heart_rate_avg_max", "daily", _summary("maxAvgHeartRate", zero_is_none=True), unit=BPM, enabled=False),
+    _d("respiration_waking", "daily", _summary("avgWakingRespirationValue", zero_is_none=True), unit="brpm", enabled=False),
+    _d("respiration_latest", "daily", _summary("latestRespirationValue", zero_is_none=True), unit="brpm", enabled=False),
     _d("hydration", "daily", item_number("hydration", "valueInML"), unit=UnitOfVolume.MILLILITERS,
-       device_class=SensorDeviceClass.VOLUME, state_class=TOTAL, icon="mdi:cup-water"),
+       device_class=SensorDeviceClass.VOLUME, state_class=TOTAL),
     _d("hydration_goal", "daily", item_number("hydration", "goalInML"), unit=UnitOfVolume.MILLILITERS,
        device_class=SensorDeviceClass.VOLUME, state_class=NO_CLASS, category=EntityCategory.DIAGNOSTIC, enabled=False),
     _d("hydration_sweat_loss", "daily", item_number("hydration", "sweatLossInML"), unit=UnitOfVolume.MILLILITERS,
        device_class=SensorDeviceClass.VOLUME, state_class=NO_CLASS, enabled=False),
     _d("last_sync", "daily", timestamp_at("summary", "lastSyncTimestampGMT"), device_class=TIMESTAMP,
-       state_class=NO_CLASS, category=EntityCategory.DIAGNOSTIC, icon="mdi:watch-vibrate"),
+       state_class=NO_CLASS, category=EntityCategory.DIAGNOSTIC),
     # ---- Sleep and HRV (group "sleep") ------------------------------------------------
     _d("sleep_duration", "sleep", number_at("sleep", "sleepTimeSeconds"), unit=SECONDS, device_class=DURATION,
-       state_class=NO_CLASS, icon="mdi:sleep"),
+       state_class=NO_CLASS),
     _d("sleep_deep", "sleep", number_at("sleep", "deepSleepSeconds"), unit=SECONDS, device_class=DURATION,
        state_class=NO_CLASS),
     _d("sleep_light", "sleep", number_at("sleep", "lightSleepSeconds"), unit=SECONDS, device_class=DURATION,
@@ -438,7 +484,7 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
        state_class=NO_CLASS),
     _d("nap_duration", "sleep", number_at("sleep", "napTimeSeconds"), unit=SECONDS, device_class=DURATION,
        state_class=NO_CLASS, enabled=False),
-    _d("sleep_score", "sleep", _sleep_score("overall"), attrs=_sleep_score_attrs("overall"), icon="mdi:sleep"),
+    _d("sleep_score", "sleep", _sleep_score("overall"), attrs=_sleep_score_attrs("overall")),
     _d("sleep_score_duration", "sleep", _sleep_score_label("totalDuration"), labels="rating", attrs=_sleep_score_attrs("totalDuration"), enabled=False),
     _d("sleep_score_stress", "sleep", _sleep_score_label("stress"), labels="rating", attrs=_sleep_score_attrs("stress"), enabled=False),
     _d("sleep_score_restlessness", "sleep", _sleep_score_label("restlessness"), labels="rating", attrs=_sleep_score_attrs("restlessness"), enabled=False),
@@ -451,11 +497,11 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("sleep_end", "sleep", timestamp_at("sleep", "sleepEndTimestampGMT"), device_class=TIMESTAMP,
        state_class=NO_CLASS),
     _d("sleep_awake_count", "sleep", number_at("sleep", "awakeCount"), enabled=False),
-    _d("sleep_heart_rate", "sleep", number_at("sleep", "avgHeartRate", digits=0), unit=BPM, enabled=False),
+    _d("sleep_heart_rate", "sleep", number_at("sleep", "avgHeartRate", digits=0, zero_is_none=True), unit=BPM, enabled=False),
     _d("sleep_stress", "sleep", number_at("sleep", "avgSleepStress", digits=1), enabled=False),
-    _d("sleep_spo2_average", "sleep", number_at("sleep", "averageSpO2Value"), unit=PERCENTAGE, enabled=False),
-    _d("sleep_spo2_lowest", "sleep", number_at("sleep", "lowestSpO2Value"), unit=PERCENTAGE, enabled=False),
-    _d("sleep_respiration_average", "sleep", number_at("sleep", "averageRespirationValue"), unit="brpm", enabled=False),
+    _d("sleep_spo2_average", "sleep", number_at("sleep", "averageSpO2Value", zero_is_none=True), unit=PERCENTAGE, enabled=False),
+    _d("sleep_spo2_lowest", "sleep", number_at("sleep", "lowestSpO2Value", zero_is_none=True), unit=PERCENTAGE, enabled=False),
+    _d("sleep_respiration_average", "sleep", number_at("sleep", "averageRespirationValue", zero_is_none=True), unit="brpm", enabled=False),
     _d("sleep_need", "sleep", number_at("sleep", "sleepNeed", "actual"), unit=MINUTES, state_class=NO_CLASS,
        enabled=False),
     _d("sleep_need_next", "sleep", number_at("sleep", "nextSleepNeed", "actual"), unit=MINUTES, state_class=NO_CLASS,
@@ -465,35 +511,33 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("sleep_personal_insight", "sleep", text_at("sleep", "sleepScorePersonalizedInsight"), labels="sleep_personal_insight",
        state_class=NO_CLASS, enabled=False),
     _d("sleep_alignment", "sleep", text_at("sleep", "sleepAlignment", "status"), labels="sleep_alignment",
-       state_class=NO_CLASS, attrs=_sleep_alignment_attrs, enabled=False, icon="mdi:sleep"),
+       state_class=NO_CLASS, attrs=_sleep_alignment_attrs, enabled=False),
     _d("sleep_breathing_disruption", "sleep", text_at("sleep", "breathingDisruptionSeverity"), state_class=NO_CLASS,
-       enabled=False),
-    _d("hrv_last_night", "sleep", _hrv("lastNightAvg"), unit="ms", icon="mdi:heart-flash", attrs=_hrv_attrs),
-    _d("hrv_weekly", "sleep", _hrv("weeklyAvg"), unit="ms", icon="mdi:heart-flash"),
+       open_enum=True, enabled=False),
+    _d("hrv_last_night", "sleep", _hrv("lastNightAvg"), unit="ms", attrs=_hrv_attrs),
+    _d("hrv_weekly", "sleep", _hrv("weeklyAvg"), unit="ms"),
     _d("hrv_5min_high", "sleep", _hrv("lastNight5MinHigh"), unit="ms", enabled=False),
     _d("hrv_status", "sleep", _hrv_text("status"), labels="hrv_status"),
     _d("hrv_feedback", "sleep", _hrv_text("feedbackPhrase"), labels="hrv_feedback", state_class=NO_CLASS, enabled=False),
     # ---- Body (group "body") ----------------------------------------------------------
-    _d("weight", "body", weight_at("weight", scale=1000, digits=2), unit=UnitOfMass.KILOGRAMS,
-       device_class=SensorDeviceClass.WEIGHT, attrs=_weight_attrs, icon="mdi:scale-bathroom"),
-    _d("bmi", "body", weight_at("bmi", digits=1), icon="mdi:human"),
-    _d("body_fat", "body", weight_at("bodyFat", digits=1, zero_is_none=True), unit=PERCENTAGE, icon="mdi:percent"),
-    _d("body_water", "body", weight_at("bodyWater", digits=1, zero_is_none=True), unit=PERCENTAGE, icon="mdi:water-percent"),
+    _d("weight", "body", weight_at("weight", scale=1000, digits=2, zero_is_none=True), unit=UnitOfMass.KILOGRAMS,
+       device_class=SensorDeviceClass.WEIGHT, attrs=_weight_attrs),
+    _d("bmi", "body", weight_at("bmi", digits=1, zero_is_none=True)),
+    _d("body_fat", "body", weight_at("bodyFat", digits=1, zero_is_none=True), unit=PERCENTAGE),
+    _d("body_water", "body", weight_at("bodyWater", digits=1, zero_is_none=True), unit=PERCENTAGE),
     _d("muscle_mass", "body", weight_at("muscleMass", scale=1000, digits=2, zero_is_none=True), unit=UnitOfMass.KILOGRAMS,
        device_class=SensorDeviceClass.WEIGHT),
     _d("bone_mass", "body", weight_at("boneMass", scale=1000, digits=2, zero_is_none=True), unit=UnitOfMass.KILOGRAMS,
        device_class=SensorDeviceClass.WEIGHT),
     _d("visceral_fat", "body", weight_at("visceralFat"), enabled=False),
     _d("metabolic_age", "body", weight_at("metabolicAge", digits=0), unit="a", enabled=False),
-    _d("fitness_age", "body", number_at("fitness_age", "fitnessAge", digits=1), unit="a", attrs=_fitness_age_attrs,
-       icon="mdi:human-handsup"),
+    _d("fitness_age", "body", number_at("fitness_age", "fitnessAge", digits=1), unit="a", attrs=_fitness_age_attrs),
     _d("fitness_age_achievable", "body", number_at("fitness_age", "achievableFitnessAge", digits=1), unit="a",
        enabled=False),
     _d("chronological_age", "body", number_at("fitness_age", "chronologicalAge"), unit="a", enabled=False,
        category=EntityCategory.DIAGNOSTIC),
     # ---- Activities (group "activities") ----------------------------------------------
-    _d("last_activity", "activities", activity_text("activityName"), state_class=NO_CLASS, attrs=_activity_attrs,
-       icon="mdi:run"),
+    _d("last_activity", "activities", activity_text("activityName"), state_class=NO_CLASS, attrs=_activity_attrs),
     _d("last_activity_type", "activities", activity_text("activityType", "typeKey"), labels="activity_type"),
     _d("last_activity_start", "activities", activity_timestamp("startTimeGMT"), device_class=TIMESTAMP,
        state_class=NO_CLASS),
@@ -502,8 +546,8 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("last_activity_duration", "activities", activity_number("duration"), unit=SECONDS, device_class=DURATION,
        state_class=NO_CLASS),
     _d("last_activity_calories", "activities", activity_number("calories", digits=0), unit=KCAL, state_class=NO_CLASS),
-    _d("last_activity_avg_hr", "activities", activity_number("averageHR", digits=0), unit=BPM, state_class=NO_CLASS),
-    _d("last_activity_max_hr", "activities", activity_number("maxHR", digits=0), unit=BPM, state_class=NO_CLASS),
+    _d("last_activity_avg_hr", "activities", activity_number("averageHR", digits=0, zero_is_none=True), unit=BPM, state_class=NO_CLASS),
+    _d("last_activity_max_hr", "activities", activity_number("maxHR", digits=0, zero_is_none=True), unit=BPM, state_class=NO_CLASS),
     _d("last_activity_aerobic_te", "activities", activity_number("aerobicTrainingEffect", digits=1),
        state_class=NO_CLASS, enabled=False),
     _d("last_activity_anaerobic_te", "activities", activity_number("anaerobicTrainingEffect", digits=1),
@@ -518,7 +562,7 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
        enabled=False),
     # ---- Profile (group "profile") ----------------------------------------------------
     _d("account", "profile", text_at("profile", "displayName"), state_class=NO_CLASS,
-       category=EntityCategory.DIAGNOSTIC, attrs=_account_attrs, icon="mdi:account"),
+       category=EntityCategory.DIAGNOSTIC, attrs=_account_attrs),
     _d("hr_max_used", "profile", hr_zone_at("maxHeartRateUsed"), unit=BPM, category=EntityCategory.DIAGNOSTIC,
        attrs=_hr_zone_attrs),
     _d("hr_resting_used", "profile", hr_zone_at("restingHeartRateUsed"), unit=BPM,
@@ -573,15 +617,51 @@ def has_content(value: Any) -> bool:
     return True
 
 
-def sensors_to_prune(data_by_group: Mapping[str, Mapping[str, Any]]) -> set[str]:
-    """Sensors that are empty although their endpoint answered.
+# Sensors are only disabled when the answers are complete enough to trust: daily and sleep
+# values can appear later in the day, so they are never disabled automatically.
+PRUNE_MIN_ENTRY_AGE = timedelta(hours=24)
+PRUNE_SKIP_GROUPS = frozenset({"daily", "sleep"})
 
-    Endpoints that returned nothing at all (for example last night's sleep early
-    in the morning) are left alone, since their sensors will fill in later.
+
+def prune_blocker(
+    data_by_group: Mapping[str, Mapping[str, Any]], entry_created: datetime | None, now: datetime | None = None
+) -> str | None:
+    """Why empty sensors must not be disabled yet, or ``None`` if the decision may be taken now."""
+    now = now or dt_util.now()
+    if entry_created is None:
+        return "the age of the account entry is unknown"
+    if entry_created.tzinfo is None:
+        entry_created = entry_created.replace(tzinfo=UTC)
+    if now - entry_created < PRUNE_MIN_ENTRY_AGE:
+        return "the account was added less than 24 hours ago"
+    synced = parse_timestamp(dig(data_by_group.get("daily"), "summary", "lastSyncTimestampGMT"))
+    if synced is None or synced.astimezone(now.tzinfo).date() != now.date():
+        return "the watch has not synchronised today"
+    return None
+
+
+def sensors_to_prune(
+    data_by_group: Mapping[str, Mapping[str, Any]],
+    entry_created: datetime | None = None,
+    now: datetime | None = None,
+) -> set[str]:
+    """Sensors that are empty although their endpoint answered (body and activity values only).
+
+    Nothing is returned while the watch has not synchronised today or the account is less than
+    24 hours old (``prune_blocker``); the caller must then not mark the pruning as done.
+    Endpoints that returned nothing at all are left alone, since their sensors will fill in later.
     """
+    reason = prune_blocker(data_by_group, entry_created, now)
+    if reason is not None:
+        _LOGGER.info("Not disabling empty sensors yet: %s", reason)
+        return set()
     keys: set[str] = set()
     for description in SENSOR_DESCRIPTIONS:
-        if not description.entity_registry_enabled_default or description.entity_category:
+        if (
+            not description.entity_registry_enabled_default
+            or description.entity_category
+            or description.group in PRUNE_SKIP_GROUPS
+        ):
             continue
         data = data_by_group.get(description.group)
         if not data:
@@ -593,6 +673,11 @@ def sensors_to_prune(data_by_group: Mapping[str, Mapping[str, Any]]) -> set[str]
             answered = has_content(source)
         if answered and description.value_fn(data) is None:
             keys.add(description.key)
+    _LOGGER.info(
+        "Disabling %d sensor(s) for which Garmin returned no value (they can be enabled again): %s",
+        len(keys),
+        ", ".join(sorted(keys)) or "-",
+    )
     return keys
 
 
@@ -606,7 +691,7 @@ async def async_setup_entry(
         for description in SENSOR_DESCRIPTIONS
         if description.group in runtime.coordinators
     ]
-    entities.append(GarminKeyExpirySensor(runtime.coordinators["profile"], entry))
+    entities.append(GarminKeyExpirySensor(entry))
     async_add_entities(entities)
 
 
@@ -614,12 +699,20 @@ class GarminSensor(CoordinatorEntity[GarminCoordinator], RestoreSensor):
     """A sensor reading one value out of its coordinator's data.
 
     Sleep and body values keep their last known value (also across restarts) while Garmin
-    returns nothing; the attributes then say so.
+    returns nothing; ``held_value`` says so and ``last_seen`` is when this value first arrived
+    here (not when it was measured). The state is derived without side effects; the held value
+    is updated only when the coordinator delivers new data.
     """
 
     _attr_has_entity_name = True
     entity_description: GarminSensorDescription
-    _unrecorded_attributes = frozenset({"values", "hourly_values", "components"})
+    # Large series and personal detail that is useful live but should not be stored in the history.
+    _unrecorded_attributes = frozenset(
+        {
+            "values", "hourly_values", "components", "events", "feedback", "end_of_day_feedback",
+            "startLatitude", "startLongitude", "locationName", "description",
+        }
+    )
 
     def __init__(
         self,
@@ -646,19 +739,35 @@ class GarminSensor(CoordinatorEntity[GarminCoordinator], RestoreSensor):
         if stored is not None and stored.native_value is not None:
             self._last_value = stored.native_value
         state = await self.async_get_last_state()
-        if state is not None:
+        # After a restart in the unavailable state the attributes are gone: last_seen stays unknown.
+        if state is not None and getattr(state, "state", None) not in ("unavailable", "unknown"):
             self._last_seen = state.attributes.get("last_seen")
+        self._remember()
+
+    def _current(self) -> Any:
+        """What Garmin delivers right now (``None`` if nothing)."""
+        return self.entity_description.value_fn(self.coordinator.data) if self.coordinator.data else None
+
+    def _remember(self) -> None:
+        """Take over a new value as the one to hold (only called when data arrives)."""
+        current = self._current()
+        if current is None:
+            return
+        if current != self._last_value:
+            self._last_seen = dt_util.utcnow().isoformat(timespec="seconds")
+        self._last_value = current
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        if self._keep:
+            self._remember()
+        super()._handle_coordinator_update()
 
     @property
     def native_value(self) -> StateType:
         """The current value, or the last known one for sleep and body values."""
-        current = self.entity_description.value_fn(self.coordinator.data) if self.coordinator.data else None
-        if not self._keep:
-            return current
-        if current is not None:
-            if current != self._last_value:
-                self._last_seen = dt_util.utcnow().isoformat(timespec="seconds")
-            self._last_value = current
+        current = self._current()
+        if current is not None or not self._keep:
             return current
         return self._last_value
 
@@ -687,27 +796,35 @@ class GarminSensor(CoordinatorEntity[GarminCoordinator], RestoreSensor):
             description.intraday and not self._entry.options.get(OPT_INTRADAY, False)
         ):
             attrs.update(description.attrs_fn(self.coordinator.data) or {})
-        if self._keep and self._last_value is not None:
-            fresh = bool(self.coordinator.data) and description.value_fn(self.coordinator.data) is not None
+        if self._keep and self.native_value is not None:
             attrs["last_seen"] = self._last_seen
-            attrs["held_value"] = not fresh
+            attrs["held_value"] = self._current() is None
         return attrs or None
 
 
-class GarminKeyExpirySensor(CoordinatorEntity[GarminCoordinator], SensorEntity):
-    """When the Personal API key runs out (from the validity chosen at setup)."""
+class GarminKeyExpirySensor(SensorEntity):
+    """When the Personal API key runs out (from the validity chosen at setup).
+
+    The value comes from the config entry alone, so it stays available when Garmin does not answer
+    (for example because the key has already expired).
+    """
 
     _attr_has_entity_name = True
+    _attr_should_poll = False
     _attr_translation_key = "key_expires"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, coordinator: GarminCoordinator, entry: GarminConfigEntry) -> None:
+    def __init__(self, entry: GarminConfigEntry) -> None:
         """Set up the sensor."""
-        super().__init__(coordinator)
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_key_expires"
         self._attr_device_info = device_info(entry)
+
+    @property
+    def available(self) -> bool:
+        """Always available: the expiry is stored locally."""
+        return True
 
     @property
     def native_value(self) -> Any:

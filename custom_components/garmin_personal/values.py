@@ -61,20 +61,46 @@ def parse_timestamp(value: Any) -> datetime | None:
     return None
 
 
-def number_at(*path: str | int, scale: float | None = None, digits: int | None = None) -> ValueFn:
+def finish_number(
+    number: float | int,
+    *,
+    scale: float | None = None,
+    digits: int | None = None,
+    allow_negative: bool = False,
+    zero_is_none: bool = False,
+) -> float | int | None:
+    """Scale and round one number the same way for every sensor.
+
+    Negative values are Garmin placeholders (for example -1 for "no stress value", or
+    negative calories from imported days) unless ``allow_negative``; with ``zero_is_none``
+    a 0 means "not measured". ``digits=0`` gives an ``int`` (never ``90.0``).
+    """
+    if (number < 0 and not allow_negative) or (zero_is_none and number == 0):
+        return None
+    if scale:
+        number = number / scale
+    if digits is not None:
+        number = round(number, digits)
+        if digits == 0:
+            number = int(number)
+    return number
+
+
+def number_at(
+    *path: str | int,
+    scale: float | None = None,
+    digits: int | None = None,
+    allow_negative: bool = False,
+    zero_is_none: bool = False,
+) -> ValueFn:
     """Value function: a number at ``path``, optionally divided by ``scale``."""
 
     def value(data: Mapping[str, Any]) -> float | int | None:
         number = to_number(dig(data, *path))
         if number is None:
             return None
-        if scale:
-            number = number / scale
-        if digits is not None:
-            number = round(number, digits)
-            if digits == 0:
-                number = int(number)
-        return number
+        return finish_number(number, scale=scale, digits=digits, allow_negative=allow_negative,
+                             zero_is_none=zero_is_none)
 
     return value
 
@@ -100,8 +126,20 @@ def timestamp_at(*path: str | int) -> ValueFn:
     return value
 
 
+# Entries Garmin creates itself when the profile weight is edited are not weighings.
+NOT_A_WEIGHING = ("USER_SETTING", "CHANGE_LOG")
+
+
+def is_weighing(entry: Mapping[str, Any]) -> bool:
+    """Whether a ``DateWeight`` entry is a real weighing (manual entry or a scale)."""
+    return str(entry.get("sourceType") or "").upper() not in NOT_A_WEIGHING
+
+
 def latest_weight(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
-    """The newest weigh-in (``DateWeight``) from a ``weight_range`` response."""
+    """The newest real weighing (``DateWeight``) from a ``weight_range`` response.
+
+    Profile edits (``USER_SETTING``, ``CHANGE_LOG``) are skipped, like in the statistics backfill.
+    """
     summaries = dig(data, "weight", "dailyWeightSummaries")
     if not isinstance(summaries, list):
         return None
@@ -109,6 +147,7 @@ def latest_weight(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
         item
         for item in summaries
         if isinstance(item, Mapping) and isinstance(item.get("latestWeight"), Mapping)
+        and is_weighing(item["latestWeight"])
     ]
     if not candidates:
         return None
@@ -119,18 +158,14 @@ def latest_weight(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
 def weight_at(
     key: str, *, scale: float | None = None, digits: int | None = None, zero_is_none: bool = False
 ) -> ValueFn:
-    """Value function: one field of the newest weigh-in."""
+    """Value function: one field of the newest weighing."""
 
     def value(data: Mapping[str, Any]) -> float | int | None:
         entry = latest_weight(data)
         number = to_number(entry.get(key)) if entry else None
-        if number is None or (zero_is_none and number == 0):
+        if number is None:
             return None
-        if scale:
-            number = number / scale
-        if digits is not None:
-            number = round(number, digits)
-        return number
+        return finish_number(number, scale=scale, digits=digits, zero_is_none=zero_is_none)
 
     return value
 
@@ -181,6 +216,23 @@ def first_item(data: Mapping[str, Any], key: str) -> Mapping[str, Any] | None:
     return None
 
 
+def latest_hrv(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """The newest HRV summary that has a night average (by ``calendarDate``, not list position).
+
+    Value and attributes must come from the same entry, so a day without a night
+    average (for example today, before the watch has synced) is skipped as a whole.
+    """
+    items = data.get("hrv_summaries")
+    if not isinstance(items, list):
+        return None
+    candidates = [
+        (str(item.get("calendarDate") or ""), index, item)
+        for index, item in enumerate(items)
+        if isinstance(item, Mapping) and to_number(item.get("lastNightAvg")) is not None
+    ]
+    return max(candidates, key=lambda c: (c[0], c[1]))[2] if candidates else None
+
+
 def item_number(group: str, key: str, *, scale: float | None = None, digits: int | None = None) -> ValueFn:
     """Value function: a number from the last element of ``data[group]``."""
 
@@ -189,17 +241,13 @@ def item_number(group: str, key: str, *, scale: float | None = None, digits: int
         number = to_number(item.get(key)) if item else None
         if number is None:
             return None
-        if scale:
-            number = number / scale
-        if digits is not None:
-            number = round(number, digits)
-        return number
+        return finish_number(number, scale=scale, digits=digits)
 
     return value
 
 
 def activity_number(
-    *path: str | int, scale: float | None = None, digits: int | None = None
+    *path: str | int, scale: float | None = None, digits: int | None = None, zero_is_none: bool = False
 ) -> ValueFn:
     """Value function: a number from the newest activity."""
 
@@ -208,11 +256,7 @@ def activity_number(
         number = to_number(dig(activity, *path)) if activity else None
         if number is None:
             return None
-        if scale:
-            number = number / scale
-        if digits is not None:
-            number = round(number, digits)
-        return number
+        return finish_number(number, scale=scale, digits=digits, zero_is_none=zero_is_none)
 
     return value
 

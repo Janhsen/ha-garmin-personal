@@ -165,9 +165,11 @@ class KeepLastValueTests(unittest.TestCase):
     def test_sleep_value_is_kept_when_garmin_returns_nothing(self):
         coord, ent = self.make("sleep_score", self.SLEEP)
         coord.data = {"sleep": {"sleepScores": {"overall": {"value": 81}}}}
+        ent._handle_coordinator_update()
         self.assertEqual(ent.native_value, 81)
         self.assertFalse(ent.extra_state_attributes["held_value"])
         coord.data = {}
+        ent._handle_coordinator_update()
         self.assertEqual(ent.native_value, 81)
         attrs = ent.extra_state_attributes
         self.assertTrue(attrs["held_value"])
@@ -176,8 +178,10 @@ class KeepLastValueTests(unittest.TestCase):
     def test_new_value_replaces_kept_one(self):
         coord, ent = self.make("sleep_score", None)
         coord.data = {"sleep": {"sleepScores": {"overall": {"value": 70}}}}
+        ent._handle_coordinator_update()
         self.assertEqual(ent.native_value, 70)
         coord.data = {"sleep": {"sleepScores": {"overall": {"value": 64}}}}
+        ent._handle_coordinator_update()
         self.assertEqual(ent.native_value, 64)
 
     def test_nothing_known_stays_unknown(self):
@@ -227,7 +231,7 @@ class CalendarTests(unittest.TestCase):
         ent = self.entity([self.activity(1, "2026-10-01 06:00:00"), self.activity(2, "2026-10-03 06:00:00")])
         events = stubs.run(ent.async_get_events(None, datetime(2026, 10, 2, tzinfo=UTC), datetime(2026, 10, 4, tzinfo=UTC)))
         self.assertEqual([e.uid for e in events], ["2"])
-        self.assertEqual(ent.event.uid, "2")
+        self.assertIsNone(ent.event)  # finished activities are not the current or next event
 
     def test_no_data(self):
         ent = self.entity([])
