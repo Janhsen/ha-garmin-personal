@@ -6,7 +6,7 @@ Custom integration (HACS) exposing **all 26 read endpoints** of the official Gar
 sensors for the common values and services for everything else. Nothing is calculated or invented:
 what Garmin does not deliver stays empty (`unknown`).
 
-> **Status:** v0.3.5, running against a real Garmin account in Home Assistant. Tokens, retries, time windows,
+> **Status:** v0.3.8, running against a real Garmin account in Home Assistant. Tokens, retries, time windows,
 > filters, value extraction and the sensor list are tested with simulated responses. Field names come from the
 > Swagger file, the documented models and real responses. Please report sensors that stay empty permanently,
 > with the diagnostics and the log.
@@ -103,6 +103,12 @@ whose wording the API does not provide, so only the number is shown, not a meani
 * Live sensors appear in the History panel only from the moment they were created.
 * Retroactively imported daily values (`backfill_statistics`) are external statistics. The History panel does not
   show them; use a *Statistics graph* card or Developer tools → Statistics.
+
+## Spotting Garmin API changes
+
+`docs/api-fields/` holds the key paths (names only, no values) of known Garmin responses. `scripts/api_fields.py --diff`
+compares a fresh response with them and lists new (+) and removed (-) fields, so additions or changes on Garmin's side
+become visible instead of silently missing.
 
 ## Privacy
 

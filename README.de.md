@@ -111,6 +111,11 @@ Textvarianten von Garmin, deren Wortlaut die API nicht liefert; angezeigt wird n
 * Rückwirkend importierte Tageswerte (`backfill_statistics`) sind externe Statistiken. Der Bereich *Verlauf* zeigt
   sie nicht; sie erscheinen in einer *Statistik-Diagramm*-Karte und unter Entwicklerwerkzeuge → Statistiken.
 
+## Änderungen an der Garmin-API erkennen
+
+`docs/api-fields/` enthält die Schlüsselpfade (nur Namen, keine Werte) bekannter Garmin-Antworten.
+`scripts/api_fields.py --diff` vergleicht eine frische Antwort damit und listet neue (+) und entfernte (-) Felder.
+
 ## Datenschutz
 
 Gesundheitsdaten. Menstruations- und Ernährungsdaten gibt es **nur** über Services auf ausdrücklichen
