@@ -43,6 +43,11 @@ LABELS: dict[str, dict[str, tuple[str, str]]] = {
         "negative_acclimatization_in_progress": ("Negative: acclimatization in progress", "Negativ: Akklimatisierung läuft"),
         "none": ("None", "Keine"),
     },
+    "hrv_feedback": {
+        # Numbered text variants of Garmin's app; only the number is shown, never a meaning.
+        **{f"hrv_balanced_{n}": (f"Balanced: {n}", f"Ausgeglichen: {n}") for n in (2, 3, 5, 6, 7, 8)},
+        "onboarding_1": ("Setup phase: 1", "Einrichtungsphase: 1"),
+    },
     "hrv_status": {
         "balanced": ("Balanced", "Ausgeglichen"),
         "unbalanced": ("Unbalanced", "Unausgeglichen"),

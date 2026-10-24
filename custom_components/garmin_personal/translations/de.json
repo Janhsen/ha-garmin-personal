@@ -382,7 +382,16 @@
         }
       },
       "hrv_feedback": {
-        "name": "HRV-Feedback"
+        "name": "HRV-Feedback",
+        "state": {
+          "hrv_balanced_2": "Ausgeglichen: 2",
+          "hrv_balanced_3": "Ausgeglichen: 3",
+          "hrv_balanced_5": "Ausgeglichen: 5",
+          "hrv_balanced_6": "Ausgeglichen: 6",
+          "hrv_balanced_7": "Ausgeglichen: 7",
+          "hrv_balanced_8": "Ausgeglichen: 8",
+          "onboarding_1": "Einrichtungsphase: 1"
+        }
       },
       "weight": {
         "name": "Gewicht"

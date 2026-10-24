@@ -410,7 +410,7 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("hrv_weekly", "sleep", _hrv("weeklyAvg"), unit="ms", icon="mdi:heart-flash"),
     _d("hrv_5min_high", "sleep", _hrv("lastNight5MinHigh"), unit="ms", enabled=False),
     _d("hrv_status", "sleep", _hrv_text("status"), labels="hrv_status"),
-    _d("hrv_feedback", "sleep", _hrv_text("feedbackPhrase"), state_class=NO_CLASS, enabled=False),
+    _d("hrv_feedback", "sleep", _hrv_text("feedbackPhrase"), labels="hrv_feedback", state_class=NO_CLASS, enabled=False),
     # ---- Body (group "body") ----------------------------------------------------------
     _d("weight", "body", weight_at("weight", scale=1000, digits=2), unit=UnitOfMass.KILOGRAMS,
        device_class=SensorDeviceClass.WEIGHT, attrs=_weight_attrs, icon="mdi:scale-bathroom"),

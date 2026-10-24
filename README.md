@@ -85,7 +85,8 @@ status, stress level, activity type, sleep sub-scores, sleep feedback and insigh
 stays the English key (e.g. `fair`) and Home Assistant shows the translation. Sleep feedback, insight and the
 personal insight are translated literally from the key, only for keys seen in real responses. Unknown values are
 shown untranslated, logged once at info level, and never hidden. HRV feedback (`HRV_BALANCED_2` to `_8`,
-`ONBOARDING_1`) stays untranslated: these are numbered text variants whose wording the API does not provide.
+`ONBOARDING_1`) is shown as "Balanced: 6" / "Ausgeglichen: 6": these are numbered text variants of Garmin's app
+whose wording the API does not provide, so only the number is shown, not a meaning or a scale.
 
 ## History and long-term statistics
 
