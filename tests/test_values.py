@@ -81,6 +81,12 @@ class RangeShape(unittest.TestCase):
         self.assertIsNone(v.first_number(self.NESTED, ("hydration", "value"), ("nothing",)))
         self.assertIsNone(v.first_number({"x": True}, ("x",)))
 
+    def test_other_sources_are_not_usable(self):
+        self.assertTrue(v.usable_summary({"source": "garmin"}))
+        self.assertTrue(v.usable_summary({"totalSteps": 1}))
+        self.assertFalse(v.usable_summary({"source": "fitbit", "calories": {"burnedActive": -18374}}))
+        self.assertFalse(v.usable_summary(None))
+
     def test_backfill_table_resolves_on_nested(self):
         import re
 

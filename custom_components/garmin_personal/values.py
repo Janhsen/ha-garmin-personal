@@ -246,3 +246,12 @@ def first_number(data: Any, *paths: tuple[str | int, ...]) -> float | int | None
         if number is not None:
             return number
     return None
+
+
+def usable_summary(summary: Any) -> bool:
+    """Whether a daily-summaries entry is real Garmin watch data.
+
+    Garmin also returns entries from other sources (for example imported
+    "fitbit" days) with nonsensical values such as negative calories.
+    """
+    return isinstance(summary, Mapping) and summary.get("source") in (None, "garmin")

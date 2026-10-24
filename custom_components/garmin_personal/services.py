@@ -30,7 +30,7 @@ from .const import (
     SERVICE_SEARCH_ACTIVITIES,
 )
 from .coordinator import GarminConfigEntry
-from .values import first_number
+from .values import first_number, usable_summary
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -208,8 +208,13 @@ def async_register_services(hass: HomeAssistant) -> None:
         except GarminError as err:
             raise HomeAssistantError(f"Garmin request failed: {err}") from err
         imported = _import_statistics(hass, entry, summaries)
-        return {"days": len({s.get("calendarDate") for s in summaries if isinstance(s, dict)}),
-                "statistics": imported}
+        usable = [s for s in summaries if usable_summary(s)]
+        return {
+            "days_returned": len({s.get("calendarDate") for s in summaries if isinstance(s, dict)}),
+            "days_imported": len({s.get("calendarDate") for s in usable}),
+            "days_skipped_other_source": len(summaries) - len(usable),
+            "statistics": imported,
+        }
 
     hass.services.async_register(
         DOMAIN, SERVICE_FETCH, fetch, schema=FETCH_SCHEMA, supports_response=SupportsResponse.ONLY
@@ -256,11 +261,11 @@ def _import_statistics(hass: HomeAssistant, entry: GarminConfigEntry, summaries:
     for name, (unit, paths) in BACKFILL_FIELDS.items():
         rows: list[StatisticData] = []
         for summary in summaries:
-            if not isinstance(summary, dict):
+            if not usable_summary(summary):
                 continue
             value = first_number(summary, *paths)
             day = summary.get("calendarDate")
-            if value is None or not day:
+            if value is None or value < 0 or not day:
                 continue
             try:
                 start = dt_util.start_of_local_day(date.fromisoformat(str(day)))
