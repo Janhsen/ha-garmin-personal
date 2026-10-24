@@ -3,7 +3,7 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
-## Unreleased
+## 0.5.1
 
 ### Added
 - EXPERIMENTAL: `backfill_history` now writes. The real measuring points of one series are put into the recorder as
