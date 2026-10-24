@@ -7,7 +7,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import stubs  # noqa: E402
-from intraday_fakes import bb_payload, hr_payload, ms, spo2_payload  # noqa: E402
+from intraday_fakes import (  # noqa: E402
+    bb_payload,
+    hr_payload,
+    hrv_payload,
+    ms,
+    spo2_payload,
+    spo2_payload3,
+)
 
 stubs.load_full()
 iv = sys.modules["gp_full.intraday"]
@@ -117,6 +124,60 @@ class Registry(unittest.TestCase):
         for key in iv.SERIES:
             stubs.run(iv.fetch_series(Api(), key, day))
         self.assertEqual(calls, [("hr", day), ("bb", day, day), ("spo2", day)])
+
+
+class Spo2Columns(unittest.TestCase):
+    def test_level_column_from_the_descriptor_list(self):
+        payload = spo2_payload3([(T0, 96, 340), (T0 + 3600000, 94, 12)])
+        self.assertEqual(iv.spo2_points(payload), [(T0, 96.0), (T0 + 3600000, 94.0)])
+
+    def test_moved_columns_are_followed_and_the_environment_is_never_read(self):
+        payload = spo2_payload3([(340, 96, T0)], order=("monitoringEnvironmentLevel", "spo2Level", "timestamp"))
+        self.assertEqual(iv.spo2_points(payload), [(T0, 96.0)])
+        only_env = spo2_payload3([(T0, 340)], order=("timestamp", "monitoringEnvironmentLevel"))
+        self.assertEqual(iv.spo2_points(only_env), [(T0, 340.0)])  # no spo2Level named: classic column 1 (as before)
+
+    def test_null_levels_are_dropped(self):
+        payload = spo2_payload3([(T0, None, 340), (T0 + 3600000, 0, 3), (T0 + 7200000, 95, None)])
+        self.assertEqual(iv.spo2_points(payload), [(T0 + 7200000, 95.0)])
+
+    def test_without_descriptor_list_the_classic_layout_applies(self):
+        self.assertEqual(iv.spo2_points({"spO2HourlyAverages": [[T0, 97, 5]]}), [(T0, 97.0)])
+
+
+class Hrv(unittest.TestCase):
+    def test_readings_use_the_gmt_time_as_utc(self):
+        payload = hrv_payload([("2026-10-24T01:05:00.0", 61), ("2026-10-24T01:10:00.0", 64.5)])
+        t = ms(2026, 10, 24, 1, 5)
+        self.assertEqual(iv.hrv_points(payload), [(t, 61.0), (t + 300000, 64.5)])
+
+    def test_other_iso_spellings(self):
+        t = ms(2026, 10, 24, 1, 5)
+        for text in ("2026-10-24T01:05:00", "2026-10-24T01:05:00Z", "2026-10-24T03:05:00+02:00", "2026-10-24 01:05:00.000"):
+            self.assertEqual(iv.hrv_points(hrv_payload([(text, 50)])), [(t, 50.0)], text)
+
+    def test_night_across_midnight_keeps_exact_times(self):
+        points = iv.hrv_points(hrv_payload([("2026-10-23T22:55:00.0", 40), ("2026-10-24T00:00:00.0", 52)]))
+        self.assertEqual([p[0] for p in points], [ms(2026, 10, 23, 22, 55), ms(2026, 10, 24, 0, 0)])
+
+    def test_placeholders_and_broken_rows_are_dropped_low_values_stay(self):
+        rows = [("2026-10-24T01:00:00.0", 0), ("2026-10-24T01:05:00.0", -1), ("2026-10-24T01:10:00.0", None),
+                ("2026-10-24T01:15:00.0", 22), ("bad", 50), (None, 50)]
+        self.assertEqual(iv.hrv_points(hrv_payload(rows)), [(ms(2026, 10, 24, 1, 15), 22.0)])
+        payload = hrv_payload([])
+        payload["hrvReadings"] += ["x", {"hrvValue": 50}, {"readingTimeGMT": "2026-10-24T01:00:00.0"}]
+        self.assertEqual(iv.hrv_points(payload), [])
+
+    def test_empty_and_unknown(self):
+        self.assertEqual(iv.hrv_points(None), [])
+        self.assertEqual(iv.hrv_points({"hrvReadings": None}), [])
+        self.assertEqual(iv.hrv_points({"hrvSummary": {"weeklyAvg": 50}}), [])
+        for payload in ({"other": 1}, [], "x", {"hrvReadings": {"a": 1}}):
+            self.assertIsNone(iv.hrv_points(payload), payload)
+
+    def test_hrv_is_a_history_series_but_has_no_hourly_statistic(self):
+        self.assertIn("hrv", iv.HISTORY_SERIES)
+        self.assertNotIn("hrv", iv.SERIES)
 
 
 if __name__ == "__main__":

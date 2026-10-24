@@ -30,7 +30,7 @@ from homeassistant.util import dt as dt_util
 
 from .api import GarminAuthError, GarminError, GarminRateLimitError
 from .const import DOMAIN
-from .intraday import SERIES, Point, fetch_series, merge_points, note_unknown_format
+from .intraday import HISTORY_SERIES, Point, fetch_series, merge_points, note_unknown_format
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ HISTORY_KEYS: dict[str, str] = {
     "heart_rate": "heart_rate_history",
     "body_battery": "body_battery_history",
     "spo2": "spo2_history",
+    "hrv": "hrv_history",
 }
 
 
@@ -76,7 +77,7 @@ class HistoryTargetError(Exception):
 
 
 def _unit_of(series: str) -> str:
-    return "bpm" if series == "heart_rate" else "%"
+    return {"heart_rate": "bpm", "hrv": "ms"}.get(series, "%")
 
 
 def _state_text(value: float) -> str:
@@ -271,6 +272,18 @@ class Ledger:
                     }
 
 
+def series_window(series: str, day: Any) -> tuple[Any, Any]:
+    """The time span of the recorder to look at for one ledger day of a series.
+
+    Most series belong to their local calendar day. The HRV of a night belongs to the day of waking
+    up, but its readings lie in the evening before and the morning of that day: noon to noon.
+    """
+    start = dt_util.start_of_local_day(day)
+    if series == "hrv":
+        return start - timedelta(hours=12), start + timedelta(hours=12)
+    return start, start + timedelta(days=1)
+
+
 async def recorded_points(hass: Any, entry: Any, series: str, day: Any) -> dict[int, float]:
     """Read-only: the states of the history sensor already in the recorder for one local day.
 
@@ -284,10 +297,10 @@ async def recorded_points(hass: Any, entry: Any, series: str, day: Any) -> dict[
         entity_id = er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_{HISTORY_KEYS[series]}")
         if entity_id is None:
             raise HistoryWriteUnsupported("history sensor is not registered")
-        start = dt_util.start_of_local_day(day)
+        start, end = series_window(series, day)
         states = await get_instance(hass).async_add_executor_job(
             lambda: history.state_changes_during_period(
-                hass, start, start + timedelta(days=1), entity_id, no_attributes=True, include_start_time_state=False
+                hass, start, end, entity_id, no_attributes=True, include_start_time_state=False
             )
         )
     except HistoryWriteUnsupported:
@@ -382,6 +395,7 @@ class HistoryManager:
         self.sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep
         self.progress: dict[str, dict[str, str]] = {}
         self.listeners: dict[str, Callable[[], None]] = {}
+        self.latest_listeners: dict[str, Callable[[int, float], None]] = {}
         self._store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.history_ledger")
         self._ledger: Ledger | None = None
         self._task: Any = None
@@ -418,6 +432,21 @@ class HistoryManager:
                 _LOGGER.debug("History sensor of %s not used: %s", series, err)
             update_history_issue(self.hass, self.entry, series, excluded)
         return active
+
+    def publish_latest(self, series: str, points: list[Point]) -> None:
+        """Tell the history sensor the newest point of the live filling; never raises.
+
+        Only the forward path calls this (never the initial load or a service run for old days).
+        The sensor itself ignores a point that is not newer than the one it shows.
+        """
+        listener = self.latest_listeners.get(series)
+        if listener is None or not points:
+            return
+        ts, value = max(points)
+        try:
+            listener(ts, value)
+        except Exception as err:  # a display problem must not stop the job
+            _LOGGER.debug("History value could not be shown: %s", err)
 
     def _notify(self, series: str) -> None:
         listener = self.listeners.get(series)
@@ -475,7 +504,7 @@ class HistoryManager:
             try:
                 async with self.lock:
                     payload = await fetch_series(api, series, day)
-                    parsed = SERIES[series].parse(payload)
+                    parsed = HISTORY_SERIES[series].parse(payload)
                     if parsed is None:
                         note_unknown_format(series)
                         break

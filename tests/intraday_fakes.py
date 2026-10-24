@@ -32,3 +32,21 @@ def bb_payload(rows):
 
 def spo2_payload(rows):
     return {"averageSpO2": 95, "spO2HourlyAverages": [list(r) for r in rows]}
+
+
+def hrv_payload(rows, summary=True):
+    """Nightly HRV answer; rows = [(ISO time without zone, value)] (readingTimeLocal is a wall-clock time)."""
+    payload = {"hrvReadings": [
+        {"hrvValue": value, "readingTimeGMT": ts, "readingTimeLocal": ts.replace("T0", "T1", 1) if ts else ts} for ts, value in rows]}
+    if summary:
+        payload["hrvSummary"] = {"calendarDate": "2026-10-24", "weeklyAvg": 50}
+    return payload
+
+
+def spo2_payload3(rows, order=("timestamp", "spo2Level", "monitoringEnvironmentLevel")):
+    """SpO2 answer with the three real columns and Garmin's descriptor list; rows = [(ts, spo2, environment)]."""
+    return {
+        "spO2HourlyAverages": [list(r) for r in rows],
+        "spO2HourlyAveragesDescriptorList": [
+            {"spo2ValueDescKey": key, "spo2ValueDescIndex": i} for i, key in enumerate(order)],
+    }

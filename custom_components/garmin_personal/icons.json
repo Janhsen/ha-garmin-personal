@@ -10,6 +10,9 @@
       "spo2_history": {
         "default": "mdi:water-percent"
       },
+      "hrv_history": {
+        "default": "mdi:heart-flash"
+      },
       "steps": {
         "default": "mdi:shoe-print"
       },

@@ -25,6 +25,7 @@ from .api import GarminAuthError, GarminError, GarminPersonalApi, GarminRateLimi
 from .const import DAILY_FULL_REFRESH, DOMAIN
 from .history import append_points, manager_for
 from .intraday import (
+    HISTORY_SERIES,
     SERIES,
     closed_hours,
     drop_straddling,
@@ -333,8 +334,8 @@ class GarminDailyCoordinator(GarminCoordinator):
             manager.ensure_backfill(self.api)  # gaps between the keep limit and yesterday, in the background
         want_yesterday = self._yesterday_done != day or (changed and dt_util.now().hour < YESTERDAY_RETRY_UNTIL_HOUR)
         yesterday_complete = want_yesterday
-        for key, spec in SERIES.items():
-            if not self._hourly_stats and key not in active:
+        for key, spec in HISTORY_SERIES.items():
+            if not (self._hourly_stats and key in SERIES) and key not in active:
                 continue
             try:
                 today_payload = fetched[key] if key in fetched else await fetch_series(self.api, key, day)
@@ -358,7 +359,7 @@ class GarminDailyCoordinator(GarminCoordinator):
                     _LOGGER.debug("Intraday job: yesterday's %s failed: %s", key, err)
             if today_points is None or yesterday_points is None and first_day != day:
                 note_unknown_format(key)
-            if self._hourly_stats:
+            if self._hourly_stats and key in SERIES:
                 points = merge_points(*(p for p in (yesterday_points, today_points) if p))
                 hours = drop_straddling(
                     closed_hours(hourly_aggregate(points), now),
@@ -384,6 +385,7 @@ class GarminDailyCoordinator(GarminCoordinator):
                 if result.error or result.unverified:
                     _LOGGER.debug("History states of %s not written: %s", key, result.error or "recorder not readable")
                     break
+                manager.publish_latest(key, points)  # all of them are in the recorder now
             await manager.save()
 
 

@@ -36,6 +36,7 @@ from .const import (
 )
 from .coordinator import GarminConfigEntry
 from .intraday import (
+    HISTORY_SERIES,
     SERIES,
     closed_hours,
     drop_straddling,
@@ -688,7 +689,7 @@ async def _run_history_backfill(
     while day <= end and stopped is None and write_error is None:
         for key in series:
             try:
-                parsed = SERIES[key].parse(await fetch_series(api, key, day))
+                parsed = HISTORY_SERIES[key].parse(await fetch_series(api, key, day))
             except (GarminRateLimitError, GarminAuthError) as err:
                 stopped = err
                 break

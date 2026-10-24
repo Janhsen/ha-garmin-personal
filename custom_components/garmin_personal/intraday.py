@@ -1,4 +1,4 @@
-"""Hourly statistics from Garmin's intraday series (no Home Assistant imports).
+"""Hourly statistics and history points from Garmin's intraday series (no Home Assistant imports).
 
 Garmin delivers the day's heart rate, Body Battery and SpO2 as lists of measurements with a
 timestamp in epoch milliseconds (UTC). The functions here turn such an answer into measuring
@@ -143,10 +143,12 @@ def body_battery_points(payload: Any) -> list[Point] | None:
 
 
 def spo2_points(payload: Any) -> list[Point] | None:
-    """Points of the SpO2 answer: ``spO2HourlyAverages`` = ``[[timestamp_ms, percent], ...]``.
+    """Points of the SpO2 answer: ``spO2HourlyAverages`` = ``[[timestamp_ms, spo2Level, environment], ...]``.
 
-    Garmin only reports hourly averages here, so minimum, maximum and mean of such an hour
-    are the same value. Zero and negative values are placeholders.
+    The columns come from Garmin's descriptor list (``spO2HourlyAveragesDescriptorList``); without a
+    usable descriptor the classic layout applies (timestamp, then percent). The environment column
+    is not SpO2 and is never read. Garmin only reports hourly averages here, so minimum, maximum and
+    mean of such an hour are the same value. Zero, negative and ``null`` values are placeholders.
     """
     if payload is None:
         return []
@@ -157,13 +159,70 @@ def spo2_points(payload: Any) -> list[Point] | None:
         return []
     if not isinstance(rows, list):
         return None
-    return _pairs(rows, 0, 1, keep=lambda v: v > 0)
+    descriptors = payload.get("spO2HourlyAveragesDescriptorList")
+    ts_col = _descriptor_index(descriptors, ("timestamp",))
+    value_col = _descriptor_index(descriptors, ("spo2level",))
+    return _pairs(rows, 0 if ts_col is None else ts_col, 1 if value_col is None else value_col,
+                  keep=lambda v: v > 0)
+
+
+def _utc_ms(value: Any) -> int | None:
+    """An ISO time (``2026-10-23T01:05:00.0``) as epoch milliseconds; without a zone it is UTC."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if text.endswith(("Z", "z")):
+        text = text[:-1] + "+00:00"
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return _timestamp(round(moment.timestamp() * 1000))
+
+
+def hrv_points(payload: Any) -> list[Point] | None:
+    """Points of the nightly HRV answer: ``hrvReadings`` = ``[{hrvValue, readingTimeGMT, ...}, ...]``.
+
+    Only ``readingTimeGMT`` is used for the time (UTC; ``readingTimeLocal`` is a wall-clock time and
+    never read). ``None`` for an unknown shape, an empty list if there are no readings (an answer
+    with only the night's summary counts as such). Zero and negative values are placeholders; low
+    values next to high ones are real measurements and stay.
+    """
+    if payload is None:
+        return []
+    if not isinstance(payload, Mapping):
+        return None
+    if "hrvReadings" not in payload:
+        return [] if "hrvSummary" in payload else None
+    rows = payload["hrvReadings"]
+    if rows is None:
+        return []
+    if not isinstance(rows, list):
+        return None
+    points: list[Point] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        ts, value = _utc_ms(row.get("readingTimeGMT")), _finite(row.get("hrvValue"))
+        if ts is not None and value is not None and value > 0:
+            points.append((ts, value))
+    return points
 
 
 SERIES: dict[str, SeriesSpec] = {
     "heart_rate": SeriesSpec("heart_rate", "heart_rate_hourly", "bpm", heart_rate_points),
     "body_battery": SeriesSpec("body_battery", "body_battery_hourly", "%", body_battery_points),
     "spo2": SeriesSpec("spo2", "spo2_hourly", "%", spo2_points),
+}
+
+
+# What the history sensors can carry: the hourly-statistics series and the night's HRV (no statistic: its
+# readings exist for the night only and a statistic would cost one more request on every sync).
+HISTORY_SERIES: dict[str, SeriesSpec] = {
+    **SERIES,
+    "hrv": SeriesSpec("hrv", "hrv_hourly", "ms", hrv_points),
 }
 
 
@@ -242,5 +301,6 @@ async def fetch_series(api: Any, key: str, day: date) -> Any:
         "heart_rate": lambda: api.get_heart_rate(day),
         "body_battery": lambda: api.get_body_battery(day, day),
         "spo2": lambda: api.get_spo2(day),
+        "hrv": lambda: api.get_hrv(day),
     }
     return await fetchers[key]()

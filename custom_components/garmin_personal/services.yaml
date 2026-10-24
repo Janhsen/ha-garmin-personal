@@ -184,6 +184,7 @@ backfill_history:
             - heart_rate
             - body_battery
             - spo2
+            - hrv
     confirm_rewrite:
       default: false
       selector:
