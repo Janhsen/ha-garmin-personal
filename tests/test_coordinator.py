@@ -290,7 +290,6 @@ class ActivityCoordinator(unittest.TestCase):
             update(c)
         self.assertEqual(self.store().saved, [])
 
-    @unittest.expectedFailure  # BUG coordinator.py:208-221: leere Historie beim ersten Lauf verschluckt die erste Aktivität
     def test_first_activity_after_empty_history_is_reported(self):
         c = self.make([], [act(1)])
         update(c)

@@ -194,7 +194,10 @@ def async_register_services(hass: HomeAssistant) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(payload)
 
-        await hass.async_add_executor_job(write)
+        try:
+            await hass.async_add_executor_job(write)
+        except OSError as err:
+            raise HomeAssistantError(f"Could not write {target}: {err}") from err
         return {"path": str(target), "bytes": len(payload)}
 
     async def backfill(call: ServiceCall) -> ServiceResponse:

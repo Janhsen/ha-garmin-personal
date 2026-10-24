@@ -210,7 +210,6 @@ class Handlers(unittest.TestCase):
             self.call("download_activity", {"activity_id": 1})
         self.assertFalse((Path(self.tmp.name) / DOMAIN).exists())
 
-    @unittest.expectedFailure  # BUG services.py:193-197: OSError beim Schreiben wird nicht abgebildet
     def test_download_unreachable_path_gives_ha_error(self):
         """Schreibfehler (Pfad liegt unter einer Datei) sollten als HomeAssistantError erscheinen."""
         blocker = Path(self.tmp.name) / "file"

@@ -215,6 +215,10 @@ class GarminActivityCoordinator(GarminCoordinator):
             if self._last_id is None or newest > self._last_id:
                 self._last_id = newest
                 await self._store.async_save({"last_id": newest})
+        elif self._last_id is None and isinstance(data.get("activities"), list):
+            # Empty history on the first run: the first activity later on is new.
+            self._last_id = 0
+            await self._store.async_save({"last_id": 0})
         data["new_activities"] = new
         return data
 
