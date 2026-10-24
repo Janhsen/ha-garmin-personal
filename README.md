@@ -61,6 +61,10 @@ offers no push; the integration only polls.
 Not part of the Personal API (and therefore not available): Training Readiness, training status, VO2max as a daily
 value, race predictions. VO2max exists only per activity.
 
+Sleep, HRV and body sensors keep their **last known value** while Garmin returns nothing (e.g. the next morning
+before the new night is synced), also across restarts. The attributes `held_value` (true while the value is old)
+and `last_seen` (when this integration last received a new value) say so. Nothing is estimated.
+
 ## Services (responses as data, e.g. for scripts and templates)
 
 * `garmin_personal.fetch` – any endpoint by short name (`daily_summary`, `sleep`, `hrv_summaries`, `stress`,

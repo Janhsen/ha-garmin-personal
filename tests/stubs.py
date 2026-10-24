@@ -269,6 +269,24 @@ class Store:
         self.saved.append(data)
 
 
+
+
+class RestoreSensor:
+    """Stand-in: nothing stored unless a test sets ``_stored``/``_stored_state``."""
+
+    _stored = None
+    _stored_state = None
+
+    async def async_added_to_hass(self):
+        return None
+
+    async def async_get_last_sensor_data(self):
+        return self._stored
+
+    async def async_get_last_state(self):
+        return self._stored_state
+
+
 @dataclass(frozen=True, kw_only=True)
 class SensorEntityDescription:
     key: str
@@ -450,7 +468,7 @@ def install() -> None:
          HomeAssistantError=HomeAssistantError, ServiceValidationError=ServiceValidationError)
     stub("homeassistant.components")
     stub("homeassistant.components.sensor", SensorDeviceClass=sensor_dc, SensorStateClass=sensor_sc,
-         SensorEntity=type("SensorEntity", (), {}), SensorEntityDescription=SensorEntityDescription)
+         SensorEntity=type("SensorEntity", (), {}), RestoreSensor=RestoreSensor, SensorEntityDescription=SensorEntityDescription)
     stub("homeassistant.components.binary_sensor",
          BinarySensorDeviceClass=make_enum("BinarySensorDeviceClass", "PROBLEM"),
          BinarySensorEntity=BinarySensorEntity)

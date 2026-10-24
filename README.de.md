@@ -68,6 +68,11 @@ Garmin nennt für die Personal API keine Limits und bietet keinen Push; es wird 
 Nicht in der Personal API enthalten (und deshalb nicht vorhanden): Training Readiness,
 Trainingsstatus, VO2max als Tageswert, Race Predictions. VO2max gibt es nur je Aktivität.
 
+Schlaf-, HRV- und Körper-Sensoren behalten den **letzten bekannten Wert**, solange Garmin nichts liefert (z. B. am
+Morgen, bevor die neue Nacht synchronisiert ist), auch über einen Neustart. Die Attribute `held_value` (wahr, solange
+der Wert alt ist) und `last_seen` (wann die Integration zuletzt einen neuen Wert bekam) zeigen das an. Es wird nichts
+geschätzt.
+
 ## Services (Antwort als Daten, z. B. für Skripte und Templates)
 
 * `garmin_personal.fetch` – jeder Endpunkt per Kurzname (`daily_summary`, `sleep`, `hrv_summaries`,

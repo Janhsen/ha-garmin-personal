@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
@@ -22,6 +23,7 @@ from homeassistant.const import (
     UnitOfVolume,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -123,6 +125,8 @@ def _d(
 
 _LOGGER = logging.getLogger(__name__)
 _SEEN_UNLISTED: set[tuple[str, str]] = set()
+# Nightly and body values are published once and then vanish from Garmin's answer; keep the last one.
+KEEP_LAST_GROUPS = frozenset({"sleep", "body"})
 
 TOTAL = SensorStateClass.TOTAL_INCREASING
 DURATION = SensorDeviceClass.DURATION
@@ -548,8 +552,12 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class GarminSensor(CoordinatorEntity[GarminCoordinator], SensorEntity):
-    """A sensor reading one value out of its coordinator's data."""
+class GarminSensor(CoordinatorEntity[GarminCoordinator], RestoreSensor):
+    """A sensor reading one value out of its coordinator's data.
+
+    Sleep and body values keep their last known value (also across restarts) while Garmin
+    returns nothing; the attributes then say so.
+    """
 
     _attr_has_entity_name = True
     entity_description: GarminSensorDescription
@@ -567,13 +575,34 @@ class GarminSensor(CoordinatorEntity[GarminCoordinator], SensorEntity):
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         self._attr_device_info = device_info(entry)
+        self._keep = description.group in KEEP_LAST_GROUPS
+        self._last_value: Any = None
+        self._last_seen: str | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the last known value after a restart."""
+        await super().async_added_to_hass()
+        if not self._keep:
+            return
+        stored = await self.async_get_last_sensor_data()
+        if stored is not None and stored.native_value is not None:
+            self._last_value = stored.native_value
+        state = await self.async_get_last_state()
+        if state is not None:
+            self._last_seen = state.attributes.get("last_seen")
 
     @property
     def native_value(self) -> StateType:
-        """The current value."""
-        if not self.coordinator.data:
-            return None
-        return self.entity_description.value_fn(self.coordinator.data)
+        """The current value, or the last known one for sleep and body values."""
+        current = self.entity_description.value_fn(self.coordinator.data) if self.coordinator.data else None
+        if not self._keep:
+            return current
+        if current is not None:
+            if current != self._last_value:
+                self._last_seen = dt_util.utcnow().isoformat(timespec="seconds")
+            self._last_value = current
+            return current
+        return self._last_value
 
     @property
     def options(self) -> list[str] | None:
@@ -595,11 +624,16 @@ class GarminSensor(CoordinatorEntity[GarminCoordinator], SensorEntity):
     def extra_state_attributes(self) -> Mapping[str, Any] | None:
         """Extra values; intraday series only if enabled in the options."""
         description = self.entity_description
-        if description.attrs_fn is None or not self.coordinator.data:
-            return None
-        if description.intraday and not self._entry.options.get(OPT_INTRADAY, False):
-            return None
-        return description.attrs_fn(self.coordinator.data)
+        attrs: dict[str, Any] = {}
+        if description.attrs_fn is not None and self.coordinator.data and not (
+            description.intraday and not self._entry.options.get(OPT_INTRADAY, False)
+        ):
+            attrs.update(description.attrs_fn(self.coordinator.data) or {})
+        if self._keep and self._last_value is not None:
+            fresh = bool(self.coordinator.data) and description.value_fn(self.coordinator.data) is not None
+            attrs["last_seen"] = self._last_seen
+            attrs["held_value"] = not fresh
+        return attrs or None
 
 
 class GarminKeyExpirySensor(CoordinatorEntity[GarminCoordinator], SensorEntity):

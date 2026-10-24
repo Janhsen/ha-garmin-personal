@@ -62,7 +62,7 @@ def install_stubs():
     stub("homeassistant")
     stub("homeassistant.components")
     stub("homeassistant.components.sensor", SensorDeviceClass=dc, SensorStateClass=sc,
-         SensorEntity=distinct('SensorEntity'), SensorEntityDescription=SensorEntityDescription)
+         SensorEntity=distinct('SensorEntity'), RestoreSensor=distinct('RestoreSensor'), SensorEntityDescription=SensorEntityDescription)
     stub("homeassistant.const", PERCENTAGE="%",
          EntityCategory=make_enum("EntityCategory", "DIAGNOSTIC", "CONFIG"),
          UnitOfLength=make_enum("UnitOfLength", "METERS"), UnitOfMass=make_enum("UnitOfMass", "KILOGRAMS"),

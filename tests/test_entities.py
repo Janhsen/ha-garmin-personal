@@ -14,6 +14,7 @@ logging.disable(logging.CRITICAL)
 gp = stubs.load_full()
 ev = sys.modules["gp_full.event"]
 bs = sys.modules["gp_full.binary_sensor"]
+sn = sys.modules["gp_full.sensor"]
 const = sys.modules["gp_full.const"]
 
 
@@ -147,6 +148,57 @@ class SyncStaleTests(unittest.TestCase):
     def test_epoch_milliseconds_timestamp(self):
         ms = int((datetime.now(UTC) - timedelta(hours=20)).timestamp() * 1000)
         self.assertIs(self.sensor({"summary": {"lastSyncTimestampGMT": ms}}).is_on, True)
+
+
+
+class KeepLastValueTests(unittest.TestCase):
+    """Sleep and body sensors keep the last known value; daily values do not."""
+
+    def make(self, key, data):
+        desc = next(d for d in sn.SENSOR_DESCRIPTIONS if d.key == key)
+        coord = SimpleNamespace(data=data)
+        return coord, sn.GarminSensor(coord, stubs.FakeEntry(entry_id="E1"), desc)
+
+    SLEEP = {"sleep": {"sleepScores": {"overall": {"value": 81}}}}
+
+    def test_sleep_value_is_kept_when_garmin_returns_nothing(self):
+        coord, ent = self.make("sleep_score", self.SLEEP)
+        coord.data = {"sleep": {"sleepScores": {"overall": {"value": 81}}}}
+        self.assertEqual(ent.native_value, 81)
+        self.assertFalse(ent.extra_state_attributes["held_value"])
+        coord.data = {}
+        self.assertEqual(ent.native_value, 81)
+        attrs = ent.extra_state_attributes
+        self.assertTrue(attrs["held_value"])
+        self.assertTrue(attrs["last_seen"])
+
+    def test_new_value_replaces_kept_one(self):
+        coord, ent = self.make("sleep_score", None)
+        coord.data = {"sleep": {"sleepScores": {"overall": {"value": 70}}}}
+        self.assertEqual(ent.native_value, 70)
+        coord.data = {"sleep": {"sleepScores": {"overall": {"value": 64}}}}
+        self.assertEqual(ent.native_value, 64)
+
+    def test_nothing_known_stays_unknown(self):
+        coord, ent = self.make("sleep_score", None)
+        self.assertIsNone(ent.native_value)
+        self.assertIsNone(ent.extra_state_attributes)
+
+    def test_daily_value_is_not_kept(self):
+        coord, ent = self.make("steps", {"summary": {"totalSteps": 5000}})
+        self.assertEqual(ent.native_value, 5000)
+        coord.data = {"summary": {}}
+        self.assertIsNone(ent.native_value)
+
+    def test_restored_value_after_restart(self):
+        coord, ent = self.make("sleep_score", None)
+        ent._keep = True
+        ent._stored = SimpleNamespace(native_value=77)
+        ent._stored_state = SimpleNamespace(attributes={"last_seen": "2026-10-24T05:00:00+00:00"})
+        import asyncio
+        asyncio.run(ent.async_added_to_hass())
+        self.assertEqual(ent.native_value, 77)
+        self.assertEqual(ent.extra_state_attributes["last_seen"], "2026-10-24T05:00:00+00:00")
 
 
 if __name__ == "__main__":
