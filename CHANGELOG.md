@@ -3,7 +3,7 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
-## Unreleased
+## 0.5.2
 
 ### Added
 - Option **Fill history automatically** (on by default). For each series whose history sensor is enabled and recorded
