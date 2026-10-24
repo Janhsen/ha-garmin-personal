@@ -51,6 +51,10 @@ class GarminSyncStaleSensor(CoordinatorEntity[GarminCoordinator], BinarySensorEn
             return None
         last = parse_timestamp(dig(self.coordinator.data, "summary", "lastSyncTimestampGMT"))
         if last is None:
+            # Right after midnight the new day's summary has no sync time yet: use the last
+            # one the coordinator actually saw (nothing is made up; unknown without one).
+            last = parse_timestamp(self.coordinator.data.get("_last_sync"))
+        if last is None:
             return None
         hours = self._entry.options.get(OPT_SYNC_STALE_HOURS, DEFAULT_SYNC_STALE_HOURS)
         return dt_util.utcnow() - last > timedelta(hours=hours)
