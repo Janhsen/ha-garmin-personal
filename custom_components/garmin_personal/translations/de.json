@@ -503,6 +503,10 @@
         "days": {
           "name": "Tage",
           "description": "Wird ohne Startdatum verwendet."
+        },
+        "include_third_party_steps": {
+          "name": "Schritte aus anderen Apps",
+          "description": "Schritte, Distanz und Stockwerke von Tagen mitimportieren, die andere Apps (z. B. RunGap) in Garmin Connect geschrieben haben. Kalorien und Puls dieser Tage werden nie importiert."
         }
       }
     }

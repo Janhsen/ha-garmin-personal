@@ -461,7 +461,7 @@ def install() -> None:
          async_add_external_statistics=async_add_external_statistics)
     RECORDED.clear()
     stub("homeassistant.helpers")
-    stub("homeassistant.helpers.config_validation", string=str, date=date, positive_int=int,
+    stub("homeassistant.helpers.config_validation", string=str, boolean=bool, date=date, positive_int=int,
          config_entry_only_config_schema=lambda domain: Schema({}))
     stub("homeassistant.helpers.entity_registry", async_get=lambda hass: REGISTRY,
          RegistryEntryDisabler=RegistryEntryDisabler)

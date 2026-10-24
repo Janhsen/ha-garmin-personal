@@ -43,6 +43,7 @@ ATTR_FILTERS = "filters"
 ATTR_LIMIT = "limit"
 ATTR_PATH = "path"
 ATTR_DAYS = "days"
+ATTR_THIRD_PARTY = "include_third_party_steps"
 
 BASE = {vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string}
 
@@ -81,6 +82,7 @@ BACKFILL_SCHEMA = vol.Schema(
         vol.Optional(ATTR_START): cv.date,
         vol.Optional(ATTR_END): cv.date,
         vol.Optional(ATTR_DAYS, default=90): vol.All(vol.Coerce(int), vol.Range(min=1, max=3650)),
+        vol.Optional(ATTR_THIRD_PARTY, default=False): cv.boolean,
     }
 )
 
@@ -106,6 +108,11 @@ BACKFILL_FIELDS: dict[str, tuple[str | None, tuple[tuple[str, ...], ...]]] = {
     "floors_ascended": (None, (("movement", "floorsAscended", "value"), ("floorsAscended",))),
     "respiration_average": ("brpm", (("respiration", "avgValue"), ("avgWakingRespirationValue",))),
 }
+
+
+# Days that other apps wrote into Garmin Connect (e.g. steps synced with RunGap) carry real steps,
+# distance and floors, but no heart rate and only partial calories; only these fields are taken.
+THIRD_PARTY_FIELDS = ("steps", "distance", "floors_ascended")
 
 
 def _get_entry(hass: HomeAssistant, call: ServiceCall) -> GarminConfigEntry:
@@ -210,12 +217,15 @@ def async_register_services(hass: HomeAssistant) -> None:
             summaries = await entry.runtime_data.api.get_daily_summaries(start, end)
         except GarminError as err:
             raise HomeAssistantError(f"Garmin request failed: {err}") from err
-        imported = _import_statistics(hass, entry, summaries)
+        third_party = bool(call.data.get(ATTR_THIRD_PARTY))
+        imported = _import_statistics(hass, entry, summaries, third_party_steps=third_party)
         usable = [s for s in summaries if usable_summary(s)]
+        third = [s for s in summaries if third_party and _third_party_day(s)]
         return {
             "days_returned": len({s.get("calendarDate") for s in summaries if isinstance(s, dict)}),
             "days_imported": len({s.get("calendarDate") for s in usable}),
-            "days_skipped_other_source": sum(1 for s in summaries if not from_garmin(s)),
+            "days_imported_third_party_steps": len({s.get("calendarDate") for s in third}),
+            "days_skipped_other_source": sum(1 for s in summaries if not from_garmin(s) and s not in third),
             "days_skipped_placeholder": sum(1 for s in summaries if from_garmin(s) and not usable_summary(s)),
             "statistics": imported,
         }
@@ -246,7 +256,17 @@ def async_register_services(hass: HomeAssistant) -> None:
     )
 
 
-def _import_statistics(hass: HomeAssistant, entry: GarminConfigEntry, summaries: list[Any]) -> int:
+def _third_party_day(summary: Any) -> bool:
+    """A day from another source that still has a usable step count."""
+    if not isinstance(summary, dict) or from_garmin(summary):
+        return False
+    steps = first_number(summary, *BACKFILL_FIELDS["steps"][1])
+    return steps is not None and steps > 0
+
+
+def _import_statistics(
+    hass: HomeAssistant, entry: GarminConfigEntry, summaries: list[Any], *, third_party_steps: bool = False
+) -> int:
     """Write one value per day into external long-term statistics.
 
     Each statistic id is ``garmin_personal:<entry_id>_<name>``; the value Garmin
@@ -266,7 +286,8 @@ def _import_statistics(hass: HomeAssistant, entry: GarminConfigEntry, summaries:
         rows: list[StatisticData] = []
         for summary in summaries:
             if not usable_summary(summary):
-                continue
+                if not (third_party_steps and name in THIRD_PARTY_FIELDS and _third_party_day(summary)):
+                    continue
             value = first_number(summary, *paths)
             day = summary.get("calendarDate")
             if value is None or value < 0 or not day:

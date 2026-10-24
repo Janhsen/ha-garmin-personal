@@ -174,7 +174,8 @@ def build(i: int) -> dict:
                                     "fields": {"config_entry_id": {"name": t("Account", "Konto"), "description": t("Only needed with several accounts.", "Nur bei mehreren Konten nötig.")},
                                                "start_date": {"name": t("Start date", "Startdatum"), "description": t("Default: days back from the end date.", "Standard: Tage rückwärts ab Enddatum.")},
                                                "end_date": {"name": t("End date", "Enddatum"), "description": t("Default: today.", "Standard: heute.")},
-                                               "days": {"name": t("Days", "Tage"), "description": t("Used when no start date is given.", "Wird ohne Startdatum verwendet.")}}},
+                                               "days": {"name": t("Days", "Tage"), "description": t("Used when no start date is given.", "Wird ohne Startdatum verwendet.")},
+                                               "include_third_party_steps": {"name": t("Steps from other apps", "Schritte aus anderen Apps"), "description": t("Also import steps, distance and floors of days that other apps (e.g. RunGap) wrote into Garmin Connect. Calories and heart rate of those days are never imported.", "Schritte, Distanz und Stockwerke von Tagen mitimportieren, die andere Apps (z. B. RunGap) in Garmin Connect geschrieben haben. Kalorien und Puls dieser Tage werden nie importiert.")}}},
         },
         "exceptions": {},
     }

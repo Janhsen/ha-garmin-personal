@@ -503,6 +503,10 @@
         "days": {
           "name": "Days",
           "description": "Used when no start date is given."
+        },
+        "include_third_party_steps": {
+          "name": "Steps from other apps",
+          "description": "Also import steps, distance and floors of days that other apps (e.g. RunGap) wrote into Garmin Connect. Calories and heart rate of those days are never imported."
         }
       }
     }

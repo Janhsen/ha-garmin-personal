@@ -278,6 +278,23 @@ class ImportStatistics(unittest.TestCase):
         _, rows = rec["steps"]
         self.assertEqual([r.mean for r in rows], [1.0, 2.0])
 
+    def test_third_party_steps_only_steps_distance_floors(self):
+        day = {"calendarDate": "2026-04-10", "source": "fitbit",
+               "movement": {"steps": {"value": 6888, "distanceInMeters": 5000}, "floorsAscended": {"value": 20}},
+               "calories": {"burnedActive": 500, "burnedTotal": 900}, "heartRate": {}}
+        stubs.RECORDED.clear()
+        sv._import_statistics(self.hass, self.entry, [day], third_party_steps=True)
+        names = {m.kw["statistic_id"].split("_", 2)[-1] for _, m, _ in stubs.RECORDED}
+        self.assertEqual(names, {"steps", "distance", "floors_ascended"})
+        stubs.RECORDED.clear()
+        sv._import_statistics(self.hass, self.entry, [day])
+        self.assertEqual(stubs.RECORDED, [])
+
+    def test_third_party_day_needs_steps(self):
+        self.assertFalse(sv._third_party_day({"source": "fitbit", "movement": {"steps": {"value": 0}}}))
+        self.assertFalse(sv._third_party_day({"source": "garmin", "totalSteps": 5}))
+        self.assertTrue(sv._third_party_day({"source": "fitbit", "movement": {"steps": {"value": 5}}}))
+
     def test_negative_skipped_zero_kept(self):
         _, rec = self.run_import([
             {"calendarDate": "2026-10-01", "totalSteps": -1},
