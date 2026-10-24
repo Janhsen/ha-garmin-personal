@@ -1,0 +1,511 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Garmin Connect Personal API",
+        "description": "Create a key at connect.garmin.com/app/settings/personalApiToken and paste it here. Garmin shows it only once.",
+        "data": {
+          "name": "Name",
+          "api_key": "API key",
+          "key_validity_days": "Validity chosen for the key (days)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "New API key",
+        "description": "The key for {account} no longer works. Create a new one and enter it.",
+        "data": {
+          "api_key": "API key",
+          "key_validity_days": "Validity (days)"
+        }
+      },
+      "reconfigure": {
+        "title": "Replace API key",
+        "description": "Enter a new key for {account}.",
+        "data": {
+          "api_key": "API key",
+          "key_validity_days": "Validity (days)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "The key was rejected by Garmin.",
+      "cannot_connect": "Could not reach Garmin.",
+      "unknown": "Unexpected error, see the log."
+    },
+    "abort": {
+      "already_configured": "This account is already set up.",
+      "reauth_successful": "The key was updated.",
+      "reconfigure_successful": "The key was updated.",
+      "wrong_account": "This key belongs to a different Garmin account."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "data": {
+          "daily_interval_minutes": "Update interval for daily values (minutes)",
+          "intraday_attributes": "Add intraday series as attributes (large)",
+          "sync_stale_hours": "Warn when the watch has not synced for (hours)"
+        }
+      }
+    }
+  },
+  "selector": {
+    "key_validity": {
+      "options": {
+        "30": "30 days",
+        "90": "90 days",
+        "180": "180 days",
+        "365": "365 days"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "steps": {
+        "name": "Steps"
+      },
+      "step_goal": {
+        "name": "Step goal"
+      },
+      "distance": {
+        "name": "Distance"
+      },
+      "total_calories": {
+        "name": "Total calories"
+      },
+      "active_calories": {
+        "name": "Active calories"
+      },
+      "resting_calories": {
+        "name": "Resting calories"
+      },
+      "consumed_calories": {
+        "name": "Consumed calories"
+      },
+      "remaining_calories": {
+        "name": "Remaining calories"
+      },
+      "moderate_intensity_minutes": {
+        "name": "Moderate intensity minutes"
+      },
+      "vigorous_intensity_minutes": {
+        "name": "Vigorous intensity minutes"
+      },
+      "intensity_minutes_goal": {
+        "name": "Intensity minutes goal"
+      },
+      "floors_ascended": {
+        "name": "Floors ascended"
+      },
+      "floors_descended": {
+        "name": "Floors descended"
+      },
+      "floors_goal": {
+        "name": "Floors goal"
+      },
+      "highly_active_time": {
+        "name": "Highly active time"
+      },
+      "active_time": {
+        "name": "Active time"
+      },
+      "sedentary_time": {
+        "name": "Sedentary time"
+      },
+      "heart_rate_resting": {
+        "name": "Resting heart rate"
+      },
+      "heart_rate_resting_7d": {
+        "name": "Resting heart rate (7 days)"
+      },
+      "heart_rate_min": {
+        "name": "Minimum heart rate"
+      },
+      "heart_rate_max": {
+        "name": "Maximum heart rate"
+      },
+      "stress_average": {
+        "name": "Average stress"
+      },
+      "stress_max": {
+        "name": "Maximum stress"
+      },
+      "stress_qualifier": {
+        "name": "Stress level"
+      },
+      "stress_rest_time": {
+        "name": "Rest time"
+      },
+      "stress_low_time": {
+        "name": "Low stress time"
+      },
+      "stress_medium_time": {
+        "name": "Medium stress time"
+      },
+      "stress_high_time": {
+        "name": "High stress time"
+      },
+      "body_battery": {
+        "name": "Body Battery"
+      },
+      "body_battery_high": {
+        "name": "Body Battery highest"
+      },
+      "body_battery_low": {
+        "name": "Body Battery lowest"
+      },
+      "body_battery_charged": {
+        "name": "Body Battery charged"
+      },
+      "body_battery_drained": {
+        "name": "Body Battery drained"
+      },
+      "body_battery_at_wake": {
+        "name": "Body Battery at wake-up"
+      },
+      "body_battery_during_sleep": {
+        "name": "Body Battery during sleep"
+      },
+      "spo2_average": {
+        "name": "Average SpO2"
+      },
+      "spo2_lowest": {
+        "name": "Lowest SpO2"
+      },
+      "spo2_latest": {
+        "name": "Latest SpO2"
+      },
+      "spo2_7d": {
+        "name": "SpO2 (7 days)"
+      },
+      "respiration_waking": {
+        "name": "Respiration (awake)"
+      },
+      "respiration_latest": {
+        "name": "Respiration (latest)"
+      },
+      "hydration": {
+        "name": "Hydration"
+      },
+      "hydration_goal": {
+        "name": "Hydration goal"
+      },
+      "hydration_sweat_loss": {
+        "name": "Sweat loss"
+      },
+      "last_sync": {
+        "name": "Last sync"
+      },
+      "sleep_duration": {
+        "name": "Sleep duration"
+      },
+      "sleep_deep": {
+        "name": "Deep sleep"
+      },
+      "sleep_light": {
+        "name": "Light sleep"
+      },
+      "sleep_rem": {
+        "name": "REM sleep"
+      },
+      "sleep_awake": {
+        "name": "Awake time"
+      },
+      "nap_duration": {
+        "name": "Nap duration"
+      },
+      "sleep_score": {
+        "name": "Sleep score"
+      },
+      "sleep_score_duration": {
+        "name": "Sleep score: duration"
+      },
+      "sleep_score_stress": {
+        "name": "Sleep score: stress"
+      },
+      "sleep_score_restlessness": {
+        "name": "Sleep score: restlessness"
+      },
+      "sleep_score_awake_count": {
+        "name": "Sleep score: awakenings"
+      },
+      "sleep_score_rem": {
+        "name": "Sleep score: REM"
+      },
+      "sleep_score_light": {
+        "name": "Sleep score: light"
+      },
+      "sleep_score_deep": {
+        "name": "Sleep score: deep"
+      },
+      "sleep_start": {
+        "name": "Sleep start"
+      },
+      "sleep_end": {
+        "name": "Sleep end"
+      },
+      "sleep_awake_count": {
+        "name": "Awakenings"
+      },
+      "sleep_heart_rate": {
+        "name": "Sleep heart rate"
+      },
+      "sleep_stress": {
+        "name": "Sleep stress"
+      },
+      "sleep_spo2_average": {
+        "name": "Sleep SpO2 average"
+      },
+      "sleep_spo2_lowest": {
+        "name": "Sleep SpO2 lowest"
+      },
+      "sleep_respiration_average": {
+        "name": "Sleep respiration"
+      },
+      "sleep_need": {
+        "name": "Sleep need"
+      },
+      "sleep_need_next": {
+        "name": "Next sleep need"
+      },
+      "sleep_feedback": {
+        "name": "Sleep feedback"
+      },
+      "sleep_insight": {
+        "name": "Sleep insight"
+      },
+      "sleep_breathing_disruption": {
+        "name": "Breathing disruption"
+      },
+      "hrv_last_night": {
+        "name": "HRV last night"
+      },
+      "hrv_weekly": {
+        "name": "HRV weekly average"
+      },
+      "hrv_5min_high": {
+        "name": "HRV 5 min high"
+      },
+      "hrv_status": {
+        "name": "HRV status"
+      },
+      "hrv_feedback": {
+        "name": "HRV feedback"
+      },
+      "weight": {
+        "name": "Weight"
+      },
+      "bmi": {
+        "name": "BMI"
+      },
+      "body_fat": {
+        "name": "Body fat"
+      },
+      "body_water": {
+        "name": "Body water"
+      },
+      "muscle_mass": {
+        "name": "Muscle mass"
+      },
+      "bone_mass": {
+        "name": "Bone mass"
+      },
+      "visceral_fat": {
+        "name": "Visceral fat"
+      },
+      "metabolic_age": {
+        "name": "Metabolic age"
+      },
+      "fitness_age": {
+        "name": "Fitness age"
+      },
+      "fitness_age_achievable": {
+        "name": "Achievable fitness age"
+      },
+      "chronological_age": {
+        "name": "Chronological age"
+      },
+      "last_activity": {
+        "name": "Last activity"
+      },
+      "last_activity_type": {
+        "name": "Last activity type"
+      },
+      "last_activity_start": {
+        "name": "Last activity start"
+      },
+      "last_activity_distance": {
+        "name": "Last activity distance"
+      },
+      "last_activity_duration": {
+        "name": "Last activity duration"
+      },
+      "last_activity_calories": {
+        "name": "Last activity calories"
+      },
+      "last_activity_avg_hr": {
+        "name": "Last activity average HR"
+      },
+      "last_activity_max_hr": {
+        "name": "Last activity max HR"
+      },
+      "last_activity_aerobic_te": {
+        "name": "Last activity aerobic training effect"
+      },
+      "last_activity_anaerobic_te": {
+        "name": "Last activity anaerobic training effect"
+      },
+      "last_activity_load": {
+        "name": "Last activity training load"
+      },
+      "last_activity_vo2max": {
+        "name": "Last activity VO2max"
+      },
+      "last_activity_elevation": {
+        "name": "Last activity elevation gain"
+      },
+      "wellness_activities": {
+        "name": "Wellness activities today"
+      },
+      "account": {
+        "name": "Account"
+      },
+      "hr_max_used": {
+        "name": "Maximum heart rate (set)"
+      },
+      "hr_resting_used": {
+        "name": "Resting heart rate (set)"
+      },
+      "hr_lactate_threshold": {
+        "name": "Lactate threshold heart rate"
+      },
+      "key_expires": {
+        "name": "API key expires"
+      }
+    },
+    "binary_sensor": {
+      "sync_stale": {
+        "name": "Watch sync overdue"
+      }
+    },
+    "event": {
+      "activity": {
+        "name": "Activity",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "activity_finished": "Activity finished"
+            }
+          }
+        }
+      }
+    }
+  },
+  "issues": {
+    "key_expiring": {
+      "title": "Garmin API key expires soon",
+      "description": "The Personal API key for {account} expires on {expires}. Create a new key in Garmin Connect and use Reconfigure on the integration."
+    }
+  },
+  "services": {
+    "fetch": {
+      "name": "Fetch data",
+      "description": "Fetch any Garmin endpoint for a day or range and return the raw result.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Only needed with several accounts."
+        },
+        "endpoint": {
+          "name": "Endpoint",
+          "description": "Short name of the endpoint."
+        },
+        "date": {
+          "name": "Date",
+          "description": "For single-day endpoints (default today)."
+        },
+        "start_date": {
+          "name": "Start date",
+          "description": "For range endpoints."
+        },
+        "end_date": {
+          "name": "End date",
+          "description": "For range endpoints."
+        },
+        "activity_id": {
+          "name": "Activity ID",
+          "description": "For activity endpoints."
+        },
+        "filters": {
+          "name": "Filters",
+          "description": "Activity filters, e.g. activity_type."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "Maximum number of activities."
+        }
+      }
+    },
+    "search_activities": {
+      "name": "Search activities",
+      "description": "Search activities with filters; pages automatically.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Only needed with several accounts."
+        },
+        "filters": {
+          "name": "Filters",
+          "description": "For example activity_type, min_distance, start_date."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "Maximum number of activities."
+        }
+      }
+    },
+    "download_activity": {
+      "name": "Download activity file",
+      "description": "Saves the original activity files (ZIP) to disk.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Only needed with several accounts."
+        },
+        "activity_id": {
+          "name": "Activity ID",
+          "description": "ID of the activity."
+        },
+        "path": {
+          "name": "Target file",
+          "description": "Default: garmin_personal folder in the config directory."
+        }
+      }
+    },
+    "backfill_statistics": {
+      "name": "Import daily values as statistics",
+      "description": "Writes daily summary values into long-term statistics (external, one value per day). Safe to repeat.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Only needed with several accounts."
+        },
+        "start_date": {
+          "name": "Start date",
+          "description": "Default: days back from the end date."
+        },
+        "end_date": {
+          "name": "End date",
+          "description": "Default: today."
+        },
+        "days": {
+          "name": "Days",
+          "description": "Used when no start date is given."
+        }
+      }
+    }
+  },
+  "exceptions": {}
+}

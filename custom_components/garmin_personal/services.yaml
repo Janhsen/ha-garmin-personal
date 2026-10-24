@@ -1,0 +1,115 @@
+fetch:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: garmin_personal
+    endpoint:
+      required: true
+      example: daily_summary
+      selector:
+        select:
+          options:
+            - activities
+            - activity
+            - activity_workouts
+            - hr_zones
+            - fitness_age
+            - weight_goals
+            - hrv
+            - hrv_summaries
+            - nutrition
+            - menstrual_summary
+            - menstrual_day
+            - sleep
+            - sleep_summaries
+            - profile
+            - hydration
+            - steps
+            - stress
+            - daily_summary
+            - daily_summaries
+            - weights_all
+            - weight_range
+            - body_battery
+            - spo2
+            - heart_rate
+            - wellness_activities
+    date:
+      selector:
+        date:
+    start_date:
+      selector:
+        date:
+    end_date:
+      selector:
+        date:
+    activity_id:
+      selector:
+        number:
+          min: 1
+          max: 99999999999999
+          mode: box
+    filters:
+      example: '{"activity_type": "running"}'
+      selector:
+        object:
+    limit:
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 500
+          mode: box
+search_activities:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: garmin_personal
+    filters:
+      example: '{"activity_type": "running", "min_distance": 10000}'
+      selector:
+        object:
+    limit:
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 500
+          mode: box
+download_activity:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: garmin_personal
+    activity_id:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 99999999999999
+          mode: box
+    path:
+      selector:
+        text:
+backfill_statistics:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: garmin_personal
+    start_date:
+      selector:
+        date:
+    end_date:
+      selector:
+        date:
+    days:
+      default: 90
+      selector:
+        number:
+          min: 1
+          max: 3650
+          mode: box
