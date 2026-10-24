@@ -97,8 +97,9 @@ class BaseCoordinator(unittest.TestCase):
         refresh(c)
         self.assertEqual(c.data["a"], 1)
         refresh(c)
-        self.assertFalse(c.last_update_success)
-        self.assertEqual(c.data["a"], 1)  # alte Daten bleiben für die Entities erhalten
+        # Ein einzelner Fehlzyklus hält die Daten (Entities bleiben verfügbar), siehe test_conn_*.py
+        self.assertTrue(c.last_update_success)
+        self.assertEqual(c.data["a"], 1)
 
     def test_auth_error_becomes_config_entry_auth_failed(self):
         later = counting(1)
@@ -290,11 +291,13 @@ class ActivityCoordinator(unittest.TestCase):
             update(c)
         self.assertEqual(self.store().saved, [])
 
-    def test_first_activity_after_empty_history_is_reported(self):
-        c = self.make([], [act(1)])
+    def test_empty_first_answer_sets_no_baseline(self):
+        # An empty first answer may be a hiccup; the next full list must not become 20 events.
+        # (Trade-off: the very first activity of a brand-new account is not reported.)
+        c = self.make([], [act(1), act(2)])
         update(c)
         data = update(c)
-        self.assertEqual([a["activityId"] for a in data["new_activities"]], [1])
+        self.assertEqual(data["new_activities"], [])
 
 
 class ProfileCoordinator(unittest.TestCase):
