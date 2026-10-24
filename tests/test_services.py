@@ -85,34 +85,43 @@ def loaded(entry_id="E1", api=None, title="Jan"):
 
 class GetEntry(unittest.TestCase):
     def test_no_entries(self):
-        with self.assertRaisesRegex(SVC_ERR, "No Garmin account"):
+        with self.assertRaises(SVC_ERR) as ctx:
             sv._get_entry(make_hass(), stubs.FakeCall())
+        self.assertEqual(ctx.exception.translation_key, "no_entry")
 
     def test_single_entry_without_id(self):
         e = loaded()
         self.assertIs(sv._get_entry(make_hass(e), stubs.FakeCall()), e)
 
     def test_several_entries_need_id(self):
-        with self.assertRaisesRegex(SVC_ERR, "Several"):
+        with self.assertRaises(SVC_ERR) as ctx:
             sv._get_entry(make_hass(loaded("A"), loaded("B")), stubs.FakeCall())
+        self.assertEqual(ctx.exception.translation_key, "entry_required")
 
     def test_several_entries_with_id(self):
         a, b = loaded("A"), loaded("B")
         self.assertIs(sv._get_entry(make_hass(a, b), stubs.FakeCall({"config_entry_id": "B"})), b)
 
     def test_unknown_id(self):
-        with self.assertRaisesRegex(SVC_ERR, "Unknown or not loaded"):
+        with self.assertRaises(SVC_ERR) as ctx:
             sv._get_entry(make_hass(loaded("A")), stubs.FakeCall({"config_entry_id": "ZZ"}))
+        self.assertEqual(ctx.exception.translation_key, "entry_unknown")
 
-    def test_not_loaded_entry_is_ignored(self):
+    def test_not_loaded_entry_is_never_used(self):
         unloaded = stubs.FakeEntry(entry_id="U")  # kein runtime_data
         none_rt = stubs.FakeEntry(entry_id="N", runtime_data=None)
         ok = loaded("A")
-        self.assertIs(sv._get_entry(make_hass(unloaded, none_rt, ok), stubs.FakeCall()), ok)
-        with self.assertRaises(SVC_ERR):  # nur nicht geladene -> "kein Konto"
-            sv._get_entry(make_hass(unloaded, none_rt), stubs.FakeCall())
-        with self.assertRaisesRegex(SVC_ERR, "Unknown or not loaded"):
+        for hass in (make_hass(unloaded), make_hass(none_rt)):
+            with self.assertRaises(SVC_ERR) as ctx:
+                sv._get_entry(hass, stubs.FakeCall())
+            self.assertEqual(ctx.exception.translation_key, "entry_not_loaded")
+        with self.assertRaises(SVC_ERR) as ctx:
             sv._get_entry(make_hass(unloaded, ok), stubs.FakeCall({"config_entry_id": "U"}))
+        self.assertEqual(ctx.exception.translation_key, "entry_not_loaded")
+        # mehrere Konten: nie still das geladene nehmen
+        with self.assertRaises(SVC_ERR) as ctx:
+            sv._get_entry(make_hass(unloaded, ok), stubs.FakeCall())
+        self.assertEqual(ctx.exception.translation_key, "entry_required")
 
 
 class Jsonable(unittest.TestCase):
@@ -153,6 +162,8 @@ class Handlers(unittest.TestCase):
         self.hass = make_hass(self.entry, config=stubs.FakeConfig(self.tmp.name, (self.tmp.name,)))
         sv.async_register_services(self.hass)
 
+    today = datetime.now(UTC).date()
+
     def call(self, name, data=None):
         handler = self.hass.services.registered[(DOMAIN, name)]["handler"]
         return stubs.run(handler(stubs.FakeCall(data)))
@@ -166,12 +177,14 @@ class Handlers(unittest.TestCase):
         _, endpoint, kw = self.api.calls[0]
         self.assertEqual(endpoint, "steps")
         self.assertEqual(kw, {"day": date(2026, 10, 1), "start": None, "end": None, "activity_id": None,
-                              "filters": {"a": 1}, "limit": 20})
+                              "filters": {"a": 1}, "limit": 20, "today": self.today})
 
     def test_fetch_value_error_becomes_validation_error(self):
         self.api.error = ValueError("bad range")
-        with self.assertRaisesRegex(SVC_ERR, "bad range"):
+        with self.assertRaises(SVC_ERR) as ctx:
             self.call("fetch", {"endpoint": "steps", "limit": 20})
+        self.assertEqual(ctx.exception.translation_key, "invalid_request")
+        self.assertEqual(ctx.exception.translation_placeholders, {"error": "bad range"})
 
     def test_fetch_garmin_error_becomes_ha_error(self):
         for exc in (api_mod.GarminAuthError("k"), api_mod.GarminRateLimitError("429"),
@@ -180,7 +193,8 @@ class Handlers(unittest.TestCase):
             with self.assertRaises(HA_ERR) as ctx:
                 self.call("fetch", {"endpoint": "steps", "limit": 20})
             self.assertNotIsInstance(ctx.exception, SVC_ERR)
-            self.assertIn("Garmin request failed", str(ctx.exception))
+            self.assertEqual(ctx.exception.translation_key, "garmin_request_failed")
+            self.assertEqual(ctx.exception.translation_domain, DOMAIN)
 
     # -- search
     def test_search(self):
@@ -199,7 +213,7 @@ class Handlers(unittest.TestCase):
     # -- download
     def test_download_default_path(self):
         out = self.call("download_activity", {"activity_id": 77})
-        expected = Path(self.tmp.name) / DOMAIN / "activity_77.zip"
+        expected = Path(self.tmp.name) / "media" / DOMAIN / "activity_77.zip"
         self.assertEqual(out, {"path": str(expected), "bytes": len(self.api.zip)})
         self.assertEqual(expected.read_bytes(), self.api.zip)
 
@@ -210,8 +224,9 @@ class Handlers(unittest.TestCase):
         self.assertTrue(target.exists())
 
     def test_download_path_outside_allowlist_rejected_before_request(self):
-        with self.assertRaisesRegex(SVC_ERR, "allowlist_external_dirs"):
+        with self.assertRaises(SVC_ERR) as ctx:
             self.call("download_activity", {"activity_id": 1, "path": "/etc/passwd"})
+        self.assertEqual(ctx.exception.translation_key, "path_not_allowed")
         self.assertEqual(self.api.calls, [])
 
     def test_download_prefix_trick_not_allowed(self):
@@ -223,7 +238,7 @@ class Handlers(unittest.TestCase):
         self.api.error = api_mod.GarminApiError("x", 404)
         with self.assertRaises(HA_ERR):
             self.call("download_activity", {"activity_id": 1})
-        self.assertFalse((Path(self.tmp.name) / DOMAIN).exists())
+        self.assertFalse((Path(self.tmp.name) / "media").exists())
 
     def test_download_unreachable_path_gives_ha_error(self):
         """Schreibfehler (Pfad liegt unter einer Datei) sollten als HomeAssistantError erscheinen."""
@@ -234,23 +249,24 @@ class Handlers(unittest.TestCase):
 
     # -- backfill
     def test_backfill_start_after_end(self):
-        with self.assertRaisesRegex(SVC_ERR, "after"):
+        with self.assertRaises(SVC_ERR) as ctx:
             self.call("backfill_statistics", {"start_date": date(2026, 2, 1), "end_date": date(2026, 1, 1),
                                               "days": 5})
+        self.assertEqual(ctx.exception.translation_key, "invalid_date_range")
 
     def test_backfill_days_window(self):
         self.call("backfill_statistics", {"end_date": date(2026, 10, 10), "days": 10})
         _, start, end = self.api.calls[0]
         self.assertEqual((start, end), (date(2026, 10, 1), date(2026, 10, 10)))  # 10 Tage inklusiv
 
-    def test_backfill_default_end_is_today_local(self):
+    def test_backfill_default_end_is_yesterday_local(self):
         orig = sv.dt_util.now
         sv.dt_util.now = lambda: datetime(2026, 5, 5, 23, 0, tzinfo=UTC)
         try:
             self.call("backfill_statistics", {"days": 1})
         finally:
             sv.dt_util.now = orig
-        self.assertEqual(self.api.calls[0][1:], (date(2026, 5, 5), date(2026, 5, 5)))
+        self.assertEqual(self.api.calls[0][1:], (date(2026, 5, 4), date(2026, 5, 4)))  # heute ist unvollstaendig
 
     def stat_names(self):
         return {m.kw["statistic_id"].split(":", 1)[1].split("_", 1)[1] for _, m, _ in stubs.RECORDED}
@@ -301,7 +317,8 @@ class Handlers(unittest.TestCase):
         self.assertEqual(out["days_returned"], 3)
         self.assertEqual(out["days_imported"], 2)
         self.assertEqual(out["days_skipped_other_source"], 1)
-        self.assertEqual(out["statistics"], 1)  # nur "steps" hat Werte
+        self.assertEqual(out["statistic_series"], 1)  # nur "steps" hat Werte
+        self.assertEqual(out["statistic_rows"], 2)
 
 
 class ImportStatistics(unittest.TestCase):
