@@ -10,8 +10,8 @@ listener (automations, logbook, websocket clients). The only path that reaches t
 to put a hand-built ``state_changed`` event on the recorder's own queue (``Recorder.queue_task``).
 That is undocumented, depends on the recorder's internals (it reads ``old_state.last_reported_timestamp``
 of the previous row, the ``Event``/``State`` constructors changed between versions, entity filters are
-bypassed) and cannot be verified without a running Home Assistant. Until it is verified there,
-``write_history_states`` refuses to write and the service reports ``history_write_unsupported``.
+bypassed) and could only be tested against fakes so far. It is therefore EXPERIMENTAL: the service
+writes only with ``confirm_experimental: true``, one series and at most two days per call.
 """
 
 from __future__ import annotations
@@ -33,8 +33,11 @@ HISTORY_KEYS: dict[str, str] = {
 }
 
 
-# Set to True only after the recorder path described above has been verified on a real Home Assistant.
-WRITE_SUPPORTED = False
+# The writer exists; the service still needs ``confirm_experimental`` (see services.py) to use it.
+WRITE_SUPPORTED = True
+# Hand-over pauses: after this many events the loop yields, and above this recorder backlog it stops.
+YIELD_EVERY = 100
+MAX_RECORDER_BACKLOG = 20000
 
 # Days with the exact written timestamps (and values) the ledger keeps; older days shrink to a mark.
 LEDGER_DETAIL_DAYS = 7
@@ -55,12 +58,96 @@ def new_points(points: list[Point], last_written_ts: int | None) -> list[Point]:
     return sorted(seen.items())
 
 
-async def write_history_states(hass: Any, entry: Any, series: str, points: list[Point]) -> int:
-    """Write ``points`` as recorded states of the history sensor of ``series``; returns the number written.
+class HistoryTargetError(Exception):
+    """The history sensor cannot take states; ``key`` is the translation key of the error."""
 
-    Not implemented on purpose, see the module docstring.
+    def __init__(self, key: str, entity_id: str = "") -> None:
+        """Remember the translation key and the entity id for the message."""
+        super().__init__(key)
+        self.key = key
+        self.entity_id = entity_id
+
+
+def _unit_of(series: str) -> str:
+    return "bpm" if series == "heart_rate" else "%"
+
+
+def _state_text(value: float) -> str:
+    return str(int(value)) if value == int(value) else repr(value)
+
+
+async def check_target(hass: Any, entry: Any, series: str) -> str:
+    """The entity id of the history sensor, if it exists, is enabled and the recorder records it.
+
+    Raises ``HistoryTargetError`` (translated) otherwise, and ``HistoryWriteUnsupported`` if the
+    registry or the recorder cannot be reached. Nothing is written or requested here.
     """
-    raise HistoryWriteUnsupported(series)
+    try:
+        from homeassistant.components.recorder import get_instance
+        from homeassistant.helpers import entity_registry as er
+
+        registry = er.async_get(hass)
+        entity_id = registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_{HISTORY_KEYS[series]}")
+        reg_entry = registry.async_get(entity_id) if entity_id else None
+        instance = get_instance(hass)
+        entity_filter = getattr(instance, "entity_filter", None)
+    except Exception as err:  # registry/recorder API differs between versions
+        raise HistoryWriteUnsupported(str(err)) from err
+    if entity_id is None or reg_entry is None:
+        raise HistoryTargetError("history_sensor_missing")
+    if getattr(reg_entry, "disabled_by", None) is not None:
+        raise HistoryTargetError("history_sensor_disabled", entity_id)
+    if entity_filter is not None and not entity_filter(entity_id):
+        raise HistoryTargetError("history_not_recorded", entity_id)
+    return entity_id
+
+
+async def write_history_states(hass: Any, entry: Any, series: str, points: list[Point]) -> tuple[int, str | None]:
+    """EXPERIMENTAL. Put ``points`` into the recorder as states of the history sensor, at their own times.
+
+    Returns ``(n, error)``: the first ``n`` points (oldest first) were handed over, ``error`` says why
+    it stopped early (``None`` if all went through). It never raises for a failed hand-over, so the
+    caller can note exactly the written points. Target problems raise ``HistoryTargetError`` before
+    anything is written.
+
+    Each point becomes a ``state_changed`` event with a state stamped at the measurement time and
+    the previous point as ``old_state`` (the recorder reads its ``last_reported``), put on the
+    recorder's own queue: no listener of the event bus ever sees it.
+    """
+    import asyncio
+
+    from homeassistant.components.recorder import get_instance
+    from homeassistant.const import EVENT_STATE_CHANGED
+    from homeassistant.core import Event, State
+
+    entity_id = await check_target(hass, entry, series)
+    ordered = sorted(points)
+    done = 0
+    try:
+        instance = get_instance(hass)
+        attributes = {"unit_of_measurement": _unit_of(series)}
+        previous = None
+        for ts, value in ordered:
+            when = dt_util.utc_from_timestamp(ts / 1000)
+            state = State(
+                entity_id, _state_text(value), attributes,
+                last_changed=when, last_reported=when, last_updated=when,
+            )
+            event = Event(
+                EVENT_STATE_CHANGED,
+                {"entity_id": entity_id, "old_state": state if previous is None else previous, "new_state": state},
+                time_fired_timestamp=ts / 1000,
+            )
+            instance.queue_task(event)
+            previous = state
+            done += 1
+            if done % YIELD_EVERY == 0:
+                await asyncio.sleep(0)
+                if getattr(instance, "backlog", 0) > MAX_RECORDER_BACKLOG:
+                    return done, "recorder queue is full"
+    except Exception as err:  # stop at once; what was handed over is reported
+        return done, str(err)
+    return done, None
 
 
 def _crc(ts: int, value: float) -> int:

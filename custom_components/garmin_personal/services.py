@@ -49,8 +49,10 @@ from .intraday import (
 )
 from .history import (
     HISTORY_KEYS,
+    HistoryTargetError,
     HistoryWriteUnsupported,
     Ledger,
+    check_target,
     recorded_points,
     write_history_states,
 )
@@ -98,7 +100,13 @@ ERR_BACKFILL_RUNNING = "backfill_running"
 ERR_HISTORY_UNSUPPORTED = "history_write_unsupported"
 ATTR_SERIES = "series"
 ATTR_CONFIRM = "confirm_rewrite"
-MAX_HISTORY_DAYS = 366
+ATTR_EXPERIMENTAL = "confirm_experimental"
+# While the writer is experimental: one series and this many days per call.
+MAX_HISTORY_DAYS = 2
+ERR_HISTORY_LIMITS = "history_limits"
+ERR_HISTORY_SENSOR_MISSING = "history_sensor_missing"
+ERR_HISTORY_SENSOR_DISABLED = "history_sensor_disabled"
+ERR_HISTORY_NOT_RECORDED = "history_not_recorded"
 
 
 def _invalid(key: str, **placeholders: Any) -> ServiceValidationError:
@@ -192,8 +200,9 @@ HISTORY_SCHEMA = vol.Schema(
         vol.Optional(ATTR_START): cv.date,
         vol.Optional(ATTR_END): cv.date,
         vol.Optional(ATTR_DAYS, default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_HISTORY_DAYS)),
-        vol.Optional(ATTR_SERIES): vol.All(cv.ensure_list, [vol.In(tuple(HISTORY_KEYS))]),
+        vol.Required(ATTR_SERIES): vol.All(cv.ensure_list, [vol.In(tuple(HISTORY_KEYS))]),
         vol.Optional(ATTR_CONFIRM, default=False): cv.boolean,
+        vol.Optional(ATTR_EXPERIMENTAL, default=False): cv.boolean,
     }
 )
 
@@ -431,14 +440,16 @@ def async_register_services(hass: HomeAssistant) -> None:
 
     async def backfill_history(call: ServiceCall) -> ServiceResponse:
         entry = _get_entry(hass, call)
-        if not history_mod.WRITE_SUPPORTED:  # before any request to Garmin
-            raise _failed(ERR_HISTORY_UNSUPPORTED)
+        if not history_mod.WRITE_SUPPORTED or not call.data.get(ATTR_EXPERIMENTAL, False):
+            raise _failed(ERR_HISTORY_UNSUPPORTED)  # before any request to Garmin
         today = dt_util.now().date()
         explicit_end = call.data.get(ATTR_END)
         end = min(explicit_end, today) if explicit_end else today
         start = call.data.get(ATTR_START) or (end - timedelta(days=call.data.get(ATTR_DAYS, 1) - 1))
         _check_span(start, end, MAX_HISTORY_DAYS)
-        series = [s for s in (call.data.get(ATTR_SERIES) or list(HISTORY_KEYS)) if s in HISTORY_KEYS]
+        series = [s for s in (call.data.get(ATTR_SERIES) or []) if s in HISTORY_KEYS]
+        if len(series) != 1:
+            raise _invalid(ERR_HISTORY_LIMITS, max_days=MAX_HISTORY_DAYS)
         lock = backfill_locks.setdefault(entry.entry_id, asyncio.Lock())
         if lock.locked():
             raise _invalid(ERR_BACKFILL_RUNNING, title=entry.title)
@@ -667,6 +678,18 @@ async def _run_history_backfill(
     never seen its timestamp. Same timestamp with another value is counted, not written.
     """
     api = entry.runtime_data.api
+    for key in series:  # the target must exist, be enabled and recorded, before Garmin is asked
+        try:
+            await check_target(hass, entry, key)
+        except HistoryTargetError as err:
+            if err.key == ERR_HISTORY_SENSOR_MISSING:
+                raise _invalid(ERR_HISTORY_SENSOR_MISSING) from err
+            if err.key == ERR_HISTORY_SENSOR_DISABLED:
+                raise _invalid(ERR_HISTORY_SENSOR_DISABLED, entity_id=err.entity_id) from err
+            raise _invalid(ERR_HISTORY_NOT_RECORDED, entity_id=err.entity_id) from err
+        except HistoryWriteUnsupported as err:
+            raise _failed(ERR_HISTORY_UNSUPPORTED) from err
+    write_error: str | None = None
     store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.history_ledger")
     ledger = Ledger(await store.async_load())
     result = {"written": 0, "already_written": 0, "changed": 0}
@@ -676,7 +699,7 @@ async def _run_history_backfill(
     stopped: GarminError | None = None
     last_done: date | None = None
     day = start
-    while day <= end and stopped is None:
+    while day <= end and stopped is None and write_error is None:
         iso = day.isoformat()
         for key in series:
             try:
@@ -709,9 +732,15 @@ async def _run_history_backfill(
             result["already_written"] += same
             result["changed"] += changed
             if new:
-                result["written"] += await write_history_states(hass, entry, key, new)
-                ledger.record(key, iso, new)
-        if stopped is not None:
+                try:
+                    done, write_error = await write_history_states(hass, entry, key, new)
+                except HistoryTargetError as err:
+                    done, write_error = 0, err.key
+                result["written"] += done
+                ledger.record(key, iso, new[:done])  # only what was really handed over
+                if write_error is not None:
+                    break
+        if stopped is not None or write_error is not None:
             break
         last_done = day
         days_done += 1
@@ -724,7 +753,7 @@ async def _run_history_backfill(
     out: dict[str, Any] = {
         "start_date": start.isoformat(),
         "end_date": end.isoformat(),
-        "complete": stopped is None,
+        "complete": stopped is None and write_error is None,
         "days_completed": days_done,
         "points_written": result["written"],
         "points_already_written": result["already_written"],
@@ -737,6 +766,9 @@ async def _run_history_backfill(
         out["unknown_format"] = sorted(unreadable)
     if stopped is not None:
         out["error"] = str(stopped)
+        out["last_completed_day"] = last_done.isoformat() if last_done else None
+    if write_error is not None:
+        out["error"] = f"history_write_failed: {write_error}"
         out["last_completed_day"] = last_done.isoformat() if last_done else None
     return out
 
