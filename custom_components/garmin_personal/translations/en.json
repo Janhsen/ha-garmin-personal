@@ -10,7 +10,7 @@
           "key_validity_days": "Validity chosen for the key (days)"
         },
         "data_description": {
-          "name": "Display name of the account, e.g. a first name. It becomes the device name and part of every entity ID (for example sensor.<name>_steps); renaming later does not change existing entity IDs.",
+          "name": "Display name of the account, e.g. a first name. It becomes the device name and part of every entity ID (for example sensor.jan_steps if the name is Jan); renaming later does not change existing entity IDs.",
           "api_key": "The key from Garmin Connect (Settings > Personal API key). Garmin shows it only once.",
           "key_validity_days": "The same duration you chose in Garmin when creating the key. Garmin does not report the expiry date; it is calculated from this value and only used for the reminder before expiry."
         }
