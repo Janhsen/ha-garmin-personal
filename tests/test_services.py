@@ -146,6 +146,14 @@ class Registration(unittest.TestCase):
         sv.async_register_services(hass)  # idempotent
         self.assertEqual(hass.services.registered, before)
 
+    def test_every_service_is_admin_only(self):
+        # fetch hands out health data of any account; download_activity writes files; backfill* write
+        # statistics and recorder states: none of this is for a non-admin user.
+        hass = make_hass()
+        sv.async_register_services(hass)
+        self.assertEqual(len(hass.services.registered), 6)
+        self.assertTrue(all(item.get("admin") for item in hass.services.registered.values()))
+
     def test_response_modes(self):
         hass = make_hass()
         sv.async_register_services(hass)

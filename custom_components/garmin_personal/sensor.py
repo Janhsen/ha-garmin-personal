@@ -409,8 +409,8 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
        state_class=TOTAL),
     _d("intensity_minutes_goal", "daily", _summary("intensityMinutesGoal"), unit=MINUTES,
        category=EntityCategory.DIAGNOSTIC, enabled=False),
-    _d("floors_ascended", "daily", _summary("floorsAscended", digits=0), state_class=TOTAL),
-    _d("floors_descended", "daily", _summary("floorsDescended", digits=0), state_class=TOTAL),
+    _d("floors_ascended", "daily", _summary("floorsAscended"), state_class=TOTAL, precision=0),
+    _d("floors_descended", "daily", _summary("floorsDescended"), state_class=TOTAL, precision=0),
     _d("floors_goal", "daily", _summary("userFloorsAscendedGoal"), category=EntityCategory.DIAGNOSTIC, enabled=False),
     _d("highly_active_time", "daily", _summary("highlyActiveSeconds"), unit=SECONDS, device_class=DURATION,
        state_class=TOTAL, enabled=False),
@@ -522,15 +522,15 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("hrv_status", "sleep", _hrv_text("status"), labels="hrv_status"),
     _d("hrv_feedback", "sleep", _hrv_text("feedbackPhrase"), labels="hrv_feedback", state_class=NO_CLASS, enabled=False),
     # ---- Body (group "body") ----------------------------------------------------------
-    _d("weight", "body", weight_at("weight", scale=1000, digits=2, zero_is_none=True), unit=UnitOfMass.KILOGRAMS,
-       device_class=SensorDeviceClass.WEIGHT, attrs=_weight_attrs),
+    _d("weight", "body", weight_at("weight", scale=1000, zero_is_none=True), unit=UnitOfMass.KILOGRAMS,
+       device_class=SensorDeviceClass.WEIGHT, attrs=_weight_attrs, precision=2),
     _d("bmi", "body", weight_at("bmi", digits=1, zero_is_none=True)),
     _d("body_fat", "body", weight_at("bodyFat", digits=1, zero_is_none=True), unit=PERCENTAGE),
     _d("body_water", "body", weight_at("bodyWater", digits=1, zero_is_none=True), unit=PERCENTAGE),
-    _d("muscle_mass", "body", weight_at("muscleMass", scale=1000, digits=2, zero_is_none=True), unit=UnitOfMass.KILOGRAMS,
-       device_class=SensorDeviceClass.WEIGHT),
-    _d("bone_mass", "body", weight_at("boneMass", scale=1000, digits=2, zero_is_none=True), unit=UnitOfMass.KILOGRAMS,
-       device_class=SensorDeviceClass.WEIGHT),
+    _d("muscle_mass", "body", weight_at("muscleMass", scale=1000, zero_is_none=True), unit=UnitOfMass.KILOGRAMS,
+       device_class=SensorDeviceClass.WEIGHT, precision=2),
+    _d("bone_mass", "body", weight_at("boneMass", scale=1000, zero_is_none=True), unit=UnitOfMass.KILOGRAMS,
+       device_class=SensorDeviceClass.WEIGHT, precision=2),
     _d("visceral_fat", "body", weight_at("visceralFat"), enabled=False),
     _d("metabolic_age", "body", weight_at("metabolicAge", digits=0), unit=YEARS, enabled=False),
     _d("fitness_age", "body", number_at("fitness_age", "fitnessAge", digits=1), unit=YEARS, attrs=_fitness_age_attrs),
@@ -620,9 +620,11 @@ def has_content(value: Any) -> bool:
 
 
 # Sensors are only disabled when the answers are complete enough to trust: daily and sleep
-# values can appear later in the day, so they are never disabled automatically.
+# values can appear later in the day, so they are never disabled automatically. The activity
+# sensors (``last_activity_*``) only describe the newest activity: a strength workout without
+# heart rate or distance must not switch them off for good.
 PRUNE_MIN_ENTRY_AGE = timedelta(hours=24)
-PRUNE_SKIP_GROUPS = frozenset({"daily", "sleep"})
+PRUNE_SKIP_GROUPS = frozenset({"daily", "sleep", "activities"})
 
 
 def prune_blocker(
@@ -647,7 +649,7 @@ def sensors_to_prune(
     entry_created: datetime | None = None,
     now: datetime | None = None,
 ) -> set[str]:
-    """Sensors that are empty although their endpoint answered (body and activity values only).
+    """Sensors that are empty although their endpoint answered (body and profile values only).
 
     Nothing is returned while the watch has not synchronised today or the account is less than
     24 hours old (``prune_blocker``); the caller must then not mark the pruning as done.

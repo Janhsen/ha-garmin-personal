@@ -218,7 +218,9 @@ class DisabledSensorLog(Base):
         entry = make_entry(source="profile_id", unique_id="4711")
         stubs.REGISTRY.entries["E1_steps"] = stubs.FakeRegistryEntry(None)
         orig = gp.sensors_to_prune
-        gp.sensors_to_prune = lambda data: {"steps"}
+        orig_blocker = gp.prune_blocker
+        gp.sensors_to_prune = lambda data, created=None: {"steps"}
+        gp.prune_blocker = lambda data, created, now=None: None
         try:
             with self.assertLogs(gp._LOGGER, level="INFO") as logs:
                 logging.disable(logging.NOTSET)
@@ -228,6 +230,7 @@ class DisabledSensorLog(Base):
                 gp._disable_empty_sensors_once(self.hass, entry)
         finally:
             gp.sensors_to_prune = orig
+            gp.prune_blocker = orig_blocker
             logging.disable(logging.CRITICAL)
         self.assertTrue(any("steps" in line for line in logs.output))
         self.assertEqual(stubs.REGISTRY.updates[0][0], "sensor.E1_steps")

@@ -36,7 +36,7 @@ from .intraday import (
 )
 from .repairs import update_key_expiry_issue
 from .stats_writer import write_hourly
-from .values import dig
+from .values import dig, parse_timestamp
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -248,6 +248,7 @@ class GarminDailyCoordinator(GarminCoordinator):
     _intraday_day: date | None = None  # the day for which the last write was started
     _yesterday_done: date | None = None  # the day on which yesterday's hours were last written
     _intraday_lock: asyncio.Lock | None = None
+    _jobs: set[Any]
 
     def __init__(
         self, *args: Any, hourly_stats: bool = False, history_auto: bool = False, **kwargs: Any
@@ -259,6 +260,26 @@ class GarminDailyCoordinator(GarminCoordinator):
         self._last_full: Any = None
         self._hourly_stats = hourly_stats
         self._history_auto = history_auto
+        self._jobs = set()
+
+    def _start_job(self, coro: Any) -> None:
+        """Run a side job in the background, bound to the config entry so that unloading stops it."""
+        entry = self.config_entry
+        create = getattr(entry, "async_create_background_task", None)
+        if create is None:  # no entry to bind to (tests, very old Home Assistant)
+            self.hass.async_create_task(coro)
+            return
+        task = create(self.hass, coro, f"{DOMAIN} intraday job")
+        self._jobs.add(task)
+        task.add_done_callback(self._jobs.discard)
+
+    async def async_stop_jobs(self) -> None:
+        """Cancel the side jobs and wait until they have stopped (the entry is being unloaded)."""
+        jobs = [task for task in self._jobs if not task.done()]
+        for task in jobs:
+            task.cancel()
+        if jobs:
+            await asyncio.gather(*jobs, return_exceptions=True)
 
     async def _skip(self, key: str, results: dict[str, Any]) -> bool:
         if key == "summary":
@@ -284,6 +305,8 @@ class GarminDailyCoordinator(GarminCoordinator):
         # first cycle after the start is no change (the followers refresh on their own then).
         primed_before = self._primed
         changed = sync is not None and primed_before and sync != self._last_sync
+        # A sync that follows one from before today's midnight may carry the evening of yesterday.
+        late_sync = changed and self._sync_before_today(self._last_sync, self._cycle_day)
         if sync is not None:
             self._last_sync = sync
         if not skipped:
@@ -296,24 +319,33 @@ class GarminDailyCoordinator(GarminCoordinator):
             # background: the entities must not wait for the extra requests.
             self._intraday_day = day
             fetched = {key: results[key] for key in SERIES if key in results}
-            self.hass.async_create_task(self.async_write_hourly_statistics(day, fetched, changed))
+            self._start_job(self.async_write_hourly_statistics(day, fetched, changed, late_sync))
         if changed:
             _LOGGER.debug("New watch sync %s: refreshing follower groups", sync)
             for follower in self.followers:
                 self.hass.async_create_task(follower.async_request_refresh())
 
-    async def async_write_hourly_statistics(self, day: date, fetched: Mapping[str, Any], changed: bool) -> None:
+    @staticmethod
+    def _sync_before_today(previous: Any, day: date) -> bool:
+        """Whether the previous watch sync is known and lies before the start of ``day``."""
+        before = parse_timestamp(previous)
+        return before is not None and before < dt_util.start_of_local_day(day)
+
+    async def async_write_hourly_statistics(
+        self, day: date, fetched: Mapping[str, Any], changed: bool, late_sync: bool = False
+    ) -> None:
         """Write the closed hours of today (and of yesterday) as hourly statistics; never raises.
 
         ``fetched`` holds the series this cycle already asked for (they are reused); every other
-        series costs one request. Yesterday is added on the first run of a day and after new
-        syncs in the morning (one request per series). Runs one at a time.
+        series costs one request. Yesterday is added on the first run of a day, after new syncs in the
+        morning and after the first sync that follows one from before midnight (``late_sync``; one request
+        per series). Runs one at a time.
         """
         if self._intraday_lock is None:
             self._intraday_lock = asyncio.Lock()
         async with self._intraday_lock:
             try:
-                await self._write_hourly(day, fetched, changed)
+                await self._write_hourly(day, fetched, changed, late_sync)
             except GarminRateLimitError as err:
                 _LOGGER.debug("Hourly statistics: Garmin limits requests, trying again at the next sync: %s", err)
             except GarminError as err:
@@ -321,7 +353,9 @@ class GarminDailyCoordinator(GarminCoordinator):
             except Exception as err:  # a side job must never break the update
                 _LOGGER.warning("Hourly statistics could not be written: %s", err)
 
-    async def _write_hourly(self, day: date, fetched: Mapping[str, Any], changed: bool) -> None:
+    async def _write_hourly(
+        self, day: date, fetched: Mapping[str, Any], changed: bool, late_sync: bool = False
+    ) -> None:
         """The job behind every trigger: hourly statistics and/or history states from the same requests."""
         entry = self.config_entry
         if entry is None:
@@ -332,7 +366,11 @@ class GarminDailyCoordinator(GarminCoordinator):
         if manager is not None:
             active = await manager.active_series()
             manager.ensure_backfill(self.api)  # gaps between the keep limit and yesterday, in the background
-        want_yesterday = self._yesterday_done != day or (changed and dt_util.now().hour < YESTERDAY_RETRY_UNTIL_HOUR)
+        want_yesterday = (
+            self._yesterday_done != day
+            or late_sync
+            or (changed and dt_util.now().hour < YESTERDAY_RETRY_UNTIL_HOUR)
+        )
         yesterday_complete = want_yesterday
         for key, spec in HISTORY_SERIES.items():
             if not (self._hourly_stats and key in SERIES) and key not in active:
@@ -376,7 +414,7 @@ class GarminDailyCoordinator(GarminCoordinator):
         self, manager: Any, key: str, day: date, yesterday_points: list | None, today_points: list | None
     ) -> None:
         """Append the points never written before (yesterday first, then today); never today as "done"."""
-        async with manager.lock:
+        async with manager.lock, manager.persisting():
             ledger = await manager.ledger()
             for point_day, points in ((day - timedelta(days=1), yesterday_points), (day, today_points)):
                 if not points:

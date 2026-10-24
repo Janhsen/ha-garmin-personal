@@ -13,7 +13,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
@@ -52,10 +52,14 @@ from .coordinator import (
     sleep_calls,
 )
 from .repairs import remove_key_expiry_issue, update_key_expiry_issue
-from .sensor import sensors_to_prune
+from .sensor import prune_blocker, sensors_to_prune
 from .services import async_register_services
 
 _LOGGER = logging.getLogger(__name__)
+
+# A secondary group whose first refresh failed is asked again after this time, at most this often.
+SETUP_RETRY_DELAY = timedelta(minutes=5)
+SETUP_RETRY_ATTEMPTS = 3
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.CALENDAR, Platform.EVENT]
 
@@ -140,9 +144,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: GarminConfigEntry) -> bo
     _watch_key_expiry(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _disable_empty_sensors_once(hass, entry)
+    _retry_failed_groups(hass, entry)
     # No update listener: option changes reload through OptionsFlowWithReload,
     # reauth/reconfigure through async_update_reload_and_abort.
     return True
+
+
+@callback
+def _retry_failed_groups(hass: HomeAssistant, entry: GarminConfigEntry, attempt: int = 1) -> None:
+    """Ask the secondary groups whose first refresh failed again soon, instead of at their normal interval.
+
+    Without this a hiccup at the start would leave the profile sensors (24 h interval) or the sleep sensors
+    (2 h) unavailable until the next regular poll. The daily group has its own retry through setup.
+    """
+    failed = [c for name, c in entry.runtime_data.coordinators.items() if name != "daily" and not c.last_update_success]
+    if not failed or attempt > SETUP_RETRY_ATTEMPTS:
+        return
+
+    async def _retry(_now: Any) -> None:
+        for coordinator in failed:
+            await coordinator.async_refresh()
+        _retry_failed_groups(hass, entry, attempt + 1)
+
+    entry.async_on_unload(async_call_later(hass, SETUP_RETRY_DELAY.total_seconds(), _retry))
 
 
 @callback
@@ -197,9 +221,16 @@ def _disable_empty_sensors_once(hass: HomeAssistant, entry: GarminConfigEntry) -
     coordinators = entry.runtime_data.coordinators
     if not all(c.last_update_success and c.data for c in coordinators.values()):
         return  # try again at the next start, with complete data
+    data_by_group = {name: c.data for name, c in coordinators.items()}
+    created = getattr(entry, "created_at", None)
+    reason = prune_blocker(data_by_group, created)
+    if reason is not None:
+        # Too early to decide: not done, so the next start tries again.
+        _LOGGER.debug("Not disabling empty sensors yet: %s", reason)
+        return
     registry = er.async_get(hass)
     disabled: list[str] = []
-    for key in sensors_to_prune({name: c.data for name, c in coordinators.items()}):
+    for key in sensors_to_prune(data_by_group, created):
         entity_id = registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_{key}")
         registered = registry.async_get(entity_id) if entity_id else None
         if registered is not None and registered.disabled_by is None:
@@ -232,8 +263,27 @@ async def async_migrate_entry(hass: HomeAssistant, entry: GarminConfigEntry) -> 
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: GarminConfigEntry) -> bool:
-    """Unload the platforms; coordinators and the expiry timer are released by the entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    """Unload the platforms and stop the background jobs; the expiry timer is released by the entry.
+
+    The jobs (hourly statistics, history filling) are stopped and awaited, so that none of them keeps
+    writing with the old state while the entry is set up again; a write that is interrupted notes what
+    it already handed over in the ledger.
+    """
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        await _stop_background_jobs(entry)
+    return unloaded
+
+
+async def _stop_background_jobs(entry: GarminConfigEntry) -> None:
+    runtime = getattr(entry, "runtime_data", None)
+    daily = (getattr(runtime, "coordinators", None) or {}).get("daily")
+    stop_jobs = getattr(daily, "async_stop_jobs", None)
+    if stop_jobs is not None:
+        await stop_jobs()
+    manager = getattr(runtime, "history", None)
+    if manager is not None:
+        await manager.async_stop()
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: GarminConfigEntry) -> None:

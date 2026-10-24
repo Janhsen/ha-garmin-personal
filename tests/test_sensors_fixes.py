@@ -56,7 +56,22 @@ class WeightTests(unittest.TestCase):
         result = val("metabolic_age", data)
         self.assertEqual(result, 38)
         self.assertIsInstance(result, int)
-        self.assertIsInstance(val("floors_ascended", {"summary": {"floorsAscended": 7.6, "totalSteps": 1}}), int)
+
+    def test_floors_keep_garmins_value(self):
+        # Rounding a running total would make it fall back and look like a reset; the display rounds.
+        summary = {"summary": {"floorsAscended": 7.6, "floorsDescended": 3.4, "totalSteps": 1}}
+        self.assertEqual(val("floors_ascended", summary), 7.6)
+        self.assertEqual(val("floors_descended", summary), 3.4)
+        by_key = {d.key: d for d in sn.SENSOR_DESCRIPTIONS}
+        self.assertEqual(by_key["floors_ascended"].suggested_display_precision, 0)
+
+    def test_body_masses_in_kg_are_not_rounded_to_two_places(self):
+        data = weights(("2026-10-24", {"weight": 75834, "muscleMass": 31234, "boneMass": 3456, "sourceType": "MANUAL"}))
+        self.assertEqual(val("weight", data), 75.834)
+        self.assertEqual(val("muscle_mass", data), 31.234)
+        self.assertEqual(val("bone_mass", data), 3.456)
+        by_key = {d.key: d for d in sn.SENSOR_DESCRIPTIONS}
+        self.assertEqual(by_key["weight"].suggested_display_precision, 2)
 
 
 class PlaceholderTests(unittest.TestCase):
@@ -309,6 +324,17 @@ class PruneTests(unittest.TestCase):
         self.assertFalse({k for k in keys if BY[k].group in ("daily", "sleep")})
         self.assertNotIn("sleep_score", keys)
         self.assertNotIn("heart_rate_resting", keys)
+
+    def test_activity_sensors_are_never_disabled_by_one_activity_without_heart_rate_or_distance(self):
+        data = {**self.DATA, "activities": {"activities": [{"activityId": 1, "calories": 300.0,
+                                                           "activityType": {"typeKey": "strength_training"}}]}}
+        self.assertEqual(sn.PRUNE_SKIP_GROUPS & {"activities"}, {"activities"})
+        keys = self.prune(data, created=self.NOW - timedelta(days=2))
+        self.assertFalse({k for k in keys if k.startswith("last_activity") or k == "wellness_activities"})
+        # the same activity does leave these values empty, which is what used to switch them off
+        self.assertIsNone(BY["last_activity_avg_hr"].value_fn(data["activities"]))
+        self.assertIsNone(BY["last_activity_distance"].value_fn(data["activities"]))
+        self.assertIn("bmi", keys)  # body sensors are still decided as before
 
     def test_young_entry_waits(self):
         with self.assertLogs(sn._LOGGER, "INFO") as logs:

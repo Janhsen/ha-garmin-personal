@@ -19,9 +19,10 @@ Writing is append-only. The ``Ledger`` decides "written already?" per series, da
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import zlib
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
@@ -51,10 +52,21 @@ MAX_RECORDER_BACKLOG = 20000
 LEDGER_DETAIL_DAYS = 7
 # Upper bound of points kept per detail day (a heart rate day has about 720).
 LEDGER_MAX_POINTS_PER_DAY = 5000
+# Marker of a floor that stays for good (all days behind it were answered with real, empty data).
+FLOOR_FOREVER = "always"
 
 
 class HistoryWriteUnsupported(Exception):
     """States with historic timestamps cannot be written safely on this Home Assistant."""
+
+
+class HistoryWriteCancelled(Exception):
+    """The task was cancelled while handing points over; ``done`` of them already reached the recorder."""
+
+    def __init__(self, done: int) -> None:
+        """Remember how many points were handed over before the cancellation."""
+        super().__init__(done)
+        self.done = done
 
 
 def new_points(points: list[Point], last_written_ts: int | None) -> list[Point]:
@@ -116,14 +128,13 @@ async def write_history_states(hass: Any, entry: Any, series: str, points: list[
     Returns ``(n, error)``: the first ``n`` points (oldest first) were handed over, ``error`` says why
     it stopped early (``None`` if all went through). It never raises for a failed hand-over, so the
     caller can note exactly the written points. Target problems raise ``HistoryTargetError`` before
-    anything is written.
+    anything is written. A cancellation raises ``HistoryWriteCancelled(done)`` so that the points
+    already handed over can still be noted.
 
     Each point becomes a ``state_changed`` event with a state stamped at the measurement time and
     the previous point as ``old_state`` (the recorder reads its ``last_reported``), put on the
     recorder's own queue: no listener of the event bus ever sees it.
     """
-    import asyncio
-
     from homeassistant.components.recorder import get_instance
     from homeassistant.const import EVENT_STATE_CHANGED
     from homeassistant.core import Event, State
@@ -153,6 +164,10 @@ async def write_history_states(hass: Any, entry: Any, series: str, points: list[
                 await asyncio.sleep(0)
                 if getattr(instance, "backlog", 0) > MAX_RECORDER_BACKLOG:
                     return done, "recorder queue is full"
+    except asyncio.CancelledError as err:
+        # The points handed over so far are in the recorder's queue for good: the caller must still
+        # note them in the ledger, otherwise the next run writes them a second time.
+        raise HistoryWriteCancelled(done) from err
     except Exception as err:  # stop at once; what was handed over is reported
         return done, str(err)
     return done, None
@@ -194,6 +209,7 @@ class Ledger:
 
     def mark_done(self, series: str, day: str) -> None:
         """Remember a finished past day (never today); the list is bounded."""
+        self.data.get("defer", {}).get(series, {}).pop(day, None)
         days = self.data.setdefault("done", {}).setdefault(series, [])
         if day not in days:
             days.append(day)
@@ -209,14 +225,47 @@ class Ledger:
             day -= timedelta(days=1)
         return oldest
 
-    def floor(self, series: str) -> str | None:
-        """Day where the initial load once found nothing older (it does not look beyond again)."""
-        value = self.data.get("floor", {}).get(series)
-        return value if isinstance(value, str) else None
+    def floor(self, series: str, today: date | None = None) -> str | None:
+        """Day where the initial load once found nothing older (it does not look beyond again).
 
-    def set_floor(self, series: str, day: str) -> None:
-        """Remember where the initial load stopped for lack of data."""
+        A floor that rested on days Garmin did not really answer (empty body, HTTP 204) only holds
+        for ``BACKFILL_EMPTY_RETRY_DAYS``; a floor without a hold note (written by older versions) does not
+        hold at all and is found again by the next run.
+        """
+        value = self.data.get("floor", {}).get(series)
+        if not isinstance(value, str):
+            return None
+        hold = self.data.get("floor_hold", {}).get(series)
+        if hold == FLOOR_FOREVER:
+            return value
+        today = today or dt_util.now().date()
+        return value if isinstance(hold, str) and today.isoformat() < hold else None
+
+    def set_floor(self, series: str, day: str, *, hold_until: date | None = None) -> None:
+        """Remember where the initial load stopped for lack of data (``hold_until``: only until then)."""
         self.data.setdefault("floor", {})[series] = day
+        self.data.setdefault("floor_hold", {})[series] = FLOOR_FOREVER if hold_until is None else hold_until.isoformat()
+
+    def is_deferred(self, series: str, day: str, today: date) -> bool:
+        """Whether this day is put off for now (it failed repeatedly or Garmin did not answer)."""
+        note = self.data.get("defer", {}).get(series, {}).get(day)
+        return isinstance(note, list) and bool(note) and today.isoformat() < str(note[0])
+
+    def defer(self, series: str, day: str, until: date, *, failed: bool = False) -> int:
+        """Put a day off until ``until``; returns how often it failed (``failed``) so far."""
+        notes = self.data.setdefault("defer", {}).setdefault(series, {})
+        old = notes.get(day)
+        tries = int(old[1]) if isinstance(old, list) and len(old) > 1 else 0
+        tries += 1 if failed else 0
+        notes[day] = [until.isoformat(), tries]
+        for stale in sorted(notes)[: max(0, len(notes) - self.MAX_DONE_DAYS)]:
+            del notes[stale]
+        return tries
+
+    def failed_tries(self, series: str, day: str) -> int:
+        """How often this day failed repeatedly so far (0 if never)."""
+        old = self.data.get("defer", {}).get(series, {}).get(day)
+        return int(old[1]) if isinstance(old, list) and len(old) > 1 else 0
 
     def classify(
         self, series: str, day: str, points: list[Point]
@@ -359,6 +408,9 @@ async def append_points(
             done, result.error = await write_history_states(hass, entry, series, new)
         except HistoryTargetError as err:
             done, result.error = 0, err.key
+        except HistoryWriteCancelled as err:
+            ledger.record(series, iso, new[: err.done])  # handed over already; the caller saves
+            raise asyncio.CancelledError from err
         result.written = done
         ledger.record(series, iso, new[:done])  # only what was really handed over
     return result
@@ -399,13 +451,35 @@ class HistoryManager:
         self.latest: dict[str, tuple[int, float]] = {}  # newest live point per series, for sensors added later
         self._store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.history_ledger")
         self._ledger: Ledger | None = None
+        self._ledger_lock = asyncio.Lock()
         self._task: Any = None
 
     async def ledger(self) -> Ledger:
-        """The account's ledger (loaded once)."""
+        """The account's ledger (loaded once; concurrent first calls get the same object)."""
         if self._ledger is None:
-            self._ledger = Ledger(await self._store.async_load())
+            async with self._ledger_lock:
+                if self._ledger is None:
+                    self._ledger = Ledger(await self._store.async_load())
         return self._ledger
+
+    @contextlib.asynccontextmanager
+    async def persisting(self) -> AsyncIterator[None]:
+        """On cancellation, save the ledger before the cancellation goes on (nothing is lost on a reload)."""
+        try:
+            yield
+        except asyncio.CancelledError:
+            try:
+                await asyncio.shield(self.save())
+            except Exception as err:  # the cancellation must go on in any case
+                _LOGGER.debug("Ledger could not be saved while stopping: %s", err)
+            raise
+
+    async def async_stop(self) -> None:
+        """Cancel the initial load and wait until it has stopped (the entry is being unloaded)."""
+        task = self._task
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     async def save(self) -> None:
         """Write the ledger to disk."""
@@ -461,8 +535,8 @@ class HistoryManager:
                 _LOGGER.debug("History progress could not be shown: %s", err)
 
     async def _refresh_progress(self, series: str, ledger: Ledger) -> None:
-        yesterday = dt_util.now().date() - timedelta(days=1)
-        until = ledger.oldest_contiguous_done(series, yesterday) or ledger.floor(series)
+        newest = dt_util.now().date() - timedelta(days=BACKFILL_NEWEST_LAG_DAYS)
+        until = ledger.oldest_contiguous_done(series, newest) or ledger.floor(series)
         new = {"history_backfilled_until": until} if until else {}
         if new != self.progress.get(series, {}):
             self.progress[series] = new
@@ -490,15 +564,23 @@ class HistoryManager:
             _LOGGER.warning("History load stopped: %s", err)
 
     async def _backfill_series(self, api: Any, series: str) -> None:
+        """Go back day by day from the day before yesterday; yesterday belongs to the live path.
+
+        Yesterday can still be incomplete (the watch may not have synchronised its evening yet), so the
+        initial load never touches or finishes it. A day that fails repeatedly is put off and the load
+        moves on; a day Garmin did not really answer (empty body) is neither finished nor counted as the
+        end of the data for good: it is asked again later.
+        """
         ledger = await self.ledger()
         today = dt_util.now().date()
         oldest = today - timedelta(days=recorder_keep_days(self.hass))
-        floor = ledger.floor(series)
-        day = today - timedelta(days=1)
-        empty = failures = 0
+        floor = ledger.floor(series, today)
+        day = today - timedelta(days=BACKFILL_NEWEST_LAG_DAYS)
+        empty = attempts = failed_days = 0
+        unsure = False  # an empty day of the current streak was not a real answer
         while day >= oldest and not (floor and day.isoformat() <= floor):
             iso = day.isoformat()
-            if ledger.is_done(series, iso):
+            if ledger.is_done(series, iso) or ledger.is_deferred(series, iso, today):
                 day -= timedelta(days=1)
                 continue
             try:
@@ -506,7 +588,7 @@ class HistoryManager:
             except (HistoryTargetError, HistoryWriteUnsupported):
                 break
             try:
-                async with self.lock:
+                async with self.lock, self.persisting():
                     payload = await fetch_series(api, series, day)
                     parsed = HISTORY_SERIES[series].parse(payload)
                     if parsed is None:
@@ -521,21 +603,38 @@ class HistoryManager:
             except GarminAuthError:
                 break
             except GarminError as err:
-                failures += 1
+                attempts += 1
                 _LOGGER.debug("History load: %s failed for a day: %s", series, err)
-                if failures >= 3:
-                    break
+                if attempts >= BACKFILL_DAY_ATTEMPTS:
+                    tries = ledger.failed_tries(series, iso) + 1
+                    wait = min(2 ** (tries - 1), BACKFILL_MAX_DEFER_DAYS)
+                    ledger.defer(series, iso, today + timedelta(days=wait), failed=True)
+                    await self.save()
+                    attempts = 0
+                    failed_days += 1
+                    if failed_days >= BACKFILL_FAILED_DAYS_STOP:
+                        break  # not one bad day: Garmin is in trouble, the next run goes on
+                    day -= timedelta(days=1)
                 await self.sleep(self.throttle_s)
                 continue
             if result.error or result.unverified:
                 _LOGGER.debug("History load stopped for %s: %s", series, result.error or "recorder not readable")
                 break
-            failures = 0
-            ledger.mark_done(series, iso)
+            attempts = failed_days = 0
+            if parsed:
+                ledger.mark_done(series, iso)
+                empty, unsure = 0, False
+            else:
+                empty += 1
+                if payload is None:  # HTTP 204 / empty body: not a statement that there is no data
+                    unsure = True
+                    ledger.defer(series, iso, today + timedelta(days=BACKFILL_EMPTY_RETRY_DAYS))
+                else:
+                    ledger.mark_done(series, iso)
             await self.save()
-            empty = 0 if parsed else empty + 1
             if empty >= BACKFILL_EMPTY_STOP:
-                ledger.set_floor(series, iso)
+                hold = today + timedelta(days=BACKFILL_EMPTY_RETRY_DAYS) if unsure else None
+                ledger.set_floor(series, iso, hold_until=hold)
                 await self.save()
                 break
             day -= timedelta(days=1)
@@ -549,6 +648,14 @@ BACKFILL_THROTTLE_S = 20
 BACKFILL_RATE_PAUSE_S = 1800
 MAX_BACKFILL_DAYS = 400
 BACKFILL_EMPTY_STOP = 14
+# The newest day the initial load takes is this many days back: yesterday is the live path's.
+BACKFILL_NEWEST_LAG_DAYS = 2
+# A day is tried this often in a row, then put off (1, 2, 4 ... at most 7 days); two such days in a
+# row stop the run. A day without a real answer is asked again after this many days.
+BACKFILL_DAY_ATTEMPTS = 3
+BACKFILL_MAX_DEFER_DAYS = 7
+BACKFILL_FAILED_DAYS_STOP = 2
+BACKFILL_EMPTY_RETRY_DAYS = 7
 
 
 def manager_for(hass: Any, entry: Any) -> HistoryManager:

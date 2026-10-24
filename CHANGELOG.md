@@ -3,6 +3,33 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## 0.5.6
+
+### Fixed
+- Initial history load: an empty answer from Garmin (HTTP 204, no body) no longer marks a day as finished and no longer
+  sets the lower limit for good. Such days are asked again after a week; a limit found without real answers lapses after a
+  week, and limits written by older versions are checked once again. Days Garmin answers with real, empty data stay finished.
+- Initial history load: a day that keeps failing (three tries) is put off (1, 2, 4 ... at most 7 days) and the load goes on
+  with the older days instead of stopping there at every sync. Two such days in a row end the run; the next run continues.
+- Yesterday's evening is now fetched after the first sync that follows one from before midnight, also after 10 o'clock.
+  The initial load starts at the day before yesterday and never finishes yesterday (the live filling takes care of it).
+- Interrupting a write (reload, shutdown) now notes the points already handed to the recorder in the ledger and saves it, so
+  nothing is written twice afterwards.
+- The hourly-statistics and live-history job is bound to the config entry and is stopped (and awaited) when the entry is
+  unloaded; no second job and no second ledger after a reload. The ledger is loaded once even if two parts ask at the same time.
+- Switching off empty sensors once (first start after 24 hours with a sync of the day) is wired up for real: it uses the age
+  of the entry, and it is only marked as done when the decision could be taken.
+- The *last activity* sensors are never switched off by that cleanup any more (a strength workout without heart rate or
+  distance used to switch off heart rate and distance for good).
+- Groups (sleep, body, activities, profile) whose first refresh failed at the start are asked again after 5 minutes
+  (up to three times) instead of staying unavailable until their regular interval.
+- *Floors climbed* and *Floors descended* show Garmin's value unchanged (it was rounded to a whole number, so the total could
+  fall back); weight, muscle mass and bone mass are no longer rounded to two places (display precision only).
+
+### Changed
+- All services (`fetch`, `search_activities`, `download_activity`, `backfill_statistics`, `backfill_intraday`,
+  `backfill_history`) are now administrator-only. Automations and scripts are not affected.
+
 ## 0.5.5
 
 ### Fixed

@@ -192,7 +192,7 @@ class SensorTests(unittest.TestCase):
         self.assertEqual(val("hydration"), 1500)
         self.assertEqual(val("last_activity"), "Morning Run")
         self.assertEqual(val("hr_max_used"), 185)
-        self.assertEqual(val("floors_ascended"), 8)
+        self.assertEqual(val("floors_ascended"), 7.6)
         self.assertEqual(val("wellness_activities"), 2)
         self.assertEqual(val("last_sync").year, 2026)
         self.assertEqual(by["body_battery"].attrs_fn(DATA["daily"])["values"], [[1700000000000, 50]])

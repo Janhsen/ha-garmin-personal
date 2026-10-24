@@ -78,7 +78,7 @@ Viele Detailsensoren sind standardmäßig **deaktiviert** und können einzeln ak
 Beim ersten vollständigen Abruf werden außerdem einmalig die Sensoren deaktiviert, für die Garmin
 zwar den Endpunkt beantwortet, aber keinen Wert für das Feld liefert (z. B. Körperfett ohne
 Körperanalyse-Waage). Endpunkte, die noch gar nichts geliefert haben (z. B. Schlaf am frühen Morgen),
-bleiben unberührt. Das gilt nur für Körper- und Aktivitätssensoren, erst wenn der Eintrag mindestens 24 Stunden alt
+bleiben unberührt. Das gilt nur für Körper- und Profilsensoren (nie für die Sensoren der *letzten Aktivität*, die nur die neueste Aktivität beschreiben), erst wenn der Eintrag mindestens 24 Stunden alt
 ist und die Uhr am selben Tag synchronisiert hat; die Schlüssel stehen im Log auf Info-Ebene. Wieder einschalten geht
 jederzeit unter Einstellungen → Entitäten.
 Zusätzlich: Binärsensor *Uhr-Synchronisation überfällig* und Event-Entität *Aktivität*.
@@ -158,6 +158,9 @@ Dashboard: Eine *Statistik-Diagramm*-Karte oder eine einfache Entitätenkarte mi
 `sensor.alex_schlafwert` und `sensor.alex_ruhepuls` zeigt die wichtigsten Werte.
 
 ## Services (Antwort als Daten, z. B. für Skripte und Templates)
+
+Alle Services sind **nur für Administratoren** (sie liefern Gesundheitsdaten, schreiben Dateien und Statistiken).
+Automationen und Skripte rufen sie wie gewohnt auf; ein normales Benutzerkonto kann das nicht.
 
 Bei **mehreren Konten** braucht jeder Service das Feld *Konto*. Im Formular wählst du es aus einer Liste; in YAML ist
 es die Config-Entry-ID (Service-Formular öffnen, Konto wählen, in den YAML-Modus wechseln und den Wert kopieren).

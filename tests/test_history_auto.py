@@ -116,26 +116,107 @@ def make_manager(env, api=None):
     return mgr, entry
 
 
+class LedgerAndCancel(Env):
+    def test_concurrent_first_access_gives_one_ledger(self):
+        import asyncio
+
+        mgr, _ = make_manager(self)
+        loads = []
+        orig = mgr._store.async_load
+
+        async def slow_load():
+            loads.append(1)
+            await asyncio.sleep(0.01)
+            return await orig()
+
+        mgr._store.async_load = slow_load
+
+        async def both():
+            return await asyncio.gather(mgr.ledger(), mgr.ledger(), mgr.ledger())
+
+        ledgers = stubs.run(both())
+        self.assertIs(ledgers[0], ledgers[1])
+        self.assertIs(ledgers[1], ledgers[2])
+        self.assertEqual(len(loads), 1)
+
+    def test_cancelled_write_notes_the_points_already_handed_over(self):
+        mgr, entry = make_manager(self)
+        pts = [(ms(2026, 10, 24, 8, i), 60.0 + i) for i in range(10)]
+        led = stubs.run(mgr.ledger())
+        calls = []
+
+        async def cancelled_after_four(hass, entry, series, points):
+            calls.append([ts for ts, _ in points])
+            raise hs.HistoryWriteCancelled(4)
+
+        self.patch(hs, "write_history_states", cancelled_after_four)
+
+        async def run():
+            async with mgr.persisting():
+                await hs.append_points(None, entry, led, "heart_rate", D, pts)
+
+        with self.assertRaises(__import__("asyncio").CancelledError):
+            stubs.run(run())
+        saved = stubs.Store.instances[-1].saved[-1]  # the ledger was saved on the way out
+        self.assertEqual(sorted(int(t) for t in saved["series"]["heart_rate"][D.isoformat()]["p"]),
+                         [ts for ts, _ in pts[:4]])
+        # after a reload the next run writes only the rest
+        stubs.Store.preset = saved
+        mgr2, entry2 = make_manager(self)
+        led2 = stubs.run(mgr2.ledger())
+        rest = []
+
+        async def writer(hass, entry, series, points):
+            rest.extend(ts for ts, _ in points)
+            return len(points), None
+
+        self.patch(hs, "write_history_states", writer)
+        res = stubs.run(hs.append_points(None, entry2, led2, "heart_rate", D, pts))
+        self.assertEqual((res.written, res.already), (6, 4))
+        self.assertEqual(sorted(rest), [ts for ts, _ in pts[4:]])
+
+    def test_stop_cancels_the_running_initial_load(self):
+        import asyncio
+
+        mgr, _ = make_manager(self)
+
+        async def scenario():
+            started = asyncio.Event()
+
+            async def forever():
+                started.set()
+                await asyncio.sleep(3600)
+
+            mgr._task = asyncio.ensure_future(forever())
+            await started.wait()
+            await mgr.async_stop()
+            return mgr._task.cancelled()
+
+        self.assertTrue(stubs.run(scenario()))
+
+
 class InitialLoad(Env):
     def run_load(self, mgr, api):
         stubs.run(mgr.run_backfill(api))
 
-    def test_goes_back_from_yesterday_one_day_per_throttle_and_never_marks_today(self):
+    def test_goes_back_from_the_day_before_yesterday_one_day_per_throttle(self):
+        self.keep = 4
         api = BackfillApi()
-        for n in (1, 2, 3):
+        for n in (1, 2, 3, 4):
             day = D - timedelta(days=n)
             api.hr[day] = hr_payload([(ms(day.year, day.month, day.day, 8, 0), 60)])
         mgr, _ = make_manager(self, api)
         self.target_errors = {"spo2": "history_sensor_disabled", "body_battery": "history_sensor_disabled"}
         self.run_load(mgr, api)
         days = [d for s, d in api.requests if s == "heart_rate"]
-        self.assertEqual(days, [D - timedelta(days=n) for n in (1, 2, 3)])  # newest first, today excluded
+        self.assertEqual(days, [D - timedelta(days=n) for n in (2, 3, 4)])  # newest first, yesterday is the live path's
         self.assertEqual(self.sleeps, [20, 20, 20])
         self.assertEqual(self.count(self.written, "heart_rate"), 3)
         led = stubs.run(mgr.ledger())
         self.assertFalse(led.is_done("heart_rate", D.isoformat()))
-        self.assertTrue(all(led.is_done("heart_rate", (D - timedelta(days=n)).isoformat()) for n in (1, 2, 3)))
-        self.assertEqual(mgr.progress["heart_rate"], {"history_backfilled_until": "2026-10-21"})
+        self.assertFalse(led.is_done("heart_rate", (D - timedelta(days=1)).isoformat()))  # may still be incomplete
+        self.assertTrue(all(led.is_done("heart_rate", (D - timedelta(days=n)).isoformat()) for n in (2, 3, 4)))
+        self.assertEqual(mgr.progress["heart_rate"], {"history_backfilled_until": "2026-10-20"})
         self.assertEqual(api.n("spo2"), 0)  # disabled series: silently nothing
 
     def test_resume_after_restart_asks_nothing_twice(self):
@@ -169,32 +250,119 @@ class InitialLoad(Env):
         mgr, _ = make_manager(self, api)
         self.target_errors = {"spo2": "history_sensor_disabled", "body_battery": "history_sensor_disabled"}
         self.run_load(mgr, api)
-        self.assertEqual(api.n("heart_rate"), 20 + 14)  # 14 empty days after the last day with data
+        self.assertEqual(api.n("heart_rate"), 19 + 14)  # from the day before yesterday; 14 empty days after the last data
 
     def test_rate_limit_pauses_30_minutes_and_retries_the_same_day(self):
-        self.keep = 1
+        self.keep = 2
         api = BackfillApi()
         api.errors = [api_mod.GarminRateLimitError("429")]
         mgr, _ = make_manager(self, api)
         self.target_errors = {"spo2": "history_sensor_disabled", "body_battery": "history_sensor_disabled"}
         self.run_load(mgr, api)
         self.assertEqual(self.sleeps[0], 1800)
-        self.assertEqual([d for _, d in api.requests], [D - timedelta(days=1)] * 2)
+        self.assertEqual([d for _, d in api.requests], [D - timedelta(days=2)] * 2)
 
     def test_auth_error_and_repeated_errors_stop_without_marking_days(self):
         self.keep = 5
-        for errors in ([api_mod.GarminAuthError("bad")], [api_mod.GarminApiError("x", 500)] * 5):
+        for errors in ([api_mod.GarminAuthError("bad")], [api_mod.GarminApiError("x", 500)] * 9):
             api = BackfillApi()
             api.errors = list(errors)
             mgr, _ = make_manager(self, api)
             self.target_errors = {"spo2": "history_sensor_disabled", "body_battery": "history_sensor_disabled"}
             self.run_load(mgr, api)
-            self.assertFalse(stubs.run(mgr.ledger()).is_done("heart_rate", (D - timedelta(days=1)).isoformat()))
-            self.assertLessEqual(api.n(), 3)
+            led = stubs.run(mgr.ledger())
+            self.assertFalse(any(led.is_done("heart_rate", (D - timedelta(days=n)).isoformat()) for n in range(1, 6)))
+            self.assertLessEqual(api.n(), 6)  # an auth error at once, otherwise two bad days of three tries each
+
+    def test_a_day_that_keeps_failing_is_put_off_and_the_load_goes_on(self):
+        self.keep = 8
+        bad = D - timedelta(days=4)
+
+        class Api(BackfillApi):
+            async def get_heart_rate(self, day):
+                self.requests.append(("heart_rate", day))
+                if day == bad:
+                    raise api_mod.GarminApiError("HTTP 500", 500)
+                return hr_payload([(ms(day.year, day.month, day.day, 8, 0), 60)])
+
+        api = Api()
+        mgr, _ = make_manager(self, api)
+        self.target_errors = {"spo2": "history_sensor_disabled", "body_battery": "history_sensor_disabled"}
+        self.run_load(mgr, api)
+        led = stubs.run(mgr.ledger())
+        asked = [d for _, d in api.requests]
+        self.assertEqual(asked.count(bad), 3)  # three tries, then it is put off
+        self.assertIn(D - timedelta(days=8), asked)  # everything behind it was loaded
+        self.assertFalse(led.is_done("heart_rate", bad.isoformat()))
+        self.assertTrue(led.is_deferred("heart_rate", bad.isoformat(), D))
+        n = api.n()
+        self.run_load(mgr, api)
+        self.assertEqual(api.n(), n)  # not asked again the same day
+        self.today = D + timedelta(days=1)  # the next day it gets another chance, with a longer wait after that
+        self.run_load(mgr, api)
+        self.assertEqual([d for _, d in api.requests[n:]].count(bad), 3)
+        led = stubs.run(mgr.ledger())
+        self.assertTrue(led.is_deferred("heart_rate", bad.isoformat(), D + timedelta(days=2)))
+
+    def test_two_bad_days_in_a_row_end_the_run_but_not_the_next_one(self):
+        self.keep = 8
+        bad = {D - timedelta(days=2), D - timedelta(days=3)}
+
+        class Api(BackfillApi):
+            async def get_heart_rate(self, day):
+                self.requests.append(("heart_rate", day))
+                if day in bad:
+                    raise api_mod.GarminApiError("HTTP 500", 500)
+                return hr_payload([(ms(day.year, day.month, day.day, 8, 0), 60)])
+
+        api = Api()
+        mgr, _ = make_manager(self, api)
+        self.target_errors = {"spo2": "history_sensor_disabled", "body_battery": "history_sensor_disabled"}
+        self.run_load(mgr, api)
+        self.assertEqual(api.n(), 6)
+        self.run_load(mgr, api)  # the bad days are skipped, the rest is loaded
+        self.assertIn(D - timedelta(days=8), [d for _, d in api.requests])
+
+    def test_empty_answers_do_not_finish_days_and_the_floor_lapses(self):
+        self.keep = 60
+        api = BackfillApi()  # every day: no body at all (HTTP 204)
+        mgr, _ = make_manager(self, api)
+        self.target_errors = {"spo2": "history_sensor_disabled", "body_battery": "history_sensor_disabled"}
+        self.run_load(mgr, api)
+        led = stubs.run(mgr.ledger())
+        self.assertEqual(api.n(), 14)
+        self.assertFalse(any(led.is_done("heart_rate", (D - timedelta(days=n)).isoformat()) for n in range(2, 16)))
+        self.assertIsNotNone(led.floor("heart_rate", D))
+        self.run_load(mgr, api)
+        self.assertEqual(api.n(), 14)  # asked again only after a week
+        for n in range(2, 60):  # Garmin has data after all
+            day = D - timedelta(days=n)
+            api.hr[day] = hr_payload([(ms(day.year, day.month, day.day, 8, 0), 60)])
+        self.today = D + timedelta(days=8)
+        self.run_load(mgr, api)
+        self.assertGreater(self.count(self.written, "heart_rate"), 14)
+        self.assertTrue(stubs.run(mgr.ledger()).is_done("heart_rate", (D - timedelta(days=2)).isoformat()))
+
+    def test_real_empty_days_are_done_and_the_floor_stays(self):
+        self.keep = 60
+        api = BackfillApi()
+        for n in range(2, 60):
+            api.hr[D - timedelta(days=n)] = hr_payload([])  # Garmin answers: nothing measured
+        mgr, _ = make_manager(self, api)
+        self.target_errors = {"spo2": "history_sensor_disabled", "body_battery": "history_sensor_disabled"}
+        self.run_load(mgr, api)
+        led = stubs.run(mgr.ledger())
+        self.assertTrue(all(led.is_done("heart_rate", (D - timedelta(days=n)).isoformat()) for n in range(2, 16)))
+        self.today = D + timedelta(days=30)
+        self.assertIsNotNone(led.floor("heart_rate", self.today))
+
+    def test_a_floor_from_an_older_version_does_not_hold(self):
+        led = hs.Ledger({"v": 1, "series": {}, "floor": {"heart_rate": "2026-10-01"}})
+        self.assertIsNone(led.floor("heart_rate", D))
 
     def test_write_error_or_unreadable_recorder_stops_and_marks_nothing(self):
         self.keep = 3
-        day = D - timedelta(days=1)
+        day = D - timedelta(days=2)
         api = BackfillApi()
         api.hr[day] = hr_payload([(ms(day.year, day.month, day.day, 8, 0), 60)])
         mgr, _ = make_manager(self, api)
@@ -216,7 +384,7 @@ class InitialLoad(Env):
 
     def test_unknown_format_stops_the_series(self):
         api = BackfillApi()
-        api.hr[D - timedelta(days=1)] = {"surprise": 1}
+        api.hr[D - timedelta(days=2)] = {"surprise": 1}
         mgr, _ = make_manager(self, api)
         self.target_errors = {"spo2": "history_sensor_disabled", "body_battery": "history_sensor_disabled"}
         self.run_load(mgr, api)
@@ -241,6 +409,7 @@ class InitialLoad(Env):
         self.assertGreater(api.n(), 0)
 
     def test_enabling_a_series_later_loads_everything_back_to_the_limit_without_repeating_the_other(self):
+        self.keep = 4
         api = BackfillApi()
         for series_store in (api.hr, api.spo2):
             for n in range(0, 8):
@@ -248,7 +417,7 @@ class InitialLoad(Env):
                 series_store[day] = hr_payload([(ms(day.year, day.month, day.day, 8, 0), 60)]) if series_store is api.hr \
                     else spo2_payload([(ms(day.year, day.month, day.day, 8, 0), 95)])
         mgr, _ = make_manager(self, api)
-        # run 1: only SpO2 is enabled; days 23, 22, 21 are loaded
+        # run 1: only SpO2 is enabled; days 22, 21, 20 are loaded
         self.target_errors = {"heart_rate": "history_sensor_disabled", "body_battery": "history_sensor_disabled"}
         self.run_load(mgr, api)
         self.assertEqual((api.n("spo2"), api.n("heart_rate")), (3, 0))
@@ -259,9 +428,9 @@ class InitialLoad(Env):
         self.run_load(mgr, api)
         today = self.today
         self.assertEqual(sorted(d for s, d in api.requests if s == "heart_rate"),
-                         [today - timedelta(days=n) for n in (3, 2, 1)])  # full load up to the limit
+                         [today - timedelta(days=n) for n in (4, 3, 2)])  # full load up to the limit
         self.assertEqual(sorted(d for s, d in api.requests if s == "spo2"),
-                         [today - timedelta(days=2), today - timedelta(days=1)])  # only the new gap, day 23 is done
+                         [today - timedelta(days=3), today - timedelta(days=2)])  # only the new gap, day 22 is done
 
     def test_recorder_exclusion_gives_a_repair_hint_only_then(self):
         api = BackfillApi()
@@ -273,6 +442,9 @@ class InitialLoad(Env):
 
     def test_progress_attribute_is_small_and_on_the_sensor(self):
         api = BackfillApi()
+        for n in (2, 3):
+            day = D - timedelta(days=n)
+            api.hr[day] = hr_payload([(ms(day.year, day.month, day.day, 8, 0), 60)])
         mgr, entry = make_manager(self, api)
         self.target_errors = {"spo2": "history_sensor_disabled", "body_battery": "history_sensor_disabled"}
         self.run_load(mgr, api)
@@ -404,9 +576,25 @@ class Live(LiveBase):
     def test_start_of_the_initial_load_is_requested_by_the_job(self):
         c = self.make()
         started = []
-        self.entry.async_create_background_task = lambda hass, coro, name: (started.append(name), coro.close())[0]
+
+        class Task:
+            def done(self):
+                return False
+
+            def add_done_callback(self, callback):
+                pass
+
+        def create(hass, coro, name):
+            started.append(name)
+            if "history load" in name:
+                coro.close()
+            else:
+                self.hass.tasks.append(coro)  # the side job itself runs inside the cycle
+            return Task()
+
+        self.entry.async_create_background_task = create
         self.cycle(c)
-        self.assertEqual(len(started), 1)
+        self.assertEqual(sorted(n.split(" ", 1)[1] for n in started), ["history load", "intraday job"])
 
     def test_write_failure_is_swallowed(self):
         self.write_error = "boom"
@@ -441,20 +629,20 @@ class HrvHistory(Env):
 
     def test_initial_load_writes_whole_nights_under_the_wake_day(self):
         self.only_hrv()
-        self.keep = 2
+        self.keep = 3
         api = BackfillApi()
-        api.hrv = {D - timedelta(days=n): hrv_payload(night(D - timedelta(days=n))) for n in (1, 2)}
+        api.hrv = {D - timedelta(days=n): hrv_payload(night(D - timedelta(days=n))) for n in (2, 3)}
         mgr, _ = make_manager(self, api)
         stubs.run(mgr.run_backfill(api))
-        self.assertEqual([d for s, d in api.requests], [D - timedelta(days=1), D - timedelta(days=2)])
+        self.assertEqual([d for s, d in api.requests], [D - timedelta(days=2), D - timedelta(days=3)])
         stamps = [t for s, ts in self.written if s == "hrv" for t in ts]
         self.assertEqual(len(stamps), 6)
         led = stubs.run(mgr.ledger())
-        wake = (D - timedelta(days=1)).isoformat()
+        wake = (D - timedelta(days=2)).isoformat()
         self.assertTrue(led.knows("hrv", wake) and led.is_done("hrv", wake))
         self.assertTrue(any(t < ms(2026, 10, 23, 0, 0) for t in stamps))  # the evening before the wake day
         self.assertFalse(led.knows("hrv", D.isoformat()))
-        self.assertEqual(mgr.progress["hrv"], {"history_backfilled_until": (D - timedelta(days=2)).isoformat()})
+        self.assertEqual(mgr.progress["hrv"], {"history_backfilled_until": (D - timedelta(days=3)).isoformat()})
 
     def test_service_and_recorder_check_use_the_night_window(self):
         self.only_hrv()
@@ -474,7 +662,7 @@ class HrvHistory(Env):
         self.assertEqual(seen, [("hrv", D)])
 
     def test_enabling_hrv_later_loads_it_to_the_limit_without_asking_heart_rate_again(self):
-        self.keep = 3
+        self.keep = 4
         api = BackfillApi()
         for n in range(0, 8):
             day = D - timedelta(days=n)
@@ -489,12 +677,74 @@ class HrvHistory(Env):
         api.requests.clear()
         stubs.run(mgr.run_backfill(api))
         today = self.today
-        self.assertEqual(sorted(d for s, d in api.requests if s == "hrv"), [today - timedelta(days=n) for n in (3, 2, 1)])
+        self.assertEqual(sorted(d for s, d in api.requests if s == "hrv"), [today - timedelta(days=n) for n in (4, 3, 2)])
         self.assertEqual(sorted(d for s, d in api.requests if s == "heart_rate"),
-                         [today - timedelta(days=2), today - timedelta(days=1)])
+                         [today - timedelta(days=3), today - timedelta(days=2)])
         api.requests.clear()
         stubs.run(mgr.run_backfill(api))
         self.assertEqual(api.requests, [])  # everything is done
+
+
+class LateSync(LiveBase):
+    def test_sync_after_midnight_brings_yesterdays_evening_even_after_ten(self):
+        self.api.sync = "2026-10-23T18:00:00.0"
+        self.clock["now"] = utc(2026, 10, 24, 0, 30)
+        c = self.make()
+        self.cycle(c)  # the first run of the day
+        first = len(self.hist("heart_rate"))
+        evening = ms(2026, 10, 23, 23, 50)
+        self.api.hr[tic.YESTERDAY] = hr_payload([(ms(2026, 10, 23, 22, 10), 70), (ms(2026, 10, 23, 23, 40), 72),
+                                                  (evening, 74)])
+        self.api.sync = "2026-10-24T11:00:00.0"  # the phone connects at 11 o'clock
+        self.clock["now"] = utc(2026, 10, 24, 11, 5)
+        before = self.api.n("heart_rate", tic.YESTERDAY)
+        self.cycle(c)
+        self.assertEqual(self.api.n("heart_rate", tic.YESTERDAY), before + 1)
+        self.assertIn(evening, self.hist("heart_rate")[first:])
+        self.assertEqual(len(set(self.hist("heart_rate"))), len(self.hist("heart_rate")))  # nothing twice
+
+    def test_later_syncs_of_the_day_do_not_ask_again(self):
+        self.api.sync = "2026-10-23T18:00:00.0"
+        c = self.make()
+        self.cycle(c)
+        self.api.sync = "2026-10-24T11:00:00.0"
+        self.clock["now"] = utc(2026, 10, 24, 11, 5)
+        self.cycle(c)
+        before = self.api.n("heart_rate", tic.YESTERDAY)
+        self.api.sync = "2026-10-24T15:00:00.0"  # the previous sync was today: yesterday is complete
+        self.clock["now"] = utc(2026, 10, 24, 15, 5)
+        self.cycle(c)
+        self.assertEqual(self.api.n("heart_rate", tic.YESTERDAY), before)
+
+    def test_the_job_is_bound_to_the_entry_and_stopped_with_it(self):
+        import asyncio
+
+        c = self.make()
+        started = []
+
+        async def scenario():
+            loop = asyncio.get_running_loop()
+
+            def create(hass, coro, name):
+                started.append(name)
+                return loop.create_task(coro, name=name)
+
+            self.entry.async_create_background_task = create
+            gate = asyncio.Event()
+
+            async def blocked():
+                await gate.wait()
+
+            c._start_job(blocked())
+            await asyncio.sleep(0)
+            alive = len(c._jobs)
+            await c.async_stop_jobs()
+            await asyncio.sleep(0)
+            return alive, len(c._jobs)
+
+        self.assertEqual(stubs.run(scenario()), (1, 0))
+        self.assertEqual(started, ["garmin_personal intraday job"])
+        self.assertEqual(self.hass.tasks, [])  # nothing went to the loose hass task list
 
 
 class HrvLive(LiveBase):
@@ -575,7 +825,7 @@ class LatestValue(LiveBase):
 
     def test_old_days_never_touch_the_state(self):
         api = BackfillApi()
-        day = D - timedelta(days=1)
+        day = D - timedelta(days=2)
         api.hr[day] = hr_payload([(ms(day.year, day.month, day.day, 8, 0), 60)])
         mgr, entry = make_manager(self, api)
         self.entry, self.hass = entry, mgr.hass
@@ -586,7 +836,7 @@ class LatestValue(LiveBase):
         self.assertIsNone(sensor.native_value)
         led = stubs.run(mgr.ledger())
         res = stubs.run(hs.append_points(mgr.hass, entry, led, "heart_rate", day - timedelta(days=1),
-                                         [(ms(2026, 10, 22, 8, 0), 58.0)]))  # a service run for an old day
+                                         [(ms(2026, 10, 21, 8, 0), 58.0)]))  # a service run for an old day
         self.assertEqual((res.written, sensor.native_value), (1, None))
 
     def test_progress_updates_keep_the_value(self):

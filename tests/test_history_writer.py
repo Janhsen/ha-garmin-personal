@@ -137,6 +137,25 @@ class Writing(Base):
         self.assertTrue(all(e.data["old_state"] is not None and e.event_type == "state_changed" for e in events))
         self.assertEqual({e.data["entity_id"] for e in events}, {"sensor.alex_heart_rate_history"})
 
+    def test_cancellation_reports_how_many_points_were_handed_over(self):
+        import asyncio
+
+        orig = hs.YIELD_EVERY
+        hs.YIELD_EVERY = 2
+        self.addCleanup(setattr, hs, "YIELD_EVERY", orig)
+        points = [(ms(2026, 10, 24, 8, m), 60.0 + m) for m in range(10)]
+
+        async def scenario():
+            task = asyncio.ensure_future(hs.write_history_states(object(), self.entry, "heart_rate", points))
+            await asyncio.sleep(0)  # runs up to the first pause (after 2 points)
+            task.cancel()
+            return await asyncio.gather(task, return_exceptions=True)
+
+        (result,) = stubs.run(scenario())
+        self.assertIsInstance(result, hs.HistoryWriteCancelled)
+        self.assertEqual(result.done, len(self.rec.queue))  # exactly what reached the recorder
+        self.assertEqual(result.done, 2)
+
     def test_percent_series_unit(self):
         self.reg.ids[("sensor", "garmin_personal", "E1_spo2_history")] = "sensor.alex_spo2_history"
         self.reg.entries["sensor.alex_spo2_history"] = type("E", (), {"disabled_by": None})()

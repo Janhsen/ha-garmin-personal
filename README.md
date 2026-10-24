@@ -74,7 +74,7 @@ every 2 hours, body values and activities hourly).
 Many detail sensors are **disabled by default** and can be enabled one by one. After the first full fetch, sensors
 for which Garmin answers the endpoint but returns no value for the field (e.g. body fat without a body-composition
 scale) are disabled once. Endpoints that have not delivered anything yet (e.g. sleep early in the morning) are left
-alone. This happens only for body and activity sensors, only once the entry is at least 24 hours old and the watch
+alone. This happens only for body and profile sensors (never for the *last activity* sensors, which describe just the newest activity), only once the entry is at least 24 hours old and the watch
 has synced on the same day; the keys are written to the log at info level. You can re-enable any sensor under
 Settings → Entities. Also included: binary sensor *Watch sync overdue*
 and the event entity *Activity*.
@@ -149,6 +149,9 @@ Dashboard: a *Statistics graph* card or a plain entities card with `sensor.alex_
 and `sensor.alex_resting_heart_rate` shows the main values.
 
 ## Services (responses as data, e.g. for scripts and templates)
+
+All services are **administrator-only** (they return health data, write files and write statistics). Automations and scripts
+can call them as usual; a normal user account cannot.
 
 With **several accounts** every service needs the *Account* field. In the form you pick it from a list; in YAML it is
 the config entry ID (open the service form, pick the account, switch to YAML mode and copy the value). Example with a

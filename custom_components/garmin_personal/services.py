@@ -19,6 +19,7 @@ from homeassistant.core import (
 )
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.util import dt as dt_util
 
 from .api import ENDPOINT_NAMES, GarminAuthError, GarminError, GarminRateLimitError, split_range
@@ -513,38 +514,43 @@ def async_register_services(hass: HomeAssistant) -> None:
             result["last_completed_day"] = last_done.isoformat() if last_done else None
         return result
 
-    hass.services.async_register(
-        DOMAIN, SERVICE_FETCH, fetch, schema=FETCH_SCHEMA, supports_response=SupportsResponse.ONLY
+    async_register_admin_service(
+        hass, DOMAIN, SERVICE_FETCH, fetch, schema=FETCH_SCHEMA, supports_response=SupportsResponse.ONLY
     )
-    hass.services.async_register(
+    async_register_admin_service(
+        hass,
         DOMAIN,
         SERVICE_SEARCH_ACTIVITIES,
         search_activities,
         schema=SEARCH_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
-    hass.services.async_register(
+    async_register_admin_service(
+        hass,
         DOMAIN,
         SERVICE_DOWNLOAD_ACTIVITY,
         download_activity,
         schema=DOWNLOAD_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
-    hass.services.async_register(
+    async_register_admin_service(
+        hass,
         DOMAIN,
         SERVICE_BACKFILL,
         backfill,
         schema=BACKFILL_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
-    hass.services.async_register(
+    async_register_admin_service(
+        hass,
         DOMAIN,
         SERVICE_BACKFILL_HISTORY,
         backfill_history,
         schema=HISTORY_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
-    hass.services.async_register(
+    async_register_admin_service(
+        hass,
         DOMAIN,
         SERVICE_BACKFILL_INTRADAY,
         backfill_intraday,
@@ -700,7 +706,8 @@ async def _run_history_backfill(
                 note_unknown_format(key)
                 unreadable.add(key)
                 continue
-            res = await append_points(hass, entry, ledger, key, day, parsed, confirm=confirm)
+            async with manager.persisting():
+                res = await append_points(hass, entry, ledger, key, day, parsed, confirm=confirm)
             totals["written"] += res.written
             totals["already"] += res.already
             totals["changed"] += res.changed

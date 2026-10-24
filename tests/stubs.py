@@ -455,6 +455,24 @@ def _track_interval(hass, action, interval):
     return cancel
 
 
+LATER: list[dict] = []
+
+
+def _call_later(hass, delay, action):
+    timer = {"action": action, "delay": delay, "cancelled": False}
+    LATER.append(timer)
+
+    def cancel():
+        timer["cancelled"] = True
+
+    return cancel
+
+
+def _register_admin_service(hass, domain, service, service_func, schema=None, *, supports_response=None):
+    hass.services.async_register(domain, service, service_func, schema=schema, supports_response=supports_response)
+    hass.services.registered[(domain, service)]["admin"] = True
+
+
 def _redact(data, to_redact):
     return {k: ("**REDACTED**" if k in to_redact else v) for k, v in data.items()}
 
@@ -553,6 +571,7 @@ class FakeEntry:
         self.version = 1
         self.minor_version = 1
         self.unload_callbacks = []
+        self.created_at = datetime(2026, 1, 1, tzinfo=UTC)
         if runtime_data != "UNSET":
             self.runtime_data = runtime_data
 
@@ -619,7 +638,9 @@ def install() -> None:
          IssueSeverity=make_enum("IssueSeverity", "WARNING", "ERROR"),
          async_create_issue=_create_issue, async_delete_issue=_delete_issue)
     TIMERS.clear()
-    stub("homeassistant.helpers.event", async_track_time_interval=_track_interval)
+    LATER.clear()
+    stub("homeassistant.helpers.event", async_track_time_interval=_track_interval, async_call_later=_call_later)
+    stub("homeassistant.helpers.service", async_register_admin_service=_register_admin_service)
     stub("homeassistant.components.diagnostics", async_redact_data=_redact)
     stub("homeassistant.helpers.storage", Store=Store)
     stub("homeassistant.helpers.update_coordinator", CoordinatorEntity=CoordinatorEntity,
