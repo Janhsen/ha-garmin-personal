@@ -302,10 +302,18 @@
         "name": "Nächster Schlafbedarf"
       },
       "sleep_feedback": {
-        "name": "Schlaf-Feedback"
+        "name": "Schlaf-Feedback",
+        "state": {
+          "positive_recovering": "Positiv: erholsam",
+          "negative_not_enough_rem": "Negativ: zu wenig REM-Schlaf"
+        }
       },
       "sleep_insight": {
-        "name": "Schlaf-Einblick"
+        "name": "Schlaf-Einblick",
+        "state": {
+          "positive_restful_day": "Positiv: erholsamer Tag",
+          "none": "Keine"
+        }
       },
       "sleep_breathing_disruption": {
         "name": "Atemaussetzer"

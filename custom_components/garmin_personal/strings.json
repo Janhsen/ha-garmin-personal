@@ -302,10 +302,18 @@
         "name": "Next sleep need"
       },
       "sleep_feedback": {
-        "name": "Sleep feedback"
+        "name": "Sleep feedback",
+        "state": {
+          "positive_recovering": "Positive: recovering",
+          "negative_not_enough_rem": "Negative: not enough REM"
+        }
       },
       "sleep_insight": {
-        "name": "Sleep insight"
+        "name": "Sleep insight",
+        "state": {
+          "positive_restful_day": "Positive: restful day",
+          "none": "None"
+        }
       },
       "sleep_breathing_disruption": {
         "name": "Breathing disruption"

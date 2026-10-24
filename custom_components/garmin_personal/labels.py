@@ -15,6 +15,15 @@ LABELS: dict[str, dict[str, tuple[str, str]]] = {
         "fair": ("Fair", "Mittelmäßig"),
         "poor": ("Poor", "Schlecht"),
     },
+    "sleep_feedback": {
+        # Only keys seen in real responses; the words of the key are translated literally.
+        "positive_recovering": ("Positive: recovering", "Positiv: erholsam"),
+        "negative_not_enough_rem": ("Negative: not enough REM", "Negativ: zu wenig REM-Schlaf"),
+    },
+    "sleep_insight": {
+        "positive_restful_day": ("Positive: restful day", "Positiv: erholsamer Tag"),
+        "none": ("None", "Keine"),
+    },
     "hrv_status": {
         "balanced": ("Balanced", "Ausgeglichen"),
         "unbalanced": ("Unbalanced", "Unausgeglichen"),

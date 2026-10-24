@@ -88,8 +88,9 @@ Alle Namen, Services, Dialoge und Hinweise gibt es auf Deutsch und Englisch (`st
 erzeugt mit `scripts/gen_translations.py`). Feste Wortlisten von Garmin (Bewertung EXCELLENT/GOOD/FAIR/POOR,
 HRV-Status, Stressstufe, Aktivitätstyp, Schlaf-Teilwerte) sind ENUM-Sensoren: Der Zustand bleibt der englische
 Schlüssel (z. B. `fair`), die Anzeige wird übersetzt. Unbekannte Werte erscheinen unübersetzt, nichts wird
-erfunden. Die Satztexte (Schlaf-Feedback, Einsicht, HRV-Feedback) sind nicht übersetzt, weil ihre Schlüssel
-nicht bekannt sind.
+erfunden. Schlaf-Feedback und Schlaf-Einsicht sind nur für bisher beobachtete Schlüssel übersetzt (wörtlich aus dem Schlüssel).
+Das HRV-Feedback (`HRV_BALANCED_2` bis `_8`, `ONBOARDING_1`) bleibt unübersetzt: Es sind nummerierte Textvarianten
+von Garmin, deren Wortlaut die API nicht liefert.
 
 ## Verlauf und Langzeitstatistik
 
