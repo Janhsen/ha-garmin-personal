@@ -30,4 +30,13 @@ jobs:
         if: steps.exists.outputs.found == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.version.outputs.tag }}" garmin_personal.zip --target "$GITHUB_SHA" --title "${{ steps.version.outputs.tag }}" --generate-notes
+        run: |
+          v="${{ steps.version.outputs.tag }}"
+          python3 - "$v" > notes.md <<'PY'
+          import re, sys
+          v = sys.argv[1].lstrip("v")
+          m = re.search(r"^## " + re.escape(v) + r"\n(.*?)(?=^## |\Z)", open("CHANGELOG.md").read(), re.S | re.M)
+          print(m.group(1).strip() if m else "")
+          PY
+          if [ -s notes.md ]; then n="--notes-file notes.md"; else n="--generate-notes"; fi
+          gh release create "$v" garmin_personal.zip --target "$GITHUB_SHA" --title "$v" $n
