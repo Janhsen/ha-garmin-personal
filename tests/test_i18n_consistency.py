@@ -1,6 +1,8 @@
 """Translations: generated files match the checked-in ones, en/de agree, nothing dead, nothing missing."""
 
+import contextlib
 import importlib
+import io
 import importlib.util
 import json
 import re
@@ -50,7 +52,8 @@ class GeneratedFiles(unittest.TestCase):
         self.assertEqual((PKG / "strings.json").read_text(), (PKG / "translations" / "en.json").read_text())
 
     def test_check_mode_reports_up_to_date(self):
-        self.assertEqual(GEN.main(["--check"]), 0)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(GEN.main(["--check"]), 0)
 
 
 class EnglishGerman(unittest.TestCase):
