@@ -3,7 +3,7 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
-## Unreleased
+## 0.5.0
 
 ### Added
 - Hourly statistics for heart rate, Body Battery and SpO2: minimum, maximum and mean of the real Garmin measurements
