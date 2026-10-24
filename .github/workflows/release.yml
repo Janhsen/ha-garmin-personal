@@ -1,8 +1,10 @@
 name: Release
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+    paths:
+      - custom_components/garmin_personal/manifest.json
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
@@ -10,11 +12,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Version lesen
+        id: version
+        run: echo "tag=v$(python3 -c "import json;print(json.load(open('custom_components/garmin_personal/manifest.json'))['version'])")" >> "$GITHUB_OUTPUT"
+      - name: Prüfen, ob das Release schon existiert
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then echo "found=true" >> "$GITHUB_OUTPUT"; else echo "found=false" >> "$GITHUB_OUTPUT"; fi
       - name: ZIP der Integration bauen
+        if: steps.exists.outputs.found == 'false'
         run: |
           cd custom_components/garmin_personal
           zip -r ../../garmin_personal.zip . -x "__pycache__/*" "*.pyc"
       - name: Release anlegen
+        if: steps.exists.outputs.found == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" garmin_personal.zip --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release create "${{ steps.version.outputs.tag }}" garmin_personal.zip --target "$GITHUB_SHA" --title "${{ steps.version.outputs.tag }}" --generate-notes
