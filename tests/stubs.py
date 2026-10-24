@@ -548,7 +548,6 @@ class FakeEntry:
         self.unique_id = unique_id
         self.version = 1
         self.minor_version = 1
-        self.state = "loaded"
         self.unload_callbacks = []
         if runtime_data != "UNSET":
             self.runtime_data = runtime_data
