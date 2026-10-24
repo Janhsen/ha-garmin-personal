@@ -5,7 +5,7 @@ each GitHub release shows the matching section.
 
 ## 0.4.0
 
-Requires Home Assistant 2025.10.0 or newer (`hacs.json`). Version number not yet set.
+Requires Home Assistant 2025.10.0 or newer (`hacs.json`).
 
 ### Added
 - Help texts for the setup, reauthentication, reconfigure and options dialogs; links to the Garmin key page; the
