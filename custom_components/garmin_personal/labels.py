@@ -48,6 +48,13 @@ LABELS: dict[str, dict[str, tuple[str, str]]] = {
         **{f"hrv_balanced_{n}": (f"Balanced: {n}", f"Ausgeglichen: {n}") for n in (2, 3, 5, 6, 7, 8)},
         "onboarding_1": ("Setup phase: 1", "Einrichtungsphase: 1"),
     },
+    "sleep_alignment": {
+        "behind": ("Behind", "Hinterher"),
+    },
+    "body_battery_level": {
+        # Only levels seen in real responses.
+        "high": ("High", "Hoch"),
+    },
     "hrv_status": {
         "balanced": ("Balanced", "Ausgeglichen"),
         "unbalanced": ("Unbalanced", "Unausgeglichen"),

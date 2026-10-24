@@ -235,6 +235,19 @@ class CoordinatorEntity:
         self.state_writes += 1
 
 
+@dataclass
+class CalendarEvent:
+    start: object
+    end: object
+    summary: str
+    description: str | None = None
+    uid: str | None = None
+
+
+class CalendarEntity:
+    pass
+
+
 class EventEntity:
     @property
     def triggered(self) -> list[tuple[str, dict]]:
@@ -448,7 +461,7 @@ class FakeCall:
 
 # --------------------------------------------------------------------------- install + load
 def install() -> None:
-    Platform = make_enum("Platform", "SENSOR", "BINARY_SENSOR", "EVENT")
+    Platform = make_enum("Platform", "SENSOR", "BINARY_SENSOR", "CALENDAR", "EVENT")
     sensor_dc = make_enum("SensorDeviceClass", "DISTANCE", "DURATION", "ENUM", "TIMESTAMP", "VOLUME", "WEIGHT")
     sensor_sc = make_enum("SensorStateClass", "MEASUREMENT", "TOTAL", "TOTAL_INCREASING")
 
@@ -467,6 +480,7 @@ def install() -> None:
     stub("homeassistant.exceptions", ConfigEntryAuthFailed=ConfigEntryAuthFailed,
          HomeAssistantError=HomeAssistantError, ServiceValidationError=ServiceValidationError)
     stub("homeassistant.components")
+    stub("homeassistant.components.calendar", CalendarEntity=CalendarEntity, CalendarEvent=CalendarEvent)
     stub("homeassistant.components.sensor", SensorDeviceClass=sensor_dc, SensorStateClass=sensor_sc,
          SensorEntity=type("SensorEntity", (), {}), RestoreSensor=RestoreSensor, SensorEntityDescription=SensorEntityDescription)
     stub("homeassistant.components.binary_sensor",
@@ -530,7 +544,7 @@ def load_full() -> types.ModuleType:
     pkg = importlib.util.module_from_spec(spec)
     sys.modules[NAME] = pkg
     spec.loader.exec_module(pkg)
-    for sub in ("config_flow", "services", "event", "binary_sensor"):
+    for sub in ("config_flow", "services", "event", "binary_sensor", "calendar"):
         importlib.import_module(f"{NAME}.{sub}")
     return pkg
 

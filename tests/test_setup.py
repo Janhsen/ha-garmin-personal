@@ -156,7 +156,7 @@ class Misc(unittest.TestCase):
         self.assertEqual(hass.config_entries.reloaded, ["E1"])
 
     def test_platforms(self):
-        self.assertEqual([p.value for p in gp.PLATFORMS], ["sensor", "binary_sensor", "event"])
+        self.assertEqual([p.value for p in gp.PLATFORMS], ["sensor", "binary_sensor", "calendar", "event"])
 
 
 if __name__ == "__main__":

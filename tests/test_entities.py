@@ -15,6 +15,7 @@ gp = stubs.load_full()
 ev = sys.modules["gp_full.event"]
 bs = sys.modules["gp_full.binary_sensor"]
 sn = sys.modules["gp_full.sensor"]
+cal = sys.modules["gp_full.calendar"]
 const = sys.modules["gp_full.const"]
 
 
@@ -199,6 +200,38 @@ class KeepLastValueTests(unittest.TestCase):
         asyncio.run(ent.async_added_to_hass())
         self.assertEqual(ent.native_value, 77)
         self.assertEqual(ent.extra_state_attributes["last_seen"], "2026-10-24T05:00:00+00:00")
+
+
+
+class CalendarTests(unittest.TestCase):
+    def activity(self, i, start, duration=3600.0, **extra):
+        return {"activityId": i, "activityName": f"A{i}", "startTimeGMT": start, "duration": duration, **extra}
+
+    def entity(self, activities):
+        coord = SimpleNamespace(data={"activities": activities})
+        return cal.GarminActivityCalendar(coord, stubs.FakeEntry(entry_id="E1"))
+
+    def test_event_from_activity(self):
+        ev_ = cal.activity_event(self.activity(1, "2026-10-01 06:00:00", distance=10000.0, calories=500, averageHR=150.0))
+        self.assertEqual(ev_.summary, "A1")
+        self.assertEqual(ev_.end - ev_.start, timedelta(hours=1))
+        self.assertEqual(ev_.description, "10.00 km, 500 kcal, 150 bpm")
+        self.assertEqual(ev_.uid, "1")
+
+    def test_activity_without_time_or_duration_is_skipped(self):
+        self.assertIsNone(cal.activity_event({"activityId": 1, "duration": 10}))
+        self.assertIsNone(cal.activity_event(self.activity(1, "2026-10-01 06:00:00", duration=0)))
+        self.assertIsNone(cal.activity_event(self.activity(1, "2026-10-01 06:00:00", duration=None)))
+
+    def test_range_and_latest(self):
+        ent = self.entity([self.activity(1, "2026-10-01 06:00:00"), self.activity(2, "2026-10-03 06:00:00")])
+        events = stubs.run(ent.async_get_events(None, datetime(2026, 10, 2, tzinfo=UTC), datetime(2026, 10, 4, tzinfo=UTC)))
+        self.assertEqual([e.uid for e in events], ["2"])
+        self.assertEqual(ent.event.uid, "2")
+
+    def test_no_data(self):
+        ent = self.entity([])
+        self.assertIsNone(ent.event)
 
 
 if __name__ == "__main__":

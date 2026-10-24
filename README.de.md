@@ -57,6 +57,12 @@ bleiben unberührt. Wieder einschalten geht jederzeit unter Einstellungen → En
 Zusätzlich: Binary-Sensor *Uhr-Synchronisation überfällig* und Event-Entität *Aktivität*
 (feuert `activity_finished` bei jeder neuen Aktivität, nicht beim ersten Start).
 
+Außerdem: eine **Kalender**-Entität mit den letzten Aktivitäten (rund 20, aus Garmins Startzeit und Dauer; Distanz,
+Kalorien und Durchschnittspuls in der Beschreibung), standardmäßig deaktivierte Sensoren für Stressanteile,
+durchschnittliche Höhe, höchste/niedrigste Atmung, niedrigsten/höchsten Durchschnittspuls, die Body-Battery-Stufe
+(Garmins Feedback und Ereignisliste als Attribute) und die Schlaf-Ausrichtung mit Garmins empfohlenem Fenster
+(Minuten nach Mitternacht, wie geliefert).
+
 Optionen: Intervall der Sync-Prüfung, Sync-Warnschwelle, und ob Tagesverläufe
 (Puls, Body Battery, SpO2) als Attribute angehängt werden (groß, nicht im Recorder gespeichert).
 Nur mit dieser Option werden die zusätzlichen Endpunkte für Puls- und Body-Battery-Verlauf abgefragt.

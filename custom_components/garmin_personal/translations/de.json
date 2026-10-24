@@ -157,6 +157,12 @@
       "body_battery": {
         "name": "Body Battery"
       },
+      "body_battery_level": {
+        "name": "Body-Battery-Stufe",
+        "state": {
+          "high": "Hoch"
+        }
+      },
       "body_battery_high": {
         "name": "Body Battery Höchstwert"
       },
@@ -186,6 +192,39 @@
       },
       "spo2_7d": {
         "name": "SpO2 (7 Tage)"
+      },
+      "stress_percentage": {
+        "name": "Stressanteil"
+      },
+      "stress_rest_percentage": {
+        "name": "Ruheanteil"
+      },
+      "stress_activity_percentage": {
+        "name": "Aktivitätsanteil (Stress)"
+      },
+      "stress_low_percentage": {
+        "name": "Anteil niedriger Stress"
+      },
+      "stress_medium_percentage": {
+        "name": "Anteil mittlerer Stress"
+      },
+      "stress_high_percentage": {
+        "name": "Anteil hoher Stress"
+      },
+      "altitude_average": {
+        "name": "Durchschnittliche Höhe"
+      },
+      "respiration_highest": {
+        "name": "Höchste Atmung"
+      },
+      "respiration_lowest": {
+        "name": "Niedrigste Atmung"
+      },
+      "heart_rate_avg_min": {
+        "name": "Niedrigster Durchschnittspuls"
+      },
+      "heart_rate_avg_max": {
+        "name": "Höchster Durchschnittspuls"
       },
       "respiration_waking": {
         "name": "Atmung (wach)"
@@ -359,6 +398,12 @@
           "general_pos_excellent_or_good_sleep": "Allgemein positiv: ausgezeichneter oder guter Schlaf"
         }
       },
+      "sleep_alignment": {
+        "name": "Schlaf-Ausrichtung",
+        "state": {
+          "behind": "Hinterher"
+        }
+      },
       "sleep_breathing_disruption": {
         "name": "Atemaussetzer"
       },
@@ -524,6 +569,11 @@
     "binary_sensor": {
       "sync_stale": {
         "name": "Uhr-Synchronisation überfällig"
+      }
+    },
+    "calendar": {
+      "activities": {
+        "name": "Aktivitäten"
       }
     },
     "event": {

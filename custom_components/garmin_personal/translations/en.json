@@ -157,6 +157,12 @@
       "body_battery": {
         "name": "Body Battery"
       },
+      "body_battery_level": {
+        "name": "Body Battery level",
+        "state": {
+          "high": "High"
+        }
+      },
       "body_battery_high": {
         "name": "Body Battery highest"
       },
@@ -186,6 +192,39 @@
       },
       "spo2_7d": {
         "name": "SpO2 (7 days)"
+      },
+      "stress_percentage": {
+        "name": "Stress share"
+      },
+      "stress_rest_percentage": {
+        "name": "Rest share"
+      },
+      "stress_activity_percentage": {
+        "name": "Activity share (stress)"
+      },
+      "stress_low_percentage": {
+        "name": "Low stress share"
+      },
+      "stress_medium_percentage": {
+        "name": "Medium stress share"
+      },
+      "stress_high_percentage": {
+        "name": "High stress share"
+      },
+      "altitude_average": {
+        "name": "Average altitude"
+      },
+      "respiration_highest": {
+        "name": "Highest respiration"
+      },
+      "respiration_lowest": {
+        "name": "Lowest respiration"
+      },
+      "heart_rate_avg_min": {
+        "name": "Lowest average heart rate"
+      },
+      "heart_rate_avg_max": {
+        "name": "Highest average heart rate"
       },
       "respiration_waking": {
         "name": "Respiration (awake)"
@@ -359,6 +398,12 @@
           "general_pos_excellent_or_good_sleep": "General positive: excellent or good sleep"
         }
       },
+      "sleep_alignment": {
+        "name": "Sleep alignment",
+        "state": {
+          "behind": "Behind"
+        }
+      },
       "sleep_breathing_disruption": {
         "name": "Breathing disruption"
       },
@@ -524,6 +569,11 @@
     "binary_sensor": {
       "sync_stale": {
         "name": "Watch sync overdue"
+      }
+    },
+    "calendar": {
+      "activities": {
+        "name": "Activities"
       }
     },
     "event": {

@@ -154,6 +154,32 @@ class SensorTests(unittest.TestCase):
                 d.attrs_fn(DATA[d.group])
                 d.attrs_fn({})
 
+    def test_new_garmin_fields(self):
+        by = {d.key: d for d in self.sensor.SENSOR_DESCRIPTIONS}
+        daily = {"summary": {"source": "GARMIN", "totalSteps": 100, "stressPercentage": 29.09, "lowStressPercentage": 23.38,
+                             "averageMonitoringEnvironmentAltitude": 345, "highestRespirationValue": 21,
+                             "minAvgHeartRate": 43, "maxAvgHeartRate": 112,
+                             "bodyBatteryDynamicFeedbackEvent": {"bodyBatteryLevel": "HIGH", "feedbackShortType": "X",
+                                                                 "eventTimestampGmt": "t"},
+                             "bodyBatteryActivityEventList": [{"eventType": "SLEEP", "bodyBatteryImpact": 60}]}}
+        v = lambda k, d: by[k].value_fn(d)  # noqa: E731
+        self.assertEqual(v("stress_percentage", daily), 29.09)
+        self.assertEqual(v("stress_low_percentage", daily), 23.38)
+        self.assertEqual(v("altitude_average", daily), 345)
+        self.assertEqual(v("respiration_highest", daily), 21)
+        self.assertEqual(v("heart_rate_avg_min", daily), 43)
+        self.assertEqual(v("body_battery_level", daily), "high")
+        attrs = by["body_battery_level"].attrs_fn(daily)
+        self.assertEqual(attrs["events"][0]["bodyBatteryImpact"], 60)
+        self.assertEqual(attrs["feedback"]["bodyBatteryLevel"], "HIGH")
+        sleep = {"sleep": {"sleepAlignment": {"status": "BEHIND", "optimalSleepWindowStartMins": -80},
+                           "sleepNeed": {"recommendedBedtimeStartMins": 1410}}}
+        self.assertEqual(v("sleep_alignment", sleep), "behind")
+        self.assertEqual(by["sleep_alignment"].attrs_fn(sleep),
+                         {"optimal_window_start_min": -80, "recommended_bedtime_start_min": 1410})
+        self.assertIsNone(v("sleep_alignment", {}))
+        self.assertIsNone(by["body_battery_level"].attrs_fn({}))
+
     def test_values(self):
         by = {d.key: d for d in self.sensor.SENSOR_DESCRIPTIONS}
         val = lambda k: by[k].value_fn(DATA[by[k].group])  # noqa: E731

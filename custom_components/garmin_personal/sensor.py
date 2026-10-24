@@ -144,6 +144,11 @@ def _summary(*path: str, **kwargs: Any) -> ValueFn:
     return value
 
 
+def _body_battery_level(data: Mapping[str, Any]) -> str | None:
+    return text_at("summary", "bodyBatteryDynamicFeedbackEvent", "bodyBatteryLevel")(data) \
+        if from_garmin(data.get("summary")) else None
+
+
 def _stress_qualifier(data: Mapping[str, Any]) -> str | None:
     return text_at("summary", "stressQualifier")(data) if from_garmin(data.get("summary")) else None
 
@@ -165,6 +170,43 @@ def _sleep_score_attrs(name: str) -> AttrsFn:
         return {k: item.get(k) for k in ("qualifierKey", "optimalStart", "optimalEnd") if k in item}
 
     return attrs
+
+
+def _sleep_alignment_attrs(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """Garmin's own numbers (minutes after midnight, as delivered), no conversion."""
+    out: dict[str, Any] = {}
+    for name, path in (
+        ("optimal_window_start_min", ("sleep", "sleepAlignment", "optimalSleepWindowStartMins")),
+        ("optimal_window_end_min", ("sleep", "sleepAlignment", "optimalSleepWindowEndMins")),
+        ("optimal_window_midpoint_min", ("sleep", "sleepAlignment", "optimalSleepWindowMidpointMins")),
+        ("last_sleep_midpoint_min", ("sleep", "sleepAlignment", "lastSleepMidpointMins")),
+        ("recommended_bedtime_start_min", ("sleep", "sleepNeed", "recommendedBedtimeStartMins")),
+        ("recommended_bedtime_end_min", ("sleep", "sleepNeed", "recommendedBedtimeEndMins")),
+    ):
+        value = dig(data, *path)
+        if value is not None:
+            out[name] = value
+    return out or None
+
+
+def _body_battery_events(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    summary = data.get("summary")
+    if not isinstance(summary, Mapping) or not from_garmin(summary):
+        return None
+    out: dict[str, Any] = {}
+    for name, key in (("feedback", "bodyBatteryDynamicFeedbackEvent"),
+                      ("end_of_day_feedback", "endOfDayBodyBatteryDynamicFeedbackEvent")):
+        event = summary.get(key)
+        if isinstance(event, Mapping):
+            out[name] = {k: event.get(k) for k in ("eventTimestampGmt", "bodyBatteryLevel", "feedbackShortType")}
+    events = summary.get("bodyBatteryActivityEventList")
+    if isinstance(events, list):
+        out["events"] = [
+            {k: e.get(k) for k in ("eventType", "eventStartTimeGmt", "durationInMilliseconds",
+                                    "bodyBatteryImpact", "shortFeedback")}
+            for e in events if isinstance(e, Mapping)
+        ]
+    return out or None
 
 
 def _hrv_attrs(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -344,6 +386,8 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("stress_high_time", "daily", _summary("highStressDuration"), unit=SECONDS, device_class=DURATION, enabled=False),
     _d("body_battery", "daily", _summary("bodyBatteryMostRecentValue"), unit=PERCENTAGE, icon="mdi:battery-heart-variant",
        attrs=_body_battery_intraday, intraday=True),
+    _d("body_battery_level", "daily", _body_battery_level, labels="body_battery_level", state_class=NO_CLASS,
+       attrs=_body_battery_events, enabled=False, icon="mdi:battery-heart-variant"),
     _d("body_battery_high", "daily", _summary("bodyBatteryHighestValue"), unit=PERCENTAGE, icon="mdi:battery-heart-variant"),
     _d("body_battery_low", "daily", _summary("bodyBatteryLowestValue"), unit=PERCENTAGE, icon="mdi:battery-heart-variant"),
     _d("body_battery_charged", "daily", _summary("bodyBatteryChargedValue"), unit=PERCENTAGE, state_class=TOTAL,
@@ -357,6 +401,18 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("spo2_lowest", "daily", number_at("spo2", "lowestSpO2"), unit=PERCENTAGE, icon="mdi:water-percent"),
     _d("spo2_latest", "daily", number_at("spo2", "latestSpO2"), unit=PERCENTAGE, icon="mdi:water-percent"),
     _d("spo2_7d", "daily", number_at("spo2", "lastSevenDaysAvgSpO2"), unit=PERCENTAGE, enabled=False),
+    _d("stress_percentage", "daily", _summary("stressPercentage"), unit=PERCENTAGE, enabled=False),
+    _d("stress_rest_percentage", "daily", _summary("restStressPercentage"), unit=PERCENTAGE, enabled=False),
+    _d("stress_activity_percentage", "daily", _summary("activityStressPercentage"), unit=PERCENTAGE, enabled=False),
+    _d("stress_low_percentage", "daily", _summary("lowStressPercentage"), unit=PERCENTAGE, enabled=False),
+    _d("stress_medium_percentage", "daily", _summary("mediumStressPercentage"), unit=PERCENTAGE, enabled=False),
+    _d("stress_high_percentage", "daily", _summary("highStressPercentage"), unit=PERCENTAGE, enabled=False),
+    _d("altitude_average", "daily", _summary("averageMonitoringEnvironmentAltitude"), unit="m",
+       device_class=SensorDeviceClass.DISTANCE, enabled=False, icon="mdi:altimeter"),
+    _d("respiration_highest", "daily", _summary("highestRespirationValue"), unit="brpm", enabled=False, icon="mdi:lungs"),
+    _d("respiration_lowest", "daily", _summary("lowestRespirationValue"), unit="brpm", enabled=False, icon="mdi:lungs"),
+    _d("heart_rate_avg_min", "daily", _summary("minAvgHeartRate"), unit=BPM, enabled=False, icon="mdi:heart-pulse"),
+    _d("heart_rate_avg_max", "daily", _summary("maxAvgHeartRate"), unit=BPM, enabled=False, icon="mdi:heart-pulse"),
     _d("respiration_waking", "daily", _summary("avgWakingRespirationValue"), unit="brpm", enabled=False,
        icon="mdi:lungs"),
     _d("respiration_latest", "daily", _summary("latestRespirationValue"), unit="brpm", enabled=False,
@@ -408,6 +464,8 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("sleep_insight", "sleep", text_at("sleep", "sleepScoreInsight"), labels="sleep_insight", state_class=NO_CLASS, enabled=False),
     _d("sleep_personal_insight", "sleep", text_at("sleep", "sleepScorePersonalizedInsight"), labels="sleep_personal_insight",
        state_class=NO_CLASS, enabled=False),
+    _d("sleep_alignment", "sleep", text_at("sleep", "sleepAlignment", "status"), labels="sleep_alignment",
+       state_class=NO_CLASS, attrs=_sleep_alignment_attrs, enabled=False, icon="mdi:sleep"),
     _d("sleep_breathing_disruption", "sleep", text_at("sleep", "breathingDisruptionSeverity"), state_class=NO_CLASS,
        enabled=False),
     _d("hrv_last_night", "sleep", _hrv("lastNightAvg"), unit="ms", icon="mdi:heart-flash", attrs=_hrv_attrs),

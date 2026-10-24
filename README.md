@@ -50,6 +50,12 @@ scale) are disabled once. Endpoints that have not delivered anything yet (e.g. s
 alone. You can re-enable any sensor under Settings → Entities. Also included: binary sensor *Watch sync overdue*
 and the event entity *Activity* (fires `activity_finished` for every new activity, not on first start).
 
+Also included: a **calendar** entity with the latest activities (about 20, from Garmin's start time and duration;
+distance, calories and average heart rate in the description), disabled-by-default sensors for stress shares,
+average altitude, highest/lowest respiration, lowest/highest average heart rate, the Body Battery level with Garmin's
+feedback and event list as attributes, and the sleep alignment with Garmin's recommended window (minutes after
+midnight, as delivered).
+
 Options: sync check interval, sync warning threshold, and whether intraday series (heart rate, Body Battery, SpO2)
 are attached as attributes (large, not stored in the recorder). Only with this option are the extra endpoints for
 heart rate and Body Battery series requested.

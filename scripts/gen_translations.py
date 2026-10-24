@@ -23,6 +23,15 @@ N = {
  "stress_qualifier": ("Stress level", "Stressstufe"), "stress_rest_time": ("Rest time", "Ruhezeit (Stress)"),
  "stress_low_time": ("Low stress time", "Zeit niedriger Stress"), "stress_medium_time": ("Medium stress time", "Zeit mittlerer Stress"),
  "stress_high_time": ("High stress time", "Zeit hoher Stress"),
+ "stress_percentage": ("Stress share", "Stressanteil"), "stress_rest_percentage": ("Rest share", "Ruheanteil"),
+ "stress_activity_percentage": ("Activity share (stress)", "Aktivitätsanteil (Stress)"),
+ "stress_low_percentage": ("Low stress share", "Anteil niedriger Stress"), "stress_medium_percentage": ("Medium stress share", "Anteil mittlerer Stress"),
+ "stress_high_percentage": ("High stress share", "Anteil hoher Stress"),
+ "altitude_average": ("Average altitude", "Durchschnittliche Höhe"),
+ "respiration_highest": ("Highest respiration", "Höchste Atmung"), "respiration_lowest": ("Lowest respiration", "Niedrigste Atmung"),
+ "heart_rate_avg_min": ("Lowest average heart rate", "Niedrigster Durchschnittspuls"),
+ "heart_rate_avg_max": ("Highest average heart rate", "Höchster Durchschnittspuls"),
+ "sleep_alignment": ("Sleep alignment", "Schlaf-Ausrichtung"), "body_battery_level": ("Body Battery level", "Body-Battery-Stufe"),
  "body_battery": ("Body Battery", "Body Battery"), "body_battery_high": ("Body Battery highest", "Body Battery Höchstwert"),
  "body_battery_low": ("Body Battery lowest", "Body Battery Tiefstwert"), "body_battery_charged": ("Body Battery charged", "Body Battery geladen"),
  "body_battery_drained": ("Body Battery drained", "Body Battery verbraucht"), "body_battery_at_wake": ("Body Battery at wake-up", "Body Battery beim Aufwachen"),
@@ -142,6 +151,7 @@ def build(i: int) -> dict:
         "entity": {
             "sensor": {k: ({"name": N[k][i]} | ({"state": {v: names[i] for v, names in LABELS[LABEL_OF[k]].items()}} if k in LABEL_OF else {})) for k in keys},
             "binary_sensor": {"sync_stale": {"name": t("Watch sync overdue", "Uhr-Synchronisation überfällig")}},
+            "calendar": {"activities": {"name": t("Activities", "Aktivitäten")}},
             "event": {"activity": {"name": t("Activity", "Aktivität"),
                                    "state_attributes": {"event_type": {"state": {"activity_finished": t("Activity finished", "Aktivität beendet")}}}}},
         },
@@ -194,3 +204,21 @@ for i, lang in enumerate(("en", "de")):
     (out / f"{lang}.json").write_text(json.dumps(build(i), ensure_ascii=False, indent=2) + "\n")
 (ROOT / "strings.json").write_text(json.dumps(build(0), ensure_ascii=False, indent=2) + "\n")
 print("ok", len(keys))
+
+
+def write_icons() -> None:
+    """icons.json: default icon per sensor, taken from the descriptors (icon="mdi:...")."""
+    import json
+    text = (ROOT / "sensor.py").read_text()
+    sensors = {}
+    for chunk in text.split("\n    _d(")[1:]:
+        head = re.match(r'"([a-z0-9_]+)"', chunk)
+        icon = re.search(r'icon="(mdi:[a-z0-9-]+)"', chunk.split("\n    _d(")[0].split("\n\n")[0])
+        if head and icon:
+            sensors[head.group(1)] = {"default": icon.group(1)}
+    data = {"entity": {"sensor": sensors, "calendar": {"activities": {"default": "mdi:run"}}}}
+    (ROOT / "icons.json").write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    print("icons", len(sensors))
+
+
+write_icons()

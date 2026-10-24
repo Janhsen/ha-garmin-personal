@@ -1,0 +1,134 @@
+{
+  "entity": {
+    "sensor": {
+      "steps": {
+        "default": "mdi:shoe-print"
+      },
+      "total_calories": {
+        "default": "mdi:fire"
+      },
+      "active_calories": {
+        "default": "mdi:fire"
+      },
+      "resting_calories": {
+        "default": "mdi:fire"
+      },
+      "moderate_intensity_minutes": {
+        "default": "mdi:run-fast"
+      },
+      "vigorous_intensity_minutes": {
+        "default": "mdi:run-fast"
+      },
+      "floors_ascended": {
+        "default": "mdi:stairs-up"
+      },
+      "floors_descended": {
+        "default": "mdi:stairs-down"
+      },
+      "heart_rate_resting": {
+        "default": "mdi:heart-pulse"
+      },
+      "heart_rate_resting_7d": {
+        "default": "mdi:heart-pulse"
+      },
+      "heart_rate_min": {
+        "default": "mdi:heart-pulse"
+      },
+      "heart_rate_max": {
+        "default": "mdi:heart-pulse"
+      },
+      "stress_average": {
+        "default": "mdi:emoticon-neutral"
+      },
+      "body_battery": {
+        "default": "mdi:battery-heart-variant"
+      },
+      "body_battery_level": {
+        "default": "mdi:battery-heart-variant"
+      },
+      "body_battery_high": {
+        "default": "mdi:battery-heart-variant"
+      },
+      "body_battery_low": {
+        "default": "mdi:battery-heart-variant"
+      },
+      "spo2_average": {
+        "default": "mdi:water-percent"
+      },
+      "spo2_lowest": {
+        "default": "mdi:water-percent"
+      },
+      "spo2_latest": {
+        "default": "mdi:water-percent"
+      },
+      "altitude_average": {
+        "default": "mdi:altimeter"
+      },
+      "respiration_highest": {
+        "default": "mdi:lungs"
+      },
+      "respiration_lowest": {
+        "default": "mdi:lungs"
+      },
+      "heart_rate_avg_min": {
+        "default": "mdi:heart-pulse"
+      },
+      "heart_rate_avg_max": {
+        "default": "mdi:heart-pulse"
+      },
+      "respiration_waking": {
+        "default": "mdi:lungs"
+      },
+      "respiration_latest": {
+        "default": "mdi:lungs"
+      },
+      "hydration": {
+        "default": "mdi:cup-water"
+      },
+      "last_sync": {
+        "default": "mdi:watch-vibrate"
+      },
+      "sleep_duration": {
+        "default": "mdi:sleep"
+      },
+      "sleep_score": {
+        "default": "mdi:sleep"
+      },
+      "sleep_alignment": {
+        "default": "mdi:sleep"
+      },
+      "hrv_last_night": {
+        "default": "mdi:heart-flash"
+      },
+      "hrv_weekly": {
+        "default": "mdi:heart-flash"
+      },
+      "weight": {
+        "default": "mdi:scale-bathroom"
+      },
+      "bmi": {
+        "default": "mdi:human"
+      },
+      "body_fat": {
+        "default": "mdi:percent"
+      },
+      "body_water": {
+        "default": "mdi:water-percent"
+      },
+      "fitness_age": {
+        "default": "mdi:human-handsup"
+      },
+      "last_activity": {
+        "default": "mdi:run"
+      },
+      "account": {
+        "default": "mdi:account"
+      }
+    },
+    "calendar": {
+      "activities": {
+        "default": "mdi:run"
+      }
+    }
+  }
+}
