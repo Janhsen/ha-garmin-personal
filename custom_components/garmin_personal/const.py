@@ -15,6 +15,17 @@ CONF_API_KEY: Final = "api_key"
 CONF_KEY_VALIDITY: Final = "key_validity_days"
 CONF_KEY_EXPIRES: Final = "key_expires_at"
 CONF_PRUNED: Final = "initial_prune_done"
+# Where the entry's unique_id comes from. ``profile_id``: Garmin's ``userProfileId`` (stable).
+# ``legacy``: entries made before config entry 1.2 (display name or a name slug); they are
+# moved to ``profile_id`` on the first successful setup or reauth.
+CONF_ACCOUNT_ID_SOURCE: Final = "account_id_source"
+ACCOUNT_ID_PROFILE: Final = "profile_id"
+ACCOUNT_ID_LEGACY: Final = "legacy"
+# Legacy flag (entries 1.1): True if the unique_id came from a profile field.
+CONF_ACCOUNT_ID_KNOWN: Final = "account_id_known"
+CONF_ACCOUNT_NAME: Final = "name"
+ENTRY_VERSION: Final = 1
+ENTRY_MINOR_VERSION: Final = 2
 
 # Options
 OPT_DAILY_INTERVAL: Final = "daily_interval_minutes"
@@ -34,6 +45,11 @@ DEFAULT_SYNC_STALE_HOURS: Final = 18
 
 KEY_VALIDITY_CHOICES: Final = ("30", "90", "180", "365")
 KEY_EXPIRY_WARNING: Final = timedelta(days=7)
+# The expiry date is calculated from what the user entered; Garmin does not report it.
+# The repair issue is re-evaluated this often (local arithmetic, no request).
+KEY_EXPIRY_CHECK_INTERVAL: Final = timedelta(hours=1)
+DEFAULT_KEY_VALIDITY: Final = "365"
+KEY_CREATE_URL: Final = "https://connect.garmin.com/app/settings/personalApiToken"
 
 # Garmin's documented and observed limits (inclusive days per request).
 # Larger ranges are split into windows by the client.

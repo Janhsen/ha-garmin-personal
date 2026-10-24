@@ -105,7 +105,14 @@ class Range(_Validator):
 
 # --------------------------------------------------------------------------- exceptions
 class HomeAssistantError(Exception):
-    pass
+    """Like the real one: translation_* are keyword-only extras."""
+
+    def __init__(self, *args, translation_domain=None, translation_key=None,
+                 translation_placeholders=None):
+        super().__init__(*args)
+        self.translation_domain = translation_domain
+        self.translation_key = translation_key
+        self.translation_placeholders = translation_placeholders
 
 
 class ServiceValidationError(HomeAssistantError):
@@ -129,6 +136,7 @@ class AbortFlow(Exception):
 # --------------------------------------------------------------------------- config flow
 class ConfigFlow:
     VERSION = 1
+    MINOR_VERSION = 1
     configured_unique_ids: set[str] = set()  # Tests setzen das pro Test
 
     def __init_subclass__(cls, domain=None, **kwargs):
@@ -140,6 +148,10 @@ class ConfigFlow:
         self.reauth_entry = None
         self.reconfigure_entry = None
         self.updates = []
+        self.update_kwargs = []
+
+    def _async_current_entries(self, include_ignore=None):
+        return self.hass.config_entries.async_entries()
 
     async def async_set_unique_id(self, uid):
         self.unique_id = uid
@@ -160,6 +172,7 @@ class ConfigFlow:
 
     def async_update_reload_and_abort(self, entry, *, data_updates=None, **kw):
         self.updates.append((entry, data_updates))
+        self.update_kwargs.append(kw)
         return {"type": "abort", "reason": "update_reload", "entry": entry, "data_updates": data_updates}
 
     def _get_reauth_entry(self):
@@ -177,6 +190,10 @@ class OptionsFlow:
 
     def async_show_form(self, *, step_id, data_schema=None, errors=None):
         return {"type": "form", "step_id": step_id, "data_schema": data_schema, "errors": errors or {}}
+
+
+class OptionsFlowWithReload(OptionsFlow):
+    """Marker: the real class reloads the entry itself when the options change."""
 
 
 class Selector:
@@ -281,6 +298,9 @@ class Store:
     async def async_save(self, data):
         self.saved.append(data)
 
+    async def async_remove(self):
+        self.removed = True
+
 
 
 
@@ -350,8 +370,11 @@ class RegistryEntryDisabler(enum.Enum):
 
 
 class FakeRegistryEntry:
-    def __init__(self, disabled_by=None):
+    def __init__(self, disabled_by=None, unique_id=None, domain="sensor", config_entry_id=None):
         self.disabled_by = disabled_by
+        self.unique_id = unique_id
+        self.domain = domain
+        self.config_entry_id = config_entry_id
 
 
 class FakeRegistry:
@@ -371,6 +394,37 @@ class FakeRegistry:
 
 
 REGISTRY = FakeRegistry()
+
+
+def _entries_for_entry(registry, entry_id):
+    return [e for e in registry.entries.values() if getattr(e, "config_entry_id", None) == entry_id]
+
+
+# repair issues and interval timers, recorded for tests
+ISSUES: dict[tuple[str, str], dict] = {}
+TIMERS: list[dict] = []
+
+
+def _create_issue(hass, domain, issue_id, **kw):
+    ISSUES[(domain, issue_id)] = kw
+
+
+def _delete_issue(hass, domain, issue_id):
+    ISSUES.pop((domain, issue_id), None)
+
+
+def _track_interval(hass, action, interval):
+    timer = {"action": action, "interval": interval, "cancelled": False}
+    TIMERS.append(timer)
+
+    def cancel():
+        timer["cancelled"] = True
+
+    return cancel
+
+
+def _redact(data, to_redact):
+    return {k: ("**REDACTED**" if k in to_redact else v) for k, v in data.items()}
 
 
 # --------------------------------------------------------------------------- fake hass / entry / call
@@ -403,6 +457,9 @@ class FakeConfigEntries:
         self.entries: list[Any] = []
         self.updated: list[tuple[Any, dict]] = []
         self.reloaded: list[str] = []
+        self.update_kwargs: list[dict] = []
+        self.unloaded: list[tuple[Any, list]] = []
+        self.forwarded: list[tuple[Any, list]] = []
 
     def async_entries(self, domain=None):
         return list(self.entries)
@@ -411,6 +468,17 @@ class FakeConfigEntries:
         self.updated.append((entry, data))
         if data is not None:
             entry.data = data
+        for attr in ("unique_id", "version", "minor_version", "title", "options"):
+            if attr in kw:
+                setattr(entry, attr, kw[attr])
+        self.update_kwargs.append(kw)
+
+    async def async_unload_platforms(self, entry, platforms):
+        self.unloaded.append((entry, list(platforms)))
+        return True
+
+    async def async_forward_entry_setups(self, entry, platforms):
+        self.forwarded.append((entry, list(platforms)))
 
     async def async_reload(self, entry_id):
         self.reloaded.append(entry_id)
@@ -444,11 +512,15 @@ class FakeEntry:
         self.data = dict(data or {})
         self.options = dict(options or {})
         self.unique_id = unique_id
+        self.version = 1
+        self.minor_version = 1
+        self.state = "loaded"
+        self.unload_callbacks = []
         if runtime_data != "UNSET":
             self.runtime_data = runtime_data
 
     def async_on_unload(self, cb):
-        pass
+        self.unload_callbacks.append(cb)
 
     def add_update_listener(self, cb):
         return cb
@@ -497,15 +569,20 @@ def install() -> None:
     stub("homeassistant.helpers.config_validation", string=str, boolean=bool, date=date, positive_int=int,
          config_entry_only_config_schema=lambda domain: Schema({}))
     stub("homeassistant.helpers.entity_registry", async_get=lambda hass: REGISTRY,
+         async_entries_for_config_entry=_entries_for_entry,
          RegistryEntryDisabler=RegistryEntryDisabler)
     stub("homeassistant.helpers.aiohttp_client", async_get_clientsession=lambda hass: object())
     stub("homeassistant.helpers.typing", ConfigType=dict, StateType=object)
     stub("homeassistant.helpers.entity_platform", AddEntitiesCallback=Anything)
     stub("homeassistant.helpers.device_registry", DeviceEntryType=make_enum("DeviceEntryType", "SERVICE"),
          DeviceInfo=dict)
+    ISSUES.clear()
     stub("homeassistant.helpers.issue_registry",
-         IssueSeverity=make_enum("IssueSeverity", "WARNING"),
-         async_create_issue=lambda *a, **k: None, async_delete_issue=lambda *a, **k: None)
+         IssueSeverity=make_enum("IssueSeverity", "WARNING", "ERROR"),
+         async_create_issue=_create_issue, async_delete_issue=_delete_issue)
+    TIMERS.clear()
+    stub("homeassistant.helpers.event", async_track_time_interval=_track_interval)
+    stub("homeassistant.components.diagnostics", async_redact_data=_redact)
     stub("homeassistant.helpers.storage", Store=Store)
     stub("homeassistant.helpers.update_coordinator", CoordinatorEntity=CoordinatorEntity,
          DataUpdateCoordinator=DataUpdateCoordinator, UpdateFailed=UpdateFailed)
@@ -517,7 +594,7 @@ def install() -> None:
          TextSelector=Selector, TextSelectorConfig=SelectorConfig,
          TextSelectorType=make_enum("TextSelectorType", "PASSWORD"))
     stub("homeassistant.config_entries", ConfigEntry=Anything, ConfigFlow=ConfigFlow,
-         ConfigFlowResult=dict, OptionsFlow=OptionsFlow)
+         ConfigFlowResult=dict, OptionsFlow=OptionsFlow, OptionsFlowWithReload=OptionsFlowWithReload)
     stub("homeassistant.util")
     stub("homeassistant.util.dt",
          now=lambda: datetime.now(UTC), utcnow=lambda: datetime.now(UTC),
