@@ -26,10 +26,10 @@ class Entities(unittest.TestCase):
         entry = stubs.FakeEntry(entry_id="E1", title="Alex")
         return [sn.GarminHistorySensor(entry, k, u) for k, u in sn.HISTORY_UNITS.items()]
 
-    def test_disabled_diagnostic_and_without_live_value(self):
+    def test_disabled_regular_sensor_and_without_live_value(self):
         for e in self.make():
             self.assertFalse(e._attr_entity_registry_enabled_default)
-            self.assertEqual(e._attr_entity_category, sn.EntityCategory.DIAGNOSTIC)
+            self.assertIsNone(getattr(e, "_attr_entity_category", None))
             self.assertIsNone(e.native_value)
             self.assertIsNone(getattr(e, "_attr_state_class", None))
 

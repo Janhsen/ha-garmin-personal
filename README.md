@@ -196,7 +196,7 @@ with a translated error that lists the accounts. All service errors are translat
   `spo2_hours`, `days_with_data`, `statistic_series` and `statistic_rows`; `unknown_format` lists series whose
   answer this version cannot read.
 * `garmin_personal.backfill_history` – writes the real measuring points of **heart rate, Body Battery, SpO2 and the night's HRV** with
-  their own timestamps as recorded states of the disabled-by-default diagnostic sensors (*Heart rate (history)* and so
+  their own timestamps as recorded states of the disabled-by-default sensors (*Heart rate (history)* and so
   on; the live sensors never get old values), so that the History panel shows them. `series` (any of `heart_rate`, `body_battery`, `spo2`, `hrv`; default
   all), `days` (default 7, at most 31), `start_date`, `end_date` and `config_entry_id` work as above. Home Assistant has
   no supported way to write historic states, so the service builds `state_changed` events with historic timestamps and

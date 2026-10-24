@@ -820,7 +820,6 @@ class GarminHistorySensor(RestoreSensor):
 
     _attr_has_entity_name = True
     _attr_should_poll = False
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
     _attr_available = True
 

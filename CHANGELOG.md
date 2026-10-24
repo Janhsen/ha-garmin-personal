@@ -3,10 +3,16 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## 0.5.4
+
+### Changed
+- The history sensors (*Heart rate / Body Battery / SpO2 / HRV (history)*) are regular sensors of the device again, no longer in the
+  *Diagnostic* category. They are still disabled by default.
+
 ## 0.5.3
 
 ### Added
-- New history series **HRV (history)** (`hrv_history`, diagnostic, disabled by default, ms): the nightly HRV readings
+- New history series **HRV (history)** (`hrv_history`, disabled by default, ms): the nightly HRV readings
   (about every 5 minutes) from the HRV endpoint, time from `readingTimeGMT` (UTC). A night belongs to the day of waking
   up; the ledger works with exact timestamps, so today's night is fetched again after each sync and only new points are
   appended. Available in `backfill_history` (`series: hrv`), the automatic live filling and the initial load, with the
