@@ -62,12 +62,14 @@
           "daily_interval_minutes": "Update interval for daily values (minutes)",
           "intraday_attributes": "Add intraday series as attributes (large)",
           "hourly_statistics": "Write hourly statistics (heart rate, Body Battery, SpO2)",
+          "history_auto": "Fill in history automatically (history sensors)",
           "sync_stale_hours": "Warn when the watch has not synced for (hours)"
         },
         "data_description": {
           "daily_interval_minutes": "How often the daily values are requested. The other data is fetched only after a new watch sync or less often.",
           "intraday_attributes": "Adds heart rate, Body Battery and SpO2 series to the sensors as attributes. This makes the state data large, requests extra data from Garmin and the series are not stored in the recorder.",
           "hourly_statistics": "After each new watch sync, writes heart rate, Body Battery and SpO2 as hourly values (minimum, maximum, mean of each completed hour) into the long-term statistics. Independent of the option above; costs one extra request per series and sync (plus one per series for yesterday in the morning).",
+          "history_auto": "After each new watch sync, appends the new measuring points of heart rate, Body Battery and SpO2 as recorded states of their (history) sensors, and fills in the past days up to the recorder's keep days (at most 400), slowly in the background. Only for history sensors that you enabled and that the recorder records. Adds one state per measuring point to the database (about 720 per day for heart rate) until purge_keep_days removes it.",
           "sync_stale_hours": "The binary sensor reports a problem when the last watch sync is older than this many hours."
         }
       }
@@ -656,6 +658,10 @@
     "key_expired": {
       "title": "Garmin API key for {account} has expired",
       "description": "According to your entry the API key for {account} expired on {expires}. Create a new key in Garmin Connect and enter it via Reconfigure."
+    },
+    "history_not_recorded": {
+      "title": "A history sensor is not recorded",
+      "description": "The history sensor for {series} of {account} is enabled, but the recorder excludes it (include/exclude settings), so nothing is written to the history. Allow the entity in the recorder settings or disable the sensor."
     }
   },
   "services": {
@@ -783,7 +789,7 @@
     },
     "backfill_history": {
       "name": "Write history sensors (appending only)",
-      "description": "EXPERIMENTAL. Writes the real measuring points of one series (heart rate, Body Battery or SpO2) with their own timestamps as recorded states of its (history) sensor, so the History panel shows them. Appends only: points already written are never written again, overwritten or deleted. Needs confirm_experimental; one series and at most 2 days per call. See the README.",
+      "description": "Writes the real measuring points of heart rate, Body Battery and SpO2 with their own timestamps as recorded states of the (history) sensors, so the History panel shows them. Appends only: points already written are never written again, overwritten or deleted. The sensors must be enabled and recorded. This also runs automatically (option Fill in history automatically); use the service for a specific range.",
       "fields": {
         "config_entry_id": {
           "name": "Account",
@@ -799,18 +805,14 @@
         },
         "days": {
           "name": "Days",
-          "description": "Number of days back from the end date (at most 2 while experimental, default 1)."
+          "description": "Number of days back from the end date (at most 31, default 1)."
         },
         "series": {
           "name": "Series",
-          "description": "Exactly one of heart_rate, body_battery, spo2."
-        },
-        "confirm_experimental": {
-          "name": "Confirm experimental writing",
-          "description": "Must be true to write. The route into the recorder is not supported by Home Assistant and has only been tested against fakes; try one series and one day first."
+          "description": "Any of heart_rate, body_battery, spo2 (default: all)."
         },
         "confirm_rewrite": {
-          "name": "Confirm without check",
+          "name": "Write without check",
           "description": "Only if the record of written points is lost and the recorder cannot be checked: write the requested days anyway. This can duplicate states that exist already."
         }
       }
@@ -854,10 +856,7 @@
       "message": "Could not write {path}: {error}"
     },
     "history_write_unsupported": {
-      "message": "Writing the history sensors is experimental and off by default. Set confirm_experimental to true to use it (one series, at most 2 days per call). Nothing was requested or written."
-    },
-    "history_limits": {
-      "message": "While experimental, one call needs exactly one series and covers at most {max_days} days."
+      "message": "The history sensors cannot be written on this Home Assistant: the registry or the recorder is not reachable. Nothing was requested or written."
     },
     "history_sensor_missing": {
       "message": "The history sensor does not exist yet. Reload the integration, then enable the sensor."

@@ -31,6 +31,7 @@ ENTRY_MINOR_VERSION: Final = 2
 OPT_DAILY_INTERVAL: Final = "daily_interval_minutes"
 OPT_INTRADAY: Final = "intraday_attributes"
 OPT_HOURLY_STATS: Final = "hourly_statistics"
+OPT_HISTORY_AUTO: Final = "history_auto"
 OPT_SYNC_STALE_HOURS: Final = "sync_stale_hours"
 
 # The daily group only asks for the (cheap) daily summary this often; the other

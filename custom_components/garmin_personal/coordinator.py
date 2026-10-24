@@ -23,6 +23,7 @@ from homeassistant.util import dt as dt_util
 
 from .api import GarminAuthError, GarminError, GarminPersonalApi, GarminRateLimitError
 from .const import DAILY_FULL_REFRESH, DOMAIN
+from .history import append_points, manager_for
 from .intraday import (
     SERIES,
     closed_hours,
@@ -49,6 +50,7 @@ class GarminRuntimeData:
     api: GarminPersonalApi
     coordinators: dict[str, GarminCoordinator] = field(default_factory=dict)
     options: dict[str, Any] = field(default_factory=dict)
+    history: Any = None  # HistoryManager, created on first use (history.manager_for)
 
 
 type GarminConfigEntry = ConfigEntry[GarminRuntimeData]
@@ -241,17 +243,21 @@ class GarminDailyCoordinator(GarminCoordinator):
 
     # Hourly long-term statistics from the day's heart rate, Body Battery and SpO2 series.
     _hourly_stats = False
+    _history_auto = False
     _intraday_day: date | None = None  # the day for which the last write was started
     _yesterday_done: date | None = None  # the day on which yesterday's hours were last written
     _intraday_lock: asyncio.Lock | None = None
 
-    def __init__(self, *args: Any, hourly_stats: bool = False, **kwargs: Any) -> None:
+    def __init__(
+        self, *args: Any, hourly_stats: bool = False, history_auto: bool = False, **kwargs: Any
+    ) -> None:
         """Set up the coordinator; ``followers`` are filled in after creation."""
         super().__init__(*args, **kwargs)
         self.followers: list[GarminCoordinator] = []
         self._last_sync: Any = None
         self._last_full: Any = None
         self._hourly_stats = hourly_stats
+        self._history_auto = history_auto
 
     async def _skip(self, key: str, results: dict[str, Any]) -> bool:
         if key == "summary":
@@ -284,7 +290,7 @@ class GarminDailyCoordinator(GarminCoordinator):
         self._primed = True
         results["_last_sync"] = self._last_sync
         day = self._cycle_day
-        if self._hourly_stats and not skipped and (changed or not primed_before or self._intraday_day != day):
+        if (self._hourly_stats or self._history_auto) and not skipped and (changed or not primed_before or self._intraday_day != day):
             # After a new sync, at the first full refresh after a start and on a new day. In the
             # background: the entities must not wait for the extra requests.
             self._intraday_day = day
@@ -315,43 +321,70 @@ class GarminDailyCoordinator(GarminCoordinator):
                 _LOGGER.warning("Hourly statistics could not be written: %s", err)
 
     async def _write_hourly(self, day: date, fetched: Mapping[str, Any], changed: bool) -> None:
+        """The job behind every trigger: hourly statistics and/or history states from the same requests."""
         entry = self.config_entry
         if entry is None:
             return
         now = dt_util.utcnow()
+        manager = manager_for(self.hass, entry) if self._history_auto else None
+        active: list[str] = []
+        if manager is not None:
+            active = await manager.active_series()
+            manager.ensure_backfill(self.api)  # gaps between the keep limit and yesterday, in the background
         want_yesterday = self._yesterday_done != day or (changed and dt_util.now().hour < YESTERDAY_RETRY_UNTIL_HOUR)
         yesterday_complete = want_yesterday
         for key, spec in SERIES.items():
+            if not self._hourly_stats and key not in active:
+                continue
             try:
                 today_payload = fetched[key] if key in fetched else await fetch_series(self.api, key, day)
             except GarminRateLimitError:
                 raise
             except GarminError as err:
                 yesterday_complete = False  # try this series again next time
-                _LOGGER.debug("Hourly statistics: %s failed: %s", key, err)
+                _LOGGER.debug("Intraday job: %s failed: %s", key, err)
                 continue
-            parsed = [spec.parse(today_payload)]
+            today_points = spec.parse(today_payload)
+            yesterday_points: list | None = None
             first_day = day
             if want_yesterday:
                 try:
-                    parsed.insert(0, spec.parse(await fetch_series(self.api, key, day - timedelta(days=1))))
+                    yesterday_points = spec.parse(await fetch_series(self.api, key, day - timedelta(days=1)))
                     first_day = day - timedelta(days=1)
                 except GarminRateLimitError:
                     raise
                 except GarminError as err:
                     yesterday_complete = False
-                    _LOGGER.debug("Hourly statistics: yesterday's %s failed: %s", key, err)
-            if any(points is None for points in parsed):
+                    _LOGGER.debug("Intraday job: yesterday's %s failed: %s", key, err)
+            if today_points is None or yesterday_points is None and first_day != day:
                 note_unknown_format(key)
-            points = merge_points(*(p for p in parsed if p))
-            hours = drop_straddling(
-                closed_hours(hourly_aggregate(points), now),
-                dt_util.start_of_local_day(first_day),
-                dt_util.start_of_local_day(day + timedelta(days=1)),
-            )
-            write_hourly(self.hass, entry.entry_id, entry.title, spec.stat_name, spec.unit, hours)
+            if self._hourly_stats:
+                points = merge_points(*(p for p in (yesterday_points, today_points) if p))
+                hours = drop_straddling(
+                    closed_hours(hourly_aggregate(points), now),
+                    dt_util.start_of_local_day(first_day),
+                    dt_util.start_of_local_day(day + timedelta(days=1)),
+                )
+                write_hourly(self.hass, entry.entry_id, entry.title, spec.stat_name, spec.unit, hours)
+            if manager is not None and key in active:
+                await self._append_history(manager, key, day, yesterday_points, today_points)
         if yesterday_complete:
             self._yesterday_done = day
+
+    async def _append_history(
+        self, manager: Any, key: str, day: date, yesterday_points: list | None, today_points: list | None
+    ) -> None:
+        """Append the points never written before (yesterday first, then today); never today as "done"."""
+        async with manager.lock:
+            ledger = await manager.ledger()
+            for point_day, points in ((day - timedelta(days=1), yesterday_points), (day, today_points)):
+                if not points:
+                    continue
+                result = await append_points(self.hass, self.config_entry, ledger, key, point_day, points)
+                if result.error or result.unverified:
+                    _LOGGER.debug("History states of %s not written: %s", key, result.error or "recorder not readable")
+                    break
+            await manager.save()
 
 
 class GarminActivityCoordinator(GarminCoordinator):

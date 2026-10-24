@@ -577,7 +577,7 @@ def install() -> None:
          EntityCategory=make_enum("EntityCategory", "DIAGNOSTIC", "CONFIG"),
          UnitOfLength=make_enum("UnitOfLength", "METERS"),
          UnitOfMass=make_enum("UnitOfMass", "KILOGRAMS"),
-         UnitOfTime=make_enum("UnitOfTime", "MINUTES", "SECONDS"),
+         UnitOfTime=make_enum("UnitOfTime", "MINUTES", "SECONDS", "YEARS"),
          UnitOfVolume=make_enum("UnitOfVolume", "MILLILITERS"))
     stub("homeassistant.core", HomeAssistant=Anything, ServiceCall=FakeCall, ServiceResponse=dict,
          SupportsResponse=make_enum("SupportsResponse", "ONLY", "OPTIONAL", "NONE"),

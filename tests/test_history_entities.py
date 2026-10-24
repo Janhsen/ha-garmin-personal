@@ -132,7 +132,6 @@ class ServiceTests(unittest.TestCase):
         sv.async_register_services(self.hass)
         self.written = []
         self.recorded = {}  # (series, day) -> {ts: value}; missing key: recorder cannot be asked
-        self.patch(hs, "WRITE_SUPPORTED", True)
 
         async def writer(hass, entry, series, points):
             self.written.append((series, list(points)))
@@ -147,8 +146,9 @@ class ServiceTests(unittest.TestCase):
             return f"sensor.alex_{series}_history"
 
         self.patch(sv, "check_target", target)
-        self.patch(sv, "write_history_states", writer)
-        self.patch(sv, "recorded_points", reader)
+        self.patch(hs, "check_target", target)
+        self.patch(hs, "write_history_states", writer)
+        self.patch(hs, "recorded_points", reader)
         for name in ("now", "utcnow"):
             self.patch(sv.dt_util, name, lambda: NOW)
 
@@ -159,28 +159,26 @@ class ServiceTests(unittest.TestCase):
 
     def call(self, data=None):
         handler = self.hass.services.registered[(DOMAIN, "backfill_history")]["handler"]
-        return stubs.run(handler(stubs.FakeCall({"series": ["heart_rate"], "confirm_experimental": True, **(data or {})})))
+        return stubs.run(handler(stubs.FakeCall({"series": ["heart_rate"], **(data or {})})))
 
     def feed(self, day, rows):
         self.api.hr[day] = hr_payload(rows)
 
-    def test_without_confirmation_or_support_nothing_is_requested(self):
-        for patched, data in ((True, {"confirm_experimental": False}), (False, {})):
-            self.patch(hs, "WRITE_SUPPORTED", patched)
-            with self.assertRaises(stubs.HomeAssistantError) as ctx:
-                self.call(data)
-            self.assertEqual(ctx.exception.translation_key, "history_write_unsupported")
-            self.assertEqual((self.api.calls, self.written, stubs.Store.instances), (0, [], []))
-
-    def test_limits_while_experimental(self):
-        for data in ({"series": ["heart_rate", "spo2"]}, {"series": []}):
-            with self.assertRaises(stubs.ServiceValidationError) as ctx:
-                self.call(data)
-            self.assertEqual(ctx.exception.translation_key, "history_limits")
+    def test_limits(self):
         with self.assertRaises(stubs.ServiceValidationError) as ctx:
-            self.call({"days": 3})
+            self.call({"days": 32})
         self.assertEqual(ctx.exception.translation_key, "date_range_too_long")
+        self.assertEqual(ctx.exception.translation_placeholders["max_days"], "31")
         self.assertEqual(self.api.calls, 0)
+
+    def test_several_series_and_default_all(self):
+        self.recorded[("heart_rate", D2)] = {}
+        self.feed(D2, [(ms(2026, 10, 24, 8, 0), 60)])
+        self.call({"series": ["heart_rate", "spo2", "body_battery"]})
+        self.assertEqual(self.api.calls, 3)
+        self.api.calls = 0
+        self.call({"series": None})
+        self.assertEqual(self.api.calls, 3)
 
     def test_target_problem_stops_before_any_request(self):
         async def missing(hass, entry, series):
@@ -201,7 +199,7 @@ class ServiceTests(unittest.TestCase):
         async def flaky(hass, entry, series, points):
             return 2, "boom"
 
-        self.patch(sv, "write_history_states", flaky)
+        self.patch(hs, "write_history_states", flaky)
         out = self.call()
         self.assertIs(out["complete"], False)
         self.assertEqual((out["points_written"], out["error"]), (2, "history_write_failed: boom"))

@@ -172,10 +172,8 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
                          "{path} liegt nicht in einem erlaubten Ordner. Gib {folder} in allowlist_external_dirs frei oder wähle einen Pfad im Medienordner."),
     "path_not_zip": ("The target file {path} must end in .zip.", "Die Zieldatei {path} muss auf .zip enden."),
     "download_failed": ("Could not write {path}: {error}", "{path} konnte nicht geschrieben werden: {error}"),
-    "history_write_unsupported": ("Writing the history sensors is experimental and off by default. Set confirm_experimental to true to use it (one series, at most 2 days per call). Nothing was requested or written.",
-                                  "Das Schreiben der Verlauf-Sensoren ist experimentell und standardmäßig aus. Setze confirm_experimental auf true, um es zu nutzen (eine Reihe, höchstens 2 Tage pro Aufruf). Es wurde nichts abgefragt oder geschrieben."),
-    "history_limits": ("While experimental, one call needs exactly one series and covers at most {max_days} days.",
-                       "Solange es experimentell ist, braucht ein Aufruf genau eine Reihe und umfasst höchstens {max_days} Tage."),
+    "history_write_unsupported": ("The history sensors cannot be written on this Home Assistant: the registry or the recorder is not reachable. Nothing was requested or written.",
+                                  "Die Verlauf-Sensoren lassen sich auf diesem Home Assistant nicht beschreiben: Registry oder Recorder sind nicht erreichbar. Es wurde nichts abgefragt oder geschrieben."),
     "history_sensor_missing": ("The history sensor does not exist yet. Reload the integration, then enable the sensor.",
                                "Der Verlauf-Sensor existiert noch nicht. Lade die Integration neu und aktiviere dann den Sensor."),
     "history_sensor_disabled": ("The history sensor {entity_id} is disabled. Enable it first (Settings > Devices & services > Entities).",
@@ -224,13 +222,21 @@ DATA_DESCRIPTIONS: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
                               "Schreibt nach jeder neuen Uhr-Synchronisierung Puls, Body Battery und SpO2 als Stundenwerte (Minimum, Maximum, "
                               "Mittelwert jeder abgeschlossenen Stunde) in die Langzeitstatistik. Unabhängig von der Option darüber; kostet "
                               "je Reihe und Sync eine zusätzliche Anfrage (morgens plus eine je Reihe für gestern)."),
+        "history_auto": ("After each new watch sync, appends the new measuring points of heart rate, Body Battery and SpO2 as recorded states of their (history) sensors, and fills in the past days up to the recorder's keep days (at most 400), slowly in the background. Only for history sensors that you enabled and that the recorder records. Adds one state per measuring point to the database (about 720 per day for heart rate) until purge_keep_days removes it.",
+                          "Trägt nach jeder neuen Uhr-Synchronisierung die neuen Messpunkte von Puls, Body Battery und SpO2 als aufgezeichnete Zustände ihrer (Verlauf-)Sensoren nach und füllt die vergangenen Tage bis zur Aufbewahrungsdauer des Recorders (höchstens 400) langsam im Hintergrund auf. Nur für Verlauf-Sensoren, die du aktiviert hast und die der Recorder aufzeichnet. Legt je Messpunkt einen Zustand in der Datenbank ab (beim Puls etwa 720 pro Tag), bis purge_keep_days ihn entfernt."),
         "sync_stale_hours": ("The binary sensor reports a problem when the last watch sync is older than this many hours.",
                              "Der Binärsensor meldet ein Problem, wenn der letzte Uhr-Sync länger als so viele Stunden her ist."),
     },
 }
 
 # Further repair issues: key -> {"title": (en, de), "description": (en, de)} (key_expiring is built in below).
-EXTRA_ISSUES: dict[str, dict[str, tuple[str, str]]] = {}
+EXTRA_ISSUES: dict[str, dict[str, tuple[str, str]]] = {
+    "history_not_recorded": {
+        "title": ("A history sensor is not recorded", "Ein Verlauf-Sensor wird nicht aufgezeichnet"),
+        "description": ("The history sensor for {series} of {account} is enabled, but the recorder excludes it (include/exclude settings), so nothing is written to the history. Allow the entity in the recorder settings or disable the sensor.",
+                        "Der Verlauf-Sensor für {series} von {account} ist aktiviert, aber der Recorder schließt ihn aus (Einschluss-/Ausschluss-Einstellungen), deshalb wird nichts in den Verlauf geschrieben. Erlaube die Entität in den Recorder-Einstellungen oder deaktiviere den Sensor."),
+    },
+}
 
 # Extra service fields: service -> field -> {"name": (en, de), "description": (en, de)}; added to the built-in fields.
 EXTRA_SERVICE_FIELDS: dict[str, dict[str, dict[str, tuple[str, str]]]] = {}
@@ -349,6 +355,7 @@ def build(i: int) -> dict:
                         "daily_interval_minutes": t("Update interval for daily values (minutes)", "Abrufintervall Tageswerte (Minuten)"),
                         "intraday_attributes": t("Add intraday series as attributes (large)", "Tagesverläufe als Attribute anhängen (groß)"),
                         "hourly_statistics": t("Write hourly statistics (heart rate, Body Battery, SpO2)", "Stundenstatistik schreiben (Puls, Body Battery, SpO2)"),
+                        "history_auto": t("Fill in history automatically (history sensors)", "Verlauf automatisch nachtragen (Verlauf-Sensoren)"),
                         "sync_stale_hours": t("Warn when the watch has not synced for (hours)", "Warnen, wenn die Uhr länger nicht synchronisiert wurde als (Stunden)"),
                     },
                 }
@@ -419,15 +426,14 @@ def build(i: int) -> dict:
                                              "end_date": {"name": t("End date", "Enddatum"), "description": t("Last day to import. Default: today (only completed hours are written, never the running hour).", "Letzter Tag des Imports. Standard: heute (es werden nur abgeschlossene Stunden geschrieben, nie die laufende).")},
                                              "days": {"name": t("Days", "Tage"), "description": t("Number of days back from the end date (at most 366, default 7). Used when no start date is given.", "Anzahl Tage rückwärts ab Enddatum (höchstens 366, Standard 7). Wird ohne Startdatum verwendet.")}}},
             "backfill_history": {"name": t("Write history sensors (appending only)", "Verlauf-Sensoren schreiben (nur anhängend)"),
-                                 "description": t("EXPERIMENTAL. Writes the real measuring points of one series (heart rate, Body Battery or SpO2) with their own timestamps as recorded states of its (history) sensor, so the History panel shows them. Appends only: points already written are never written again, overwritten or deleted. Needs confirm_experimental; one series and at most 2 days per call. See the README.",
-                                                  "EXPERIMENTELL. Schreibt die echten Messpunkte einer Reihe (Puls, Body Battery oder SpO2) mit ihren eigenen Zeitstempeln als aufgezeichnete Zustände ihres (Verlauf-)Sensors, damit der Bereich Verlauf sie zeigt. Nur anhängend: bereits geschriebene Punkte werden nie erneut geschrieben, überschrieben oder gelöscht. Braucht confirm_experimental; eine Reihe und höchstens 2 Tage pro Aufruf. Siehe README."),
+                                 "description": t("Writes the real measuring points of heart rate, Body Battery and SpO2 with their own timestamps as recorded states of the (history) sensors, so the History panel shows them. Appends only: points already written are never written again, overwritten or deleted. The sensors must be enabled and recorded. This also runs automatically (option Fill in history automatically); use the service for a specific range.",
+                                                  "Schreibt die echten Messpunkte von Puls, Body Battery und SpO2 mit ihren eigenen Zeitstempeln als aufgezeichnete Zustände der (Verlauf-)Sensoren, damit der Bereich Verlauf sie zeigt. Nur anhängend: bereits geschriebene Punkte werden nie erneut geschrieben, überschrieben oder gelöscht. Die Sensoren müssen aktiviert und aufgezeichnet sein. Das läuft auch automatisch (Option Verlauf automatisch nachtragen); der Dienst ist für einen bestimmten Zeitraum."),
                                  "fields": {"config_entry_id": {"name": t("Account", "Konto"), "description": t("Garmin account. May be left out only if exactly one account is set up.", "Garmin-Konto. Darf nur weggelassen werden, wenn genau ein Konto eingerichtet ist.")},
                                             "start_date": {"name": t("Start date", "Startdatum"), "description": t("Default: days back from the end date.", "Standard: Tage rückwärts ab Enddatum.")},
                                             "end_date": {"name": t("End date", "Enddatum"), "description": t("Last day. Default: today.", "Letzter Tag. Standard: heute.")},
-                                            "days": {"name": t("Days", "Tage"), "description": t("Number of days back from the end date (at most 2 while experimental, default 1).", "Anzahl Tage rückwärts ab Enddatum (solange experimentell höchstens 2, Standard 1).")},
-                                            "series": {"name": t("Series", "Reihen"), "description": t("Exactly one of heart_rate, body_battery, spo2.", "Genau eine von heart_rate, body_battery, spo2.")},
-                                            "confirm_experimental": {"name": t("Confirm experimental writing", "Experimentelles Schreiben bestätigen"), "description": t("Must be true to write. The route into the recorder is not supported by Home Assistant and has only been tested against fakes; try one series and one day first.", "Muss true sein, damit geschrieben wird. Der Weg in den Recorder wird von Home Assistant nicht unterstützt und wurde nur gegen Fakes getestet; probiere erst eine Reihe und einen Tag.")},
-                                            "confirm_rewrite": {"name": t("Confirm without check", "Ohne Prüfung bestätigen"), "description": t("Only if the record of written points is lost and the recorder cannot be checked: write the requested days anyway. This can duplicate states that exist already.", "Nur wenn das Protokoll der geschriebenen Punkte verloren ist und der Recorder nicht geprüft werden kann: die angeforderten Tage trotzdem schreiben. Das kann bereits vorhandene Zustände verdoppeln.")}}},
+                                            "days": {"name": t("Days", "Tage"), "description": t("Number of days back from the end date (at most 31, default 1).", "Anzahl Tage rückwärts ab Enddatum (höchstens 31, Standard 1).")},
+                                            "series": {"name": t("Series", "Reihen"), "description": t("Any of heart_rate, body_battery, spo2 (default: all).", "Beliebig viele von heart_rate, body_battery, spo2 (Standard: alle).")},
+                                            "confirm_rewrite": {"name": t("Write without check", "Ohne Prüfung schreiben"), "description": t("Only if the record of written points is lost and the recorder cannot be checked: write the requested days anyway. This can duplicate states that exist already.", "Nur wenn das Protokoll der geschriebenen Punkte verloren ist und der Recorder nicht geprüft werden kann: die angeforderten Tage trotzdem schreiben. Das kann bereits vorhandene Zustände verdoppeln.")}}},
         },
         "exceptions": {k: {"message": v[i]} for k, v in EXCEPTIONS.items()},
     }

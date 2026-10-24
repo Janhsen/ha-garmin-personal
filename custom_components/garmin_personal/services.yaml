@@ -172,11 +172,10 @@ backfill_history:
       selector:
         number:
           min: 1
-          max: 2
+          max: 31
           unit_of_measurement: d
           mode: box
     series:
-      required: true
       example: heart_rate
       selector:
         select:
@@ -186,10 +185,6 @@ backfill_history:
             - body_battery
             - spo2
     confirm_rewrite:
-      default: false
-      selector:
-        boolean:
-    confirm_experimental:
       default: false
       selector:
         boolean:

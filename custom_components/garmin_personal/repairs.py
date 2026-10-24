@@ -61,3 +61,25 @@ def update_key_expiry_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
 def remove_key_expiry_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Drop the issue (the entry is being removed)."""
     ir.async_delete_issue(hass, DOMAIN, expiry_issue_id(entry))
+
+
+def history_issue_id(entry: ConfigEntry, series: str) -> str:
+    """Issue id for a history sensor the recorder does not record."""
+    return f"history_not_recorded_{entry.entry_id}_{series}"
+
+
+def update_history_issue(hass: HomeAssistant, entry: ConfigEntry, series: str, excluded: bool) -> None:
+    """Create or remove the hint that an enabled history sensor is excluded from the recorder."""
+    issue_id = history_issue_id(entry, series)
+    if not excluded:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+        return
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="history_not_recorded",
+        translation_placeholders={"account": entry.title, "series": series},
+    )

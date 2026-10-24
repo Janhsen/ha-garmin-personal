@@ -3,6 +3,24 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## Unreleased
+
+### Added
+- Option **Fill history automatically** (on by default). For each series whose history sensor is enabled and recorded
+  (checked before every run; otherwise silently nothing, plus a repair hint if the recorder excludes an enabled
+  sensor): after each sync the new points of today (and of yesterday on the first full refresh of a day and after
+  syncs before 10:00) are appended, append-only through the ledger. A background load fills the past per series,
+  backwards from yesterday up to the recorder's `keep_days` (10 if unknown, at most 400): one day at a time about 20 s
+  apart, 30 minutes pause after a rate limit, stop after 14 empty days in a row, resumable (finished days are kept in
+  the ledger per series, so enabling a series later or gaps after downtime are filled on the next reload), never
+  parallel to the backfill services. Progress is shown as `history_backfilled_until` on the history sensor.
+
+### Changed
+- `backfill_history` is no longer experimental: `confirm_experimental` is gone, `series` is optional (default all
+  three), up to 31 days per call.
+- Hourly statistics are named like `Alex heart rate (hourly)`; the calendar uses a decimal comma for languages that
+  have one and a readable title (`Trail running`) for unnamed activities; ages use the unit `y` instead of `a`.
+
 ## 0.5.1
 
 ### Added
