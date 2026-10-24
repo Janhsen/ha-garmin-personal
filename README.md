@@ -5,12 +5,11 @@ Garmin Connect Personal API bereitstellt: als Sensoren für die Standardwerte un
 als Services für alles andere. Es werden keine Werte berechnet oder erfunden –
 was Garmin nicht liefert, bleibt leer (`unbekannt`).
 
-> **Stand:** v0.1.0, geschrieben ohne Zugriff auf einen Garmin-Account und ohne
-> laufendes Home Assistant. Getestet ist die Logik (Token, Retry, Zeitfenster,
-> Filter, Wert-Extraktion, Sensorliste) mit simulierten Antworten. Die Feldnamen
-> stammen aus dem Swagger/den dokumentierten Modellen und aus
-> `thomascamminady/gcpapi-sync`. **Erster echter Lauf: bitte Diagnose und Log
-> prüfen** und leere Sensoren melden.
+> **Stand:** v0.2.0, läuft gegen einen echten Garmin-Account in Home Assistant.
+> Die Logik (Token, Retry, Zeitfenster, Filter, Wert-Extraktion, Sensorliste) ist
+> mit simulierten Antworten getestet. Die Feldnamen stammen aus dem Swagger, den
+> dokumentierten Modellen und echten Antworten. Sensoren, die dauerhaft leer
+> bleiben, bitte mit Diagnose und Log melden.
 
 ## Installation
 
