@@ -305,6 +305,18 @@
         "name": "Sleep feedback",
         "state": {
           "positive_recovering": "Positive: recovering",
+          "positive_refreshing": "Positive: refreshing",
+          "positive_calm": "Positive: calm",
+          "positive_short_but_recovering": "Positive: short but recovering",
+          "positive_short_but_refreshing": "Positive: short but refreshing",
+          "positive_long_and_continuous": "Positive: long and continuous",
+          "positive_long_and_refreshing": "Positive: long and refreshing",
+          "positive_long_and_deep": "Positive: long and deep",
+          "positive_continuous": "Positive: continuous",
+          "positive_optimal_structure": "Positive: optimal structure",
+          "negative_discontinuous": "Negative: discontinuous",
+          "negative_light": "Negative: light",
+          "negative_short_and_poor_structure": "Negative: short and poor structure",
           "negative_not_enough_rem": "Negative: not enough REM"
         }
       },
@@ -312,6 +324,13 @@
         "name": "Sleep insight",
         "state": {
           "positive_restful_day": "Positive: restful day",
+          "positive_exercise": "Positive: exercise",
+          "positive_restful_evening": "Positive: restful evening",
+          "positive_late_bed_time": "Positive: late bed time",
+          "positive_acclimatization_in_progress": "Positive: acclimatization in progress",
+          "negative_strenuous_exercise": "Negative: strenuous exercise",
+          "negative_late_strenuous_exercise": "Negative: late strenuous exercise",
+          "negative_acclimatization_in_progress": "Negative: acclimatization in progress",
           "none": "None"
         }
       },

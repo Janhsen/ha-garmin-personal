@@ -305,6 +305,18 @@
         "name": "Schlaf-Feedback",
         "state": {
           "positive_recovering": "Positiv: erholsam",
+          "positive_refreshing": "Positiv: erfrischend",
+          "positive_calm": "Positiv: ruhig",
+          "positive_short_but_recovering": "Positiv: kurz, aber erholsam",
+          "positive_short_but_refreshing": "Positiv: kurz, aber erfrischend",
+          "positive_long_and_continuous": "Positiv: lang und durchgehend",
+          "positive_long_and_refreshing": "Positiv: lang und erfrischend",
+          "positive_long_and_deep": "Positiv: lang und tief",
+          "positive_continuous": "Positiv: durchgehend",
+          "positive_optimal_structure": "Positiv: optimale Struktur",
+          "negative_discontinuous": "Negativ: unterbrochen",
+          "negative_light": "Negativ: zu leicht",
+          "negative_short_and_poor_structure": "Negativ: kurz und schlechte Struktur",
           "negative_not_enough_rem": "Negativ: zu wenig REM-Schlaf"
         }
       },
@@ -312,6 +324,13 @@
         "name": "Schlaf-Einblick",
         "state": {
           "positive_restful_day": "Positiv: erholsamer Tag",
+          "positive_exercise": "Positiv: Training",
+          "positive_restful_evening": "Positiv: erholsamer Abend",
+          "positive_late_bed_time": "Positiv: späte Schlafenszeit",
+          "positive_acclimatization_in_progress": "Positiv: Akklimatisierung läuft",
+          "negative_strenuous_exercise": "Negativ: anstrengendes Training",
+          "negative_late_strenuous_exercise": "Negativ: spätes anstrengendes Training",
+          "negative_acclimatization_in_progress": "Negativ: Akklimatisierung läuft",
           "none": "Keine"
         }
       },

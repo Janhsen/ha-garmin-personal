@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -119,6 +120,9 @@ def _d(
         options=options,
     )
 
+
+_LOGGER = logging.getLogger(__name__)
+_SEEN_UNLISTED: set[tuple[str, str]] = set()
 
 TOTAL = SensorStateClass.TOTAL_INCREASING
 DURATION = SensorDeviceClass.DURATION
@@ -579,6 +583,10 @@ class GarminSensor(CoordinatorEntity[GarminCoordinator], SensorEntity):
         keys = list(listed)
         if isinstance(current, str) and current not in keys:
             keys.append(current)
+            seen = (self.entity_description.key, current)
+            if seen not in _SEEN_UNLISTED:
+                _SEEN_UNLISTED.add(seen)
+                _LOGGER.info("Garmin value %r for %s has no translation yet; please report it", current, seen[0])
         return keys
 
     @property
