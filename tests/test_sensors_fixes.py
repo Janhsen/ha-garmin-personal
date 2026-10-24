@@ -201,7 +201,7 @@ class DescriptorTests(unittest.TestCase):
         import json
         icons = json.loads((stubs.PKG / "icons.json").read_text())["entity"]["sensor"]
         self.assertGreater(len(icons), 30)
-        self.assertTrue(set(icons) <= set(BY))
+        self.assertTrue(set(icons) <= set(BY) | set(sn.HISTORY_UNITS))
 
     def test_private_attributes_are_not_recorded(self):
         for name in ("startLatitude", "startLongitude", "locationName", "description", "values", "events"):
@@ -335,6 +335,15 @@ class CalendarTests(unittest.TestCase):
 
     def event(self, hass=None, **extra):
         return cal.activity_event({"activityId": 1, "startTimeGMT": self.START, "duration": 3600.0, **extra}, hass)
+
+    def test_decimal_comma_by_language_and_readable_fallback_title(self):
+        de = SimpleNamespace(config=SimpleNamespace(language="de"))
+        en = SimpleNamespace(config=SimpleNamespace(language="en"))
+        self.assertEqual(self.event(de, distance=10250.0).description, "10,25 km")
+        self.assertEqual(self.event(en, distance=10250.0).description, "10.25 km")
+        self.assertEqual(self.event(activityType={"typeKey": "trail_running"}).summary, "Trail running")
+        self.assertEqual(self.event().summary, "Garmin")
+        self.assertEqual(self.event(activityName="Morgenrunde").summary, "Morgenrunde")
 
     def test_end_uses_elapsed_duration_when_longer(self):
         ev = self.event(elapsedDuration=4000.0)

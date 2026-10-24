@@ -18,6 +18,8 @@ from .values import dig, parse_timestamp, to_number
 
 PARALLEL_UPDATES = 0
 
+COMMA_LANGUAGES = frozenset({"de", "fr", "es", "it", "nl", "pt", "pl", "cs", "da", "sv", "nb", "no", "fi", "ru", "tr"})
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: GarminConfigEntry, async_add_entities: AddEntitiesCallback
@@ -26,15 +28,27 @@ async def async_setup_entry(
     async_add_entities([GarminActivityCalendar(entry.runtime_data.coordinators["activities"], entry)])
 
 
+def _localize(text: str, hass: HomeAssistant | None) -> str:
+    """Decimal comma for languages that use one (German and most of Europe), else the decimal point."""
+    language = str(getattr(getattr(hass, "config", None), "language", "") or "").lower()
+    return text.replace(".", ",") if language.split("-")[0] in COMMA_LANGUAGES else text
+
+
+def _fallback_title(activity: Mapping[str, Any]) -> str:
+    """Title of an activity without a name: its type key made readable (``trail_running`` -> ``Trail running``)."""
+    key = dig(activity, "activityType", "typeKey")
+    return str(key).replace("_", " ").capitalize() if key else "Garmin"
+
+
 def _length(distance_m: float, hass: HomeAssistant | None) -> str:
     """A distance in the unit system of Home Assistant (km or mi); kilometres without Home Assistant."""
     units = getattr(getattr(hass, "config", None), "units", None)
     if units is not None and hasattr(units, "length") and hasattr(units, "length_unit"):
         try:
-            return f"{units.length(distance_m, 'm'):.2f} {units.length_unit}"
+            return _localize(f"{units.length(distance_m, 'm'):.2f}", hass) + f" {units.length_unit}"
         except (TypeError, ValueError):
             pass
-    return f"{distance_m / 1000:.2f} km"
+    return _localize(f"{distance_m / 1000:.2f}", hass) + " km"
 
 
 def activity_end(start: datetime, activity: Mapping[str, Any]) -> datetime | None:
@@ -65,7 +79,7 @@ def activity_event(activity: Mapping[str, Any], hass: HomeAssistant | None = Non
     heart_rate = to_number(activity.get("averageHR"))
     if heart_rate:
         parts.append(f"{round(heart_rate)} bpm")
-    name = activity.get("activityName") or dig(activity, "activityType", "typeKey") or "Garmin"
+    name = activity.get("activityName") or _fallback_title(activity)
     return CalendarEvent(
         start=start,
         end=end,

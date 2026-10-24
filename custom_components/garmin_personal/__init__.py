@@ -34,6 +34,8 @@ from .const import (
     ENTRY_VERSION,
     KEY_EXPIRY_CHECK_INTERVAL,
     OPT_DAILY_INTERVAL,
+    OPT_HISTORY_AUTO,
+    OPT_HOURLY_STATS,
     OPT_INTRADAY,
 )
 from .coordinator import (
@@ -81,6 +83,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: GarminConfigEntry) -> bo
         "daily": GarminDailyCoordinator(
             hass, entry, api, "daily", timedelta(minutes=daily_minutes),
             make_daily_calls(bool(entry.options.get(OPT_INTRADAY, False))),
+            hourly_stats=bool(entry.options.get(OPT_HOURLY_STATS, True)),
+            history_auto=bool(entry.options.get(OPT_HISTORY_AUTO, True)),
         ),
         "sleep": GarminCoordinator(
             hass,

@@ -3,6 +3,75 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## 0.5.3
+
+### Added
+- New history series **HRV (history)** (`hrv_history`, diagnostic, disabled by default, ms): the nightly HRV readings
+  (about every 5 minutes) from the HRV endpoint, time from `readingTimeGMT` (UTC). A night belongs to the day of waking
+  up; the ledger works with exact timestamps, so today's night is fetched again after each sync and only new points are
+  appended. Available in `backfill_history` (`series: hrv`), the automatic live filling and the initial load, with the
+  same per-series resume and re-load rules as heart rate. No hourly statistic for HRV.
+
+### Changed
+- Each history sensor now shows the value of its newest point as state, with `measured_at` (ISO, with zone) as
+  attribute. Only the live filling sets it (point newer than the shown one; no new row otherwise); the initial load and
+  old-day service runs never do. Restored after a restart; the progress attribute keeps the value.
+- The SpO2 parser takes the `spo2Level` column from Garmin's descriptor list (column 1 as before if there is none);
+  the environment column is never read.
+
+## 0.5.2
+
+### Added
+- Option **Fill history automatically** (on by default). For each series whose history sensor is enabled and recorded
+  (checked before every run; otherwise silently nothing, plus a repair hint if the recorder excludes an enabled
+  sensor): after each sync the new points of today (and of yesterday on the first full refresh of a day and after
+  syncs before 10:00) are appended, append-only through the ledger. A background load fills the past per series,
+  backwards from yesterday up to the recorder's `keep_days` (10 if unknown, at most 400): one day at a time about 20 s
+  apart, 30 minutes pause after a rate limit, stop after 14 empty days in a row, resumable (finished days are kept in
+  the ledger per series, so enabling a series later or gaps after downtime are filled on the next reload), never
+  parallel to the backfill services. Progress is shown as `history_backfilled_until` on the history sensor.
+
+### Changed
+- `backfill_history` is no longer experimental: `confirm_experimental` is gone, `series` is optional (default all
+  three), up to 31 days per call.
+- Hourly statistics are named like `Alex heart rate (hourly)`; the calendar uses a decimal comma for languages that
+  have one and a readable title (`Trail running`) for unnamed activities; ages use the unit `y` instead of `a`.
+
+## 0.5.1
+
+### Added
+- EXPERIMENTAL: `backfill_history` now writes. The real measuring points of one series are put into the recorder as
+  states of the (history) sensor with their own timestamps, via the recorder's own queue (not supported by Home
+  Assistant, only tested against fakes). Requires `confirm_experimental: true` (default false: the service answers
+  `history_write_unsupported` and does nothing), exactly one `series` and at most 2 days per call. The sensor must
+  exist, be enabled and be recorded; each point's `old_state` is the previous point; a failed hand-over stops at once
+  and only the points really handed over enter the ledger. No automatic variant, no option.
+
+## 0.5.0
+
+### Added
+- Hourly statistics for heart rate, Body Battery and SpO2: minimum, maximum and mean of the real Garmin measurements
+  per full UTC hour, as external long-term statistics `garmin_personal:<entry_id>_heart_rate_hourly`,
+  `…_body_battery_hourly` and `…_spo2_hourly` (bpm, %, %). Hours without measurements stay empty; placeholder values
+  (0 or negative) are dropped; nothing is interpolated.
+- New option **Write hourly statistics** (on by default, independent of the intraday attributes): after each new
+  watch sync the completed hours of today are written, and those of yesterday on the first full refresh of a day and
+  after syncs before 10:00 local time. Same statistic and hour overwrite each other, so later corrections by Garmin are
+  taken over; the running hour is never written. Costs about 2 extra requests per sync (heart rate and Body Battery;
+  SpO2 is reused) and 3 for yesterday (see README, request volume).
+- New service `garmin_personal.backfill_intraday`: writes the hourly statistics retroactively (`days`, `start_date`,
+  `end_date`, `config_entry_id`; at most 366 days, one request per day and series, one run per account at a time,
+  partial result with `complete`, `last_completed_day` and `error` after an interruption).
+
+- Scaffold for history sensors: disabled diagnostic sensors *Heart rate / Body Battery / SpO2 (history)* and the
+  service `backfill_history` with an append-only ledger (`history.py`: exact timestamps for 7 days, marks for older
+  days, recorder check when the ledger is lost, `confirm_rewrite`). The service answers `history_write_unsupported`
+  until writing states with past timestamps is verified on a real Home Assistant; nothing is written or requested.
+
+### Changed
+- The metadata of external statistics is now built in one place (`stats_writer.py`); the existing daily statistics are
+  unchanged.
+
 ## 0.4.0
 
 Requires Home Assistant 2025.10.0 or newer (`hacs.json`).
