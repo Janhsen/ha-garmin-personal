@@ -7,11 +7,10 @@ Garmin Connect Personal API bereitstellt: als Sensoren für die Standardwerte un
 als Services für alles andere. Es werden keine Werte berechnet oder erfunden –
 was Garmin nicht liefert, bleibt leer (`unbekannt`).
 
-> **Stand:** v0.3.2, läuft gegen einen echten Garmin-Account in Home Assistant.
-> Die Logik (Token, Retry, Zeitfenster, Filter, Wert-Extraktion, Sensorliste) ist
-> mit simulierten Antworten getestet. Die Feldnamen stammen aus dem Swagger, den
-> dokumentierten Modellen und echten Antworten. Sensoren, die dauerhaft leer
-> bleiben, bitte mit Diagnose und Log melden.
+> **Stand:** läuft gegen einen echten Garmin-Account in Home Assistant (aktuelle Version: siehe `manifest.json` und
+> das [Changelog](CHANGELOG.md), das englisch ist). Die Logik (Token, Retry, Zeitfenster, Filter, Wert-Extraktion,
+> Sensorliste) ist mit simulierten Antworten getestet. Die Feldnamen stammen aus dem Swagger, den dokumentierten
+> Modellen und echten Antworten. Sensoren, die dauerhaft leer bleiben, bitte mit Diagnose und Log melden.
 
 ## Installation
 
@@ -24,26 +23,47 @@ was Garmin nicht liefert, bleibt leer (`unbekannt`).
 
 Der Schlüssel liegt nur in Home Assistant. Gib ihn nirgends sonst ein.
 
+## Was du nach der Einrichtung siehst
+
+* Pro Konto ein **Gerät**, benannt wie das Konto (zum Beispiel „Alex“), mit rund 120 Sensoren, einem Binärsensor,
+  einer Event-Entität und einem Kalender. Etwa die Hälfte der Sensoren ist **standardmäßig aktiv**; der Rest sind
+  Detailwerte, die du unter Einstellungen → Entitäten einschalten kannst.
+* Die Entitäts-IDs setzen sich aus Gerätename und Sensorname in der Sprache zusammen, die Home Assistant beim Anlegen
+  der Entität benutzt hat, zum Beispiel `sensor.alex_schritte` (Deutsch) oder `sensor.alex_steps` (Englisch). Sieh sie
+  unter Einstellungen → Entitäten nach; die Beispiele unten nutzen solche Namen.
+* Werte erscheinen nach dem ersten Abruf. Manche Sensoren bleiben leer, bis Garmin etwas liefert (Schlaf am frühen
+  Morgen, Körperwerte ohne Waage). Kurz nach dem ersten vollständigen Abruf werden Sensoren, für die Garmin gar keinen
+  Wert liefert, einmalig deaktiviert (siehe unten).
+* Die Live-Sensoren haben **keinen Verlauf vor dem Zeitpunkt ihrer Erstellung**. Ältere Tage bekommst du mit
+  `garmin_personal.backfill_statistics` einmalig in die Diagramme (siehe „Verlauf und Langzeitstatistik“).
+
+## Zwei Personen (ein Eintrag pro Person)
+
+Lege die Integration einmal pro Person an, jeweils mit dem eigenen Schlüssel und einem anderen Namen („Alex“, „Sam“).
+Jeder Eintrag hat sein eigenes Gerät, seine Sensoren, sein Event und seinen Kalender; die Entitätsnamen tragen den
+Namen der Person. Services wirken auf **ein** Konto: Bei mehreren Konten musst du es im Feld *Konto* wählen (Beispiel
+unter Services). Die Schlüssel laufen unabhängig ab; jeder Eintrag hat einen eigenen Sensor „API-Schlüssel läuft ab“
+und eine eigene Reparatur-Meldung.
+
 ## Schlüssel-Ablauf
 
-Garmin verrät das Ablaufdatum nicht über die API. Die Integration rechnet ab dem
-Anlegen mit der gewählten Gültigkeit (30/90/180/365 Tage), zeigt ein Diagnose-Sensor
-„API-Schlüssel läuft ab“ und legt **7 Tage vorher** einen Reparatur-Hinweis an.
-Erneuern: neuen Schlüssel erzeugen → am Eintrag *Neu konfigurieren*. Wird der Schlüssel
-vorher abgelehnt, startet Home Assistant automatisch die Neu-Anmeldung.
+Garmin verrät das Ablaufdatum nicht über die API. Das angezeigte Datum ist deshalb **berechnet**, nicht von Garmin
+gelesen: Die Integration zählt ab dem Anlegen mit der gewählten Gültigkeit (30/90/180/365 Tage). Wähle dieselbe
+Gültigkeit wie bei Garmin, sonst stimmt das Datum nicht und die Warnung kommt zu spät oder zu früh. Ein
+Diagnose-Sensor „API-Schlüssel läuft ab“ zeigt das berechnete Datum, und **7 Tage vorher** erscheint ein
+Reparatur-Hinweis. Erneuern: neuen Schlüssel erzeugen → am Eintrag *Neu konfigurieren*. Wird der Schlüssel vorher
+abgelehnt, startet Home Assistant automatisch die erneute Authentifizierung.
 
-## Sensoren (~100)
+## Sensoren (~120)
 
 Abruf: Der Tageswert (mit der Zeit des letzten Uhr-Syncs) wird alle 5 Minuten abgefragt, das ist eine
-einzige Anfrage. Nur wenn sich die Sync-Zeit ändert, werden SpO2, Trinkmenge, Schlaf, Körperwerte und
+einzige Anfrage. Nur wenn sich die Sync-Zeit ändert, werden SpO2, Flüssigkeitszufuhr, Schlaf, Körperwerte und
 Aktivitäten geholt. Zusätzlich gibt es einen Fallback (Tageswerte stündlich, Schlaf alle 2 Stunden,
 Körperwerte und Aktivitäten stündlich) für Daten, die ohne Uhr-Sync entstehen, z. B. Waage oder App-Einträge.
 
-Gruppen (Fallback-Intervall in Klammern):
-
 | Gruppe | Inhalt |
 |---|---|
-| Tageswerte (Tageswert 5 min, Rest bei neuem Sync / stündlich) | Schritte, Distanz, Kalorien, Intensitätsminuten, Stockwerke, Puls (Ruhe/Min/Max), Stress, Body Battery, SpO2, Atmung, Trinkmenge, letzte Synchronisation |
+| Tageswerte (Tageswert 5 min, Rest bei neuem Sync / stündlich) | Schritte, Distanz, Kalorien, Intensitätsminuten, Stockwerke, Puls (Ruhe/Min/Max), Stress, Body Battery, SpO2, Atmung, Flüssigkeitszufuhr, letzte Synchronisation |
 | Schlaf & HRV (bei neuem Sync, sonst 2 h) | Dauer, Phasen, Schlafwert + Teilwerte, Beginn/Ende, Schlafbedarf, HRV letzte Nacht/Woche/Status |
 | Körper (bei neuem Sync, sonst 1 h) | Gewicht, BMI, Körperfett/-wasser, Muskel-/Knochenmasse, Fitnessalter |
 | Aktivitäten (bei neuem Sync, sonst 1 h) | Letzte Aktivität (Name, Typ, Start, Distanz, Dauer, Kalorien, Puls, Trainingseffekt, Belastung, VO2max, Höhenmeter), Wellness-Aktivitäten |
@@ -54,8 +74,13 @@ Beim ersten vollständigen Abruf werden außerdem einmalig die Sensoren deaktivi
 zwar den Endpunkt beantwortet, aber keinen Wert für das Feld liefert (z. B. Körperfett ohne
 Körperanalyse-Waage). Endpunkte, die noch gar nichts geliefert haben (z. B. Schlaf am frühen Morgen),
 bleiben unberührt. Wieder einschalten geht jederzeit unter Einstellungen → Entitäten.
-Zusätzlich: Binary-Sensor *Uhr-Synchronisation überfällig* und Event-Entität *Aktivität*
-(feuert `activity_finished` bei jeder neuen Aktivität, nicht beim ersten Start).
+Zusätzlich: Binärsensor *Uhr-Synchronisation überfällig* und Event-Entität *Aktivität*.
+
+**Das Event feuert, nachdem die Uhr synchronisiert hat**, wenn Garmin Connect eine neue Aktivität auflistet
+(Ereignistyp `activity_finished`), nicht in dem Moment, in dem das Training endet; dazwischen können Stunden liegen.
+Für Aktivitäten, die beim ersten Start schon bekannt waren, feuert es nicht. Die Ereignisdaten (Attribute der
+Event-Entität) enthalten `activity_id`, `name`, `type`, `start_time_gmt`, `distance` (Meter), `duration` (Sekunden)
+und `calories`.
 
 Außerdem: eine **Kalender**-Entität mit den letzten Aktivitäten (rund 20, aus Garmins Startzeit und Dauer; Distanz,
 Kalorien und Durchschnittspuls in der Beschreibung), standardmäßig deaktivierte Sensoren für Stressanteile,
@@ -63,9 +88,13 @@ durchschnittliche Höhe, höchste/niedrigste Atmung, niedrigsten/höchsten Durch
 (Garmins Feedback und Ereignisliste als Attribute) und die Schlaf-Ausrichtung mit Garmins empfohlenem Fenster
 (Minuten nach Mitternacht, wie geliefert).
 
-Optionen: Intervall der Sync-Prüfung, Sync-Warnschwelle, und ob Tagesverläufe
+Optionen: Abrufintervall der Tageswerte (das ist die Sync-Prüfung), Sync-Warnschwelle, und ob Tagesverläufe
 (Puls, Body Battery, SpO2) als Attribute angehängt werden (groß, nicht im Recorder gespeichert).
 Nur mit dieser Option werden die zusätzlichen Endpunkte für Puls- und Body-Battery-Verlauf abgefragt.
+
+Einheiten: Distanzen sind in Metern und Dauern in Sekunden (Schlafbedarf in Minuten); die Einheit steht am Sensor,
+und eine Dashboard-Karte kann umrechnen. Viele „heute“-Werte (Schritte, minimaler/maximaler Puls) beginnen um
+Mitternacht neu.
 
 Abrufmenge: etwa 290 Anfragen pro Tag und Konto für die Sync-Prüfung, dazu etwa 9 je Uhr-Sync
 und die Fallbacks, insgesamt grob 400 bis 500 (ohne Tagesverläufe).
@@ -79,14 +108,53 @@ Morgen, bevor die neue Nacht synchronisiert ist), auch über einen Neustart. Die
 der Wert alt ist) und `last_seen` (wann die Integration zuletzt einen neuen Wert bekam) zeigen das an. Es wird nichts
 geschätzt.
 
+## Beispiele
+
+Benachrichtigung nach einer neuen Aktivität:
+
+```yaml
+alias: Garmin-Aktivität melden
+triggers:
+  - trigger: state
+    entity_id: event.alex_aktivitat
+actions:
+  - action: notify.notify
+    data:
+      message: >-
+        Neue Aktivität: {{ trigger.to_state.attributes.name }},
+        {{ (trigger.to_state.attributes.distance / 1000) | round(1) }} km
+```
+
+Warnung, wenn die Uhr länger nicht synchronisiert hat: den Binärsensor *Uhr-Synchronisation überfällig* als Auslöser
+nehmen; die Schwelle stellst du in den Optionen ein.
+
+Dashboard: Eine *Statistik-Diagramm*-Karte oder eine einfache Entitätenkarte mit `sensor.alex_schritte`,
+`sensor.alex_schlafwert` und `sensor.alex_ruhepuls` zeigt die wichtigsten Werte.
+
 ## Services (Antwort als Daten, z. B. für Skripte und Templates)
+
+Bei **mehreren Konten** braucht jeder Service das Feld *Konto*. Im Formular wählst du es aus einer Liste; in YAML ist
+es die Config-Entry-ID (Service-Formular öffnen, Konto wählen, in den YAML-Modus wechseln und den Wert kopieren).
+Beispiel mit Antwort:
+
+```yaml
+action: garmin_personal.fetch
+data:
+  config_entry_id: <entry_id>
+  endpoint: sleep
+  date: "2026-01-15"
+response_variable: result
+```
+
+Fehlt das Feld und es gibt mehrere Konten, bricht der Service mit einer Fehlermeldung ab, die danach fragt.
 
 * `garmin_personal.fetch` – jeder Endpunkt per Kurzname (`daily_summary`, `sleep`, `hrv_summaries`,
   `stress`, `menstrual_summary`, `nutrition`, `activity`, …) für Tag oder Zeitraum. Lange Zeiträume
   werden automatisch in Garmins erlaubte Fenster zerlegt.
 * `garmin_personal.search_activities` – Filter wie `activity_type`, `min_distance`, `start_date`,
   `bounding_box`, mit automatischem Blättern.
-* `garmin_personal.download_activity` – Original-ZIP (FIT) in einen erlaubten Ordner.
+* `garmin_personal.download_activity` – Original-ZIP (FIT) in einen Ordner, den Home Assistant erlaubt
+  (`allowlist_external_dirs`); sonst meldet der Service, dass der Ordner nicht erlaubt ist.
 * `garmin_personal.backfill_statistics` – schreibt Tageswerte rückwirkend in die **Langzeitstatistik**
   (externe Statistik `garmin_personal:<entry>_<name>`, ein Wert pro Tag): Aktivität (Schritte, Puls, Stress,
   Body Battery, Kalorien …), Schlaf (Dauer, Phasen, Wert, Puls, Schlafbedarf), HRV und Gewicht/Körperwerte.
@@ -99,17 +167,33 @@ geschätzt.
 
 Alle Namen, Services, Dialoge und Hinweise gibt es auf Deutsch und Englisch (`strings.json`, `translations/`,
 erzeugt mit `scripts/gen_translations.py`). Feste Wortlisten von Garmin (Bewertung EXCELLENT/GOOD/FAIR/POOR,
-HRV-Status, Stressstufe, Aktivitätstyp, Schlaf-Teilwerte) sind ENUM-Sensoren: Der Zustand bleibt der englische
-Schlüssel (z. B. `fair`), die Anzeige wird übersetzt. Unbekannte Werte erscheinen unübersetzt, nichts wird
-erfunden. Schlaf-Feedback und Schlaf-Einsicht sind nur für bisher beobachtete Schlüssel übersetzt (wörtlich aus dem Schlüssel).
+HRV-Status, Stressstufe, Aktivitätstyp, Schlaf-Teilwerte, Schlaf-Feedback, Schlaf-Einblick) sind ENUM-Sensoren: Der
+Zustand bleibt der englische Schlüssel (z. B. `fair`), die Anzeige wird übersetzt. Schlaf-Teilwerte, Schlaf-Feedback,
+Schlaf-Einblick und der persönliche Einblick sind nur für bisher beobachtete Schlüssel übersetzt (wörtlich aus dem
+Schlüssel). Unbekannte Werte erscheinen unübersetzt, werden einmalig auf Info-Ebene ins Log geschrieben
+(einschalten mit `custom_components.garmin_personal: info` unter `logger:` in der `configuration.yaml`) und nie
+ausgeblendet; nichts wird erfunden.
 Das HRV-Feedback (`HRV_BALANCED_2` bis `_8`, `ONBOARDING_1`) erscheint als „Ausgeglichen: 6“: Es sind nummerierte
 Textvarianten von Garmin, deren Wortlaut die API nicht liefert; angezeigt wird nur die Nummer, keine Deutung und keine Skala.
 
 ## Verlauf und Langzeitstatistik
 
 * Live-Sensoren erscheinen im Verlauf erst ab dem Zeitpunkt, an dem sie angelegt wurden.
-* Rückwirkend importierte Tageswerte (`backfill_statistics`) sind externe Statistiken. Der Bereich *Verlauf* zeigt
-  sie nicht; sie erscheinen in einer *Statistik-Diagramm*-Karte und unter Entwicklerwerkzeuge → Statistiken.
+* Rückwirkend importierte Tageswerte (`backfill_statistics`) sind externe Statistiken mit eigenem Namen (Kontoname und
+  Wertname) und **getrennt von den Live-Sensoren**: Eine Karte für `sensor.alex_schritte` zeigt importierte Tage
+  nicht. Der Bereich *Verlauf* zeigt sie ebenfalls nicht; nimm eine *Statistik-Diagramm*-Karte und wähle die
+  importierte Statistik, oder sieh unter Entwicklerwerkzeuge → Statistiken nach (Suche `garmin_personal`):
+
+  ```yaml
+  type: statistics-graph
+  entities:
+    - garmin_personal:<entry_id>_steps
+  period: day
+  stat_types:
+    - mean
+  ```
+* Jeder importierte Tag wird als ein Wert in der ersten Stunde des Tages gespeichert. Mit der Periode *Stunde* zeigt
+  eine Karte deshalb eine Spitze um Mitternacht und sonst Lücken; nimm die Periode *Tag*.
 
 ## Änderungen an der Garmin-API erkennen
 
@@ -119,7 +203,10 @@ Textvarianten von Garmin, deren Wortlaut die API nicht liefert; angezeigt wird n
 ## Datenschutz
 
 Gesundheitsdaten. Menstruations- und Ernährungsdaten gibt es **nur** über Services auf ausdrücklichen
-Abruf, nie als Sensor. Die Diagnose enthält weder Schlüssel noch Messwerte.
+Abruf, nie als Sensor. Die Diagnose enthält weder Schlüssel noch Messwerte. Der Sensor *Letzte Aktivität* trägt die
+Start-Koordinaten und den Ortsnamen der Aktivität als Attribute; sie werden im Recorder gespeichert und von Karten
+angezeigt, die Attribute darstellen. Bedenke das beim Teilen von Dashboards oder der Datenbank. Auch
+Service-Antworten können persönliche Daten enthalten; poste sie nicht öffentlich.
 
 ## Garmin-Eigenheiten, die berücksichtigt sind
 
@@ -128,12 +215,35 @@ maximal ~45 Aktivitäten je Seite, Wiederholung bei 429/5xx mit `Retry-After`, e
 Token-Tausch bei 401, Zeitstempel als ISO oder Millisekunden. `weight/all` liefert bei Garmin
 derzeit immer HTTP 400 und ist nur der Vollständigkeit halber über `fetch` erreichbar.
 
+## Fehlersuche
+
+* **Ein Sensor bleibt `unbekannt`.** Garmin liefert das Feld nicht (zum Beispiel Körperfett ohne Körperanalyse-Waage),
+  oder es ist ein Detailsensor, der beim ersten Abruf einmalig deaktiviert wurde. Schalte ihn unter Einstellungen →
+  Entitäten ein. Die Diagnose der Integration zeigt, welche Felder Garmin geliefert hat.
+* **Schlaf oder HRV ist am Morgen leer.** Die Nacht ist erst nach dem Uhr-Sync verfügbar. Bis dahin behält der Sensor
+  den gestrigen Wert; das Attribut `held_value` ist dann wahr.
+* **„Garmin hat den Schlüssel abgelehnt“ / erneute Authentifizierung.** Der Schlüssel ist abgelaufen oder widerrufen.
+  Erzeuge bei Garmin einen neuen und nutze *Neu konfigurieren* (siehe „Schlüssel-Ablauf“).
+* **Synchronisation überfällig.** Die Uhr hat länger als die eingestellten Stunden nicht mit der Garmin-App
+  synchronisiert; die Werte bleiben, wie sie sind, bis sie es tut.
+* **Mehr Details im Log.** Trage `custom_components.garmin_personal: debug` unter `logger:` → `logs:` ein.
+
+## Entfernen
+
+Lösche den Eintrag unter Einstellungen → Geräte & Dienste. Der Schlüssel bleibt bei Garmin bis zum Ablauf gültig;
+widerrufe ihn in Garmin Connect, wenn du ihn nicht mehr brauchst. Mit `backfill_statistics` importierte Statistiken
+bleiben in der Datenbank; entferne sie mit dem Service `recorder.clear_statistics` und ihren Statistik-IDs.
+
 ## Entwicklung
 
 ```
-python3 -I tests/test_api.py && python3 -I tests/test_values.py && python3 -I tests/test_sensors.py
-python3 -I scripts/gen_translations.py   # erzeugt strings.json und translations/
+for f in tests/test_*.py; do python3 -I $f || echo FAIL $f; done
+python3 -I scripts/gen_translations.py          # erzeugt strings.json, translations/ und icons.json
+python3 -I scripts/gen_translations.py --check  # schlägt fehl, wenn die erzeugten Dateien veraltet sind
 ```
-Die Tests brauchen weder Home Assistant noch Netzwerk.
+Starte jede Testdatei in einem eigenen Prozess (die Home-Assistant-Stubs ersetzen Module in `sys.modules`). Die Tests
+brauchen weder Home Assistant noch Netzwerk. `strings.json`, `translations/` und `icons.json` nie von Hand ändern;
+Namen, Wortlisten und Texte stehen in `scripts/gen_translations.py` und
+`custom_components/garmin_personal/labels.py`.
 
 Persönliche Nutzung laut Garmin-Bedingungen der Personal API.

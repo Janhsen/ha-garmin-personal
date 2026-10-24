@@ -3,6 +3,27 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## Unreleased
+<!-- Entries of the other fixes (connection, sensors, services, HA conformity) are added when the branches are merged. -->
+- German sensor names reworded: correct grammar ("Zeit mit niedrigem Stress"), one pattern for average/lowest/latest
+  values ("Durchschnittliche SpO2", "Niedrigste SpO2"), "Atemfrequenz" instead of "Atmung", "Anzahl Aufwachphasen"
+  instead of "Aufwachen", "Atemstörungen" instead of "Atemaussetzer" (Garmin reports a breathing disruption severity, not apnea).
+- English names clarified: "Rest stress time/share", "Last activity average/maximum heart rate".
+- The event type is now called "New activity" / "Neue Aktivität" (it fires when a new activity appears after a watch sync).
+  The technical key `activity_finished` is unchanged.
+- Value texts translated strictly literally: removed words that were not in Garmin's key ("zu leicht"), clearer German
+  for several activity types ("Virtuelle Radfahrt", "Indoor-Rudern", "Laufbandlauf", ...).
+- The stress level no longer has a state `unknown` for Garmin's own `UNKNOWN` (it collided with Home Assistant's
+  `unknown` state); see the sensor changes.
+- Help texts (`data_description`) for the setup, reconfigure and options dialogs; key validity is described as an estimate.
+- README rewritten for both languages: what you see after setup, two-person setup, service example with several
+  accounts, statistics card for imported values, calculated expiry date, units, when the event fires, privacy note on
+  activity coordinates, troubleshooting and removal. German README brought up to date.
+- `scripts/gen_translations.py` reads the sensor descriptors from the syntax tree (no more silent gaps), has a
+  `--check` mode and tables for exceptions, help texts, issues and service fields.
+- New test `tests/test_i18n_consistency.py`: generated files equal the checked-in files, English and German agree,
+  no dead or missing keys.
+
 ## 0.3.8
 - New calendar entity with the latest activities (start, duration; distance, calories and average heart rate in the description).
 - New sensors (disabled by default): stress shares (total, rest, activity, low, medium, high), average altitude,
