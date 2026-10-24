@@ -8,6 +8,11 @@
           "name": "Name",
           "api_key": "API key",
           "key_validity_days": "Validity chosen for the key (days)"
+        },
+        "data_description": {
+          "name": "Name of this account in Home Assistant, for example the person's first name.",
+          "api_key": "The key from Garmin Connect. It is stored only in Home Assistant.",
+          "key_validity_days": "The validity you chose at Garmin when creating the key. Garmin does not reveal the expiry date, so the integration calculates it from this value; it is an estimate and only used for the reminder."
         }
       },
       "reauth_confirm": {
@@ -16,6 +21,9 @@
         "data": {
           "api_key": "API key",
           "key_validity_days": "Validity (days)"
+        },
+        "data_description": {
+          "key_validity_days": "The validity you chose at Garmin for the new key. The expiry date is calculated from it (estimate)."
         }
       },
       "reconfigure": {
@@ -24,6 +32,9 @@
         "data": {
           "api_key": "API key",
           "key_validity_days": "Validity (days)"
+        },
+        "data_description": {
+          "key_validity_days": "The validity you chose at Garmin for the new key. The expiry date is calculated from it (estimate)."
         }
       }
     },
@@ -47,6 +58,11 @@
           "daily_interval_minutes": "Update interval for daily values (minutes)",
           "intraday_attributes": "Add intraday series as attributes (large)",
           "sync_stale_hours": "Warn when the watch has not synced for (hours)"
+        },
+        "data_description": {
+          "daily_interval_minutes": "How often the daily summary is requested. A new watch sync triggers the other requests.",
+          "intraday_attributes": "Adds heart rate, Body Battery and SpO2 series to the sensors as attributes. This makes the state data large and requests extra data from Garmin.",
+          "sync_stale_hours": "The binary sensor reports a problem when the last watch sync is older than this."
         }
       }
     }
@@ -138,12 +154,11 @@
           "calm": "Calm",
           "balanced": "Balanced",
           "stressful": "Stressful",
-          "very_stressful": "Very stressful",
-          "unknown": "Unknown"
+          "very_stressful": "Very stressful"
         }
       },
       "stress_rest_time": {
-        "name": "Rest time"
+        "name": "Rest stress time"
       },
       "stress_low_time": {
         "name": "Low stress time"
@@ -197,7 +212,7 @@
         "name": "Stress share"
       },
       "stress_rest_percentage": {
-        "name": "Rest share"
+        "name": "Rest stress share"
       },
       "stress_activity_percentage": {
         "name": "Activity share (stress)"
@@ -527,10 +542,10 @@
         "name": "Last activity calories"
       },
       "last_activity_avg_hr": {
-        "name": "Last activity average HR"
+        "name": "Last activity average heart rate"
       },
       "last_activity_max_hr": {
-        "name": "Last activity max HR"
+        "name": "Last activity maximum heart rate"
       },
       "last_activity_aerobic_te": {
         "name": "Last activity aerobic training effect"
@@ -582,7 +597,7 @@
         "state_attributes": {
           "event_type": {
             "state": {
-              "activity_finished": "Activity finished"
+              "activity_finished": "New activity"
             }
           }
         }
