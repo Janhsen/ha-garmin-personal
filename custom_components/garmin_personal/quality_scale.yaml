@@ -1,0 +1,120 @@
+# Honest self-assessment against the Home Assistant integration quality scale.
+# Custom integrations are not scored by Home Assistant; this file is the to-do list
+# behind `"quality_scale": "custom"` in manifest.json. Status as of this branch; items
+# marked "todo" are open or still being worked on in other work streams.
+rules:
+  # ---- Bronze ----
+  action-setup: done
+  appropriate-polling:
+    status: done
+    comment: Daily summary every 5 minutes (option, minimum 5); the other endpoints only after a new watch sync or hourly or slower.
+  brands:
+    status: done
+    comment: Local brand/ folder (icon.png, icon@2x.png). Needs Home Assistant 2026.3 or newer to show it.
+  common-modules:
+    status: todo
+    comment: coordinator.py exists, but there is no shared base entity class; every platform repeats the entity setup.
+  config-flow-test-coverage:
+    status: todo
+    comment: The flow is tested against hand-written stubs (tests/stubs.py), not the real flow manager, and coverage is not measured.
+  config-flow: done
+  dependency-transparency:
+    status: exempt
+    comment: No third-party requirements; the client is part of the integration.
+  docs-actions: done
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions:
+    status: todo
+    comment: README has no removal section yet (should also say that imported statistics stay and how to delete them).
+  entity-event-setup:
+    status: done
+    comment: CoordinatorEntity handles the listeners.
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry:
+    status: done
+    comment: unique_id is Garmin's userProfileId. Entries from before config entry 1.2 (display name) are moved over on the first successful setup or reauth.
+
+  # ---- Silver ----
+  action-exceptions:
+    status: todo
+    comment: Exception types are right; texts are being moved to translations (exception-translations).
+  config-entry-unloading: done
+  docs-configuration-parameters:
+    status: todo
+    comment: Form fields have data_description texts; the README does not yet describe every field and option.
+  docs-installation-parameters:
+    status: todo
+    comment: Same as docs-configuration-parameters.
+  entity-unavailable:
+    status: todo
+    comment: A failing endpoint leaves its values unknown. The sleep and body sensors keep their last value on purpose (held_value attribute), which deviates from the rule.
+  integration-owner: done
+  log-when-unavailable: done
+  parallel-updates: done
+  reauthentication-flow: done
+  test-coverage:
+    status: todo
+    comment: No coverage measurement and no tests on a real Home Assistant (pytest-homeassistant-custom-component).
+
+  # ---- Gold ----
+  devices: done
+  diagnostics:
+    status: done
+    comment: No key, account id, title, values or coordinates; endpoint status, timings, option values and entity counts only. Covered by tests/test_ha_diagnostics.py.
+  discovery-update-info:
+    status: exempt
+    comment: Cloud service reached with an API key; nothing to discover.
+  discovery:
+    status: exempt
+    comment: Cloud service reached with an API key; nothing to discover.
+  docs-data-update: done
+  docs-examples:
+    status: todo
+    comment: No automation examples in the README yet.
+  docs-known-limitations: done
+  docs-supported-devices:
+    status: exempt
+    comment: Account based; works with whatever syncs to the Garmin account.
+  docs-supported-functions: done
+  docs-troubleshooting:
+    status: todo
+    comment: No troubleshooting section in the README yet.
+  docs-use-cases:
+    status: todo
+    comment: No use-case section in the README yet.
+  dynamic-devices:
+    status: exempt
+    comment: One service device per account.
+  entity-category: done
+  entity-device-class: done
+  entity-disabled-by-default:
+    status: done
+    comment: Rarely used sensors are disabled by default. On the first complete refresh, sensors Garmin has no value for are also disabled once (logged).
+  entity-translations: done
+  exception-translations:
+    status: todo
+    comment: Exceptions in __init__.py use translation keys; the service and coordinator exceptions are being converted in other work streams.
+  icon-translations:
+    status: todo
+    comment: icons.json exists, but many sensors also set icon= in code, which takes precedence.
+  reconfiguration-flow: done
+  repair-issues:
+    status: done
+    comment: Key expiry warning (7 days ahead) and error (after the date), re-checked hourly. The date is calculated from the validity the user entered, because Garmin does not report it.
+  stale-devices:
+    status: exempt
+    comment: One device per entry; it goes away with the entry.
+
+  # ---- Platinum ----
+  async-dependency:
+    status: exempt
+    comment: No external library; the client is async (aiohttp) by construction.
+  inject-websession: done
+  strict-typing:
+    status: todo
+    comment: No mypy configuration; api.py and values.py use Any in many places.

@@ -4,25 +4,45 @@ on:
   pull_request:
   schedule:
     - cron: "0 4 * * 1"
+permissions:
+  contents: read
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   hassfest:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      # Home Assistant documents the moving ref for hassfest and HACS; they track HA's rules.
       - uses: home-assistant/actions/hassfest@master
   hacs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: hacs/action@main
         with:
           category: integration
-  tests:
-    runs-on: ubuntu-latest
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+      - run: pip install "ruff==0.16.9"
+      - run: ruff check .
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      # One process per file: every file installs its own Home Assistant stubs.
       - run: |
-          for t in tests/test_*.py; do python -I "$t" || exit 1; done
+          for t in tests/test_*.py; do python3 -I "$t" || exit 1; done
