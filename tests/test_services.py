@@ -281,7 +281,7 @@ class ImportStatistics(unittest.TestCase):
     def test_negative_skipped_zero_kept(self):
         _, rec = self.run_import([
             {"calendarDate": "2026-10-01", "totalSteps": -1},
-            {"calendarDate": "2026-10-02", "totalSteps": 0},
+            {"calendarDate": "2026-10-02", "totalSteps": 0, "restingHeartRate": 50},
             {"calendarDate": "2026-10-03", "totalSteps": 5},
         ])
         self.assertEqual([r.mean for r in rec["steps"][1]], [0.0, 5.0])

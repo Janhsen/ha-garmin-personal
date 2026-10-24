@@ -72,6 +72,8 @@ def number_at(*path: str | int, scale: float | None = None, digits: int | None =
             number = number / scale
         if digits is not None:
             number = round(number, digits)
+            if digits == 0:
+                number = int(number)
         return number
 
     return value
@@ -114,13 +116,15 @@ def latest_weight(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
     return newest["latestWeight"]
 
 
-def weight_at(key: str, *, scale: float | None = None, digits: int | None = None) -> ValueFn:
+def weight_at(
+    key: str, *, scale: float | None = None, digits: int | None = None, zero_is_none: bool = False
+) -> ValueFn:
     """Value function: one field of the newest weigh-in."""
 
     def value(data: Mapping[str, Any]) -> float | int | None:
         entry = latest_weight(data)
         number = to_number(entry.get(key)) if entry else None
-        if number is None:
+        if number is None or (zero_is_none and number == 0):
             return None
         if scale:
             number = number / scale
@@ -148,7 +152,15 @@ def hr_zone_at(key: str) -> ValueFn:
 
     def value(data: Mapping[str, Any]) -> float | int | None:
         zones = default_hr_zones(data)
-        return to_number(zones.get(key)) if zones else None
+        number = to_number(zones.get(key)) if zones else None
+        if number is None:
+            # Some values exist only in one sport profile (e.g. lactate threshold in RUNNING).
+            for entry in data.get("hr_zones") or []:
+                if isinstance(entry, Mapping):
+                    number = to_number(entry.get(key))
+                    if number is not None:
+                        break
+        return number
 
     return value
 
@@ -254,4 +266,24 @@ def usable_summary(summary: Any) -> bool:
     Garmin also returns entries from other sources (for example imported
     "fitbit" days) with nonsensical values such as negative calories.
     """
-    return isinstance(summary, Mapping) and summary.get("source") in (None, "garmin")
+    if not isinstance(summary, Mapping) or source_of(summary) not in (None, "garmin"):
+        return False
+    # Days without any tracker signal are only a placeholder (basal calories), not a measured day.
+    signals = (
+        dig(summary, "movement", "steps", "value"),
+        dig(summary, "heartRate", "restingValue"),
+        summary.get("totalSteps"),
+        summary.get("restingHeartRate"),
+    )
+    return any(x not in (None, 0) for x in signals)
+
+
+def source_of(summary: Any) -> str | None:
+    """The data source of a daily summary in lower case (``GARMIN`` and ``garmin`` are the same)."""
+    raw = summary.get("source") if isinstance(summary, Mapping) else None
+    return None if raw is None else str(raw).lower()
+
+
+def from_garmin(summary: Any) -> bool:
+    """Whether a single-day summary comes from Garmin (or states no source)."""
+    return source_of(summary) in (None, "garmin")

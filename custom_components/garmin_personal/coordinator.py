@@ -162,7 +162,7 @@ class GarminDailyCoordinator(GarminCoordinator):
         if "summary" not in results or results["summary"] is None:
             return self._last_full is not None  # no summary: connectivity trouble, do not pile on
         sync = dig(results["summary"], "lastSyncTimestampGMT")
-        changed = sync != self._last_sync
+        changed = sync is not None and sync != self._last_sync
         due = self._last_full is None or dt_util.utcnow() - self._last_full >= DAILY_FULL_REFRESH
         return not (changed or due)
 
@@ -170,12 +170,15 @@ class GarminDailyCoordinator(GarminCoordinator):
         sync = dig(results.get("summary"), "lastSyncTimestampGMT")
         if sync is None and results.get("summary") is None:
             return
-        changed = self._last_sync is not None and sync != self._last_sync
-        self._last_sync = sync
+        # A missing sync time (e.g. right after midnight) must not erase the last known one,
+        # otherwise the first real sync of the day would not count as a change.
+        changed = sync is not None and self._last_sync is not None and sync != self._last_sync
+        if sync is not None:
+            self._last_sync = sync
         if not skipped:
             self._last_full = dt_util.utcnow()
         if changed:
-            _LOGGER.debug("New watch sync (%s): refreshing follower groups", sync)
+            _LOGGER.debug("New watch sync %s: refreshing follower groups", sync)
             for follower in self.followers:
                 self.hass.async_create_task(follower.async_request_refresh())
 

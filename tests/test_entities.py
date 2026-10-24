@@ -121,9 +121,9 @@ class SyncStaleTests(unittest.TestCase):
         self.assertIs(self.sensor(self.summary(1)).is_on, False)
 
     def test_on_when_older_than_default(self):
-        self.assertEqual(const.DEFAULT_SYNC_STALE_HOURS, 12)
-        self.assertIs(self.sensor(self.summary(13)).is_on, True)
-        self.assertIs(self.sensor(self.summary(11)).is_on, False)
+        self.assertEqual(const.DEFAULT_SYNC_STALE_HOURS, 18)
+        self.assertIs(self.sensor(self.summary(19)).is_on, True)
+        self.assertIs(self.sensor(self.summary(17)).is_on, False)
 
     def test_option_overrides_threshold(self):
         opts = {const.OPT_SYNC_STALE_HOURS: 2}
@@ -137,8 +137,8 @@ class SyncStaleTests(unittest.TestCase):
         orig = bs.dt_util.utcnow
         bs.dt_util.utcnow = lambda: fixed
         try:
-            at = {"summary": {"lastSyncTimestampGMT": (fixed - timedelta(hours=12)).isoformat()}}
-            over = {"summary": {"lastSyncTimestampGMT": (fixed - timedelta(hours=12, seconds=1)).isoformat()}}
+            at = {"summary": {"lastSyncTimestampGMT": (fixed - timedelta(hours=18)).isoformat()}}
+            over = {"summary": {"lastSyncTimestampGMT": (fixed - timedelta(hours=18, seconds=1)).isoformat()}}
             self.assertIs(self.sensor(at).is_on, False)
             self.assertIs(self.sensor(over).is_on, True)
         finally:

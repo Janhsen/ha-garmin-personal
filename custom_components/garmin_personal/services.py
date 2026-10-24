@@ -30,7 +30,7 @@ from .const import (
     SERVICE_SEARCH_ACTIVITIES,
 )
 from .coordinator import GarminConfigEntry
-from .values import first_number, usable_summary
+from .values import first_number, from_garmin, usable_summary
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -215,7 +215,8 @@ def async_register_services(hass: HomeAssistant) -> None:
         return {
             "days_returned": len({s.get("calendarDate") for s in summaries if isinstance(s, dict)}),
             "days_imported": len({s.get("calendarDate") for s in usable}),
-            "days_skipped_other_source": len(summaries) - len(usable),
+            "days_skipped_other_source": sum(1 for s in summaries if not from_garmin(s)),
+            "days_skipped_placeholder": sum(1 for s in summaries if from_garmin(s) and not usable_summary(s)),
             "statistics": imported,
         }
 

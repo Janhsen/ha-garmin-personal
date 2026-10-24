@@ -82,8 +82,15 @@ class RangeShape(unittest.TestCase):
         self.assertIsNone(v.first_number({"x": True}, ("x",)))
 
     def test_other_sources_are_not_usable(self):
-        self.assertTrue(v.usable_summary({"source": "garmin"}))
+        self.assertTrue(v.usable_summary({"source": "garmin", "totalSteps": 7}))
+        self.assertTrue(v.usable_summary({"source": "GARMIN", "restingHeartRate": 50}))
         self.assertTrue(v.usable_summary({"totalSteps": 1}))
+        self.assertFalse(v.usable_summary({"source": "FITBIT", "totalSteps": 9000}))
+        # placeholder day: only basal calories, no steps and no heart rate
+        self.assertFalse(v.usable_summary({"source": "garmin", "calories": {"burnedResting": 1500},
+                                           "movement": {"steps": {"value": 0}}}))
+        self.assertTrue(v.from_garmin({"source": "GARMIN"}))
+        self.assertFalse(v.from_garmin({"source": "Fitbit"}))
         self.assertFalse(v.usable_summary({"source": "fitbit", "calories": {"burnedActive": -18374}}))
         self.assertFalse(v.usable_summary(None))
 

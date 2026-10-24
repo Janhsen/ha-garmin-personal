@@ -37,6 +37,7 @@ from .values import (
     default_hr_zones,
     dig,
     first_item,
+    from_garmin,
     hr_zone_at,
     item_number,
     last_item,
@@ -110,11 +111,26 @@ NO_CLASS = None
 
 
 def _summary(*path: str, **kwargs: Any) -> ValueFn:
-    return number_at("summary", *path, **kwargs)
+    inner = number_at("summary", *path, **kwargs)
+
+    def value(data: Mapping[str, Any]) -> float | int | None:
+        # A day from another source (e.g. imported "fitbit" data) is never shown as a Garmin value.
+        return inner(data) if from_garmin(data.get("summary")) else None
+
+    return value
+
+
+def _stress_qualifier(data: Mapping[str, Any]) -> str | None:
+    return text_at("summary", "stressQualifier")(data) if from_garmin(data.get("summary")) else None
 
 
 def _sleep_score(name: str) -> ValueFn:
     return number_at("sleep", "sleepScores", name, "value")
+
+
+def _sleep_score_label(name: str) -> ValueFn:
+    """Some score parts carry only a rating (``qualifierKey``) and no number."""
+    return text_at("sleep", "sleepScores", name, "qualifierKey")
 
 
 def _sleep_score_attrs(name: str) -> AttrsFn:
@@ -164,7 +180,7 @@ def _body_battery_intraday(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
     index = 1
     for descriptor in descriptors if isinstance(descriptors, list) else []:
         if isinstance(descriptor, Mapping) and descriptor.get("bodyBatteryValueDescriptorKey") == "bodyBatteryLevel":
-            index = descriptor.get("index", 1)
+            index = descriptor.get("bodyBatteryValueDescriptorIndex", descriptor.get("index", 1))
     return {"values": series_pairs(dig(report, "bodyBatteryValuesArray"), int(index))}
 
 
@@ -297,7 +313,7 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
        attrs=_hr_intraday, intraday=True),
     _d("stress_average", "daily", _summary("averageStressLevel"), icon="mdi:emoticon-neutral"),
     _d("stress_max", "daily", _summary("maxStressLevel"), enabled=False),
-    _d("stress_qualifier", "daily", text_at("summary", "stressQualifier"), state_class=NO_CLASS),
+    _d("stress_qualifier", "daily", _stress_qualifier, state_class=NO_CLASS),
     _d("stress_rest_time", "daily", _summary("restStressDuration"), unit=SECONDS, device_class=DURATION, enabled=False),
     _d("stress_low_time", "daily", _summary("lowStressDuration"), unit=SECONDS, device_class=DURATION, enabled=False),
     _d("stress_medium_time", "daily", _summary("mediumStressDuration"), unit=SECONDS, device_class=DURATION, enabled=False),
@@ -343,13 +359,13 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("nap_duration", "sleep", number_at("sleep", "napTimeSeconds"), unit=SECONDS, device_class=DURATION,
        state_class=NO_CLASS, enabled=False),
     _d("sleep_score", "sleep", _sleep_score("overall"), attrs=_sleep_score_attrs("overall"), icon="mdi:sleep"),
-    _d("sleep_score_duration", "sleep", _sleep_score("totalDuration"), attrs=_sleep_score_attrs("totalDuration"), enabled=False),
-    _d("sleep_score_stress", "sleep", _sleep_score("stress"), attrs=_sleep_score_attrs("stress"), enabled=False),
-    _d("sleep_score_restlessness", "sleep", _sleep_score("restlessness"), attrs=_sleep_score_attrs("restlessness"), enabled=False),
-    _d("sleep_score_awake_count", "sleep", _sleep_score("awakeCount"), attrs=_sleep_score_attrs("awakeCount"), enabled=False),
-    _d("sleep_score_rem", "sleep", _sleep_score("remPercentage"), attrs=_sleep_score_attrs("remPercentage"), enabled=False),
-    _d("sleep_score_light", "sleep", _sleep_score("lightPercentage"), attrs=_sleep_score_attrs("lightPercentage"), enabled=False),
-    _d("sleep_score_deep", "sleep", _sleep_score("deepPercentage"), attrs=_sleep_score_attrs("deepPercentage"), enabled=False),
+    _d("sleep_score_duration", "sleep", _sleep_score_label("totalDuration"), state_class=NO_CLASS, attrs=_sleep_score_attrs("totalDuration"), enabled=False),
+    _d("sleep_score_stress", "sleep", _sleep_score_label("stress"), state_class=NO_CLASS, attrs=_sleep_score_attrs("stress"), enabled=False),
+    _d("sleep_score_restlessness", "sleep", _sleep_score_label("restlessness"), state_class=NO_CLASS, attrs=_sleep_score_attrs("restlessness"), enabled=False),
+    _d("sleep_score_awake_count", "sleep", _sleep_score_label("awakeCount"), state_class=NO_CLASS, attrs=_sleep_score_attrs("awakeCount"), enabled=False),
+    _d("sleep_score_rem", "sleep", _sleep_score("remPercentage"), unit=PERCENTAGE, attrs=_sleep_score_attrs("remPercentage"), enabled=False),
+    _d("sleep_score_light", "sleep", _sleep_score("lightPercentage"), unit=PERCENTAGE, attrs=_sleep_score_attrs("lightPercentage"), enabled=False),
+    _d("sleep_score_deep", "sleep", _sleep_score("deepPercentage"), unit=PERCENTAGE, attrs=_sleep_score_attrs("deepPercentage"), enabled=False),
     _d("sleep_start", "sleep", timestamp_at("sleep", "sleepStartTimestampGMT"), device_class=TIMESTAMP,
        state_class=NO_CLASS),
     _d("sleep_end", "sleep", timestamp_at("sleep", "sleepEndTimestampGMT"), device_class=TIMESTAMP,
@@ -377,11 +393,11 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("weight", "body", weight_at("weight", scale=1000, digits=2), unit=UnitOfMass.KILOGRAMS,
        device_class=SensorDeviceClass.WEIGHT, attrs=_weight_attrs, icon="mdi:scale-bathroom"),
     _d("bmi", "body", weight_at("bmi", digits=1), icon="mdi:human"),
-    _d("body_fat", "body", weight_at("bodyFat", digits=1), unit=PERCENTAGE, icon="mdi:percent"),
-    _d("body_water", "body", weight_at("bodyWater", digits=1), unit=PERCENTAGE, icon="mdi:water-percent"),
-    _d("muscle_mass", "body", weight_at("muscleMass", scale=1000, digits=2), unit=UnitOfMass.KILOGRAMS,
+    _d("body_fat", "body", weight_at("bodyFat", digits=1, zero_is_none=True), unit=PERCENTAGE, icon="mdi:percent"),
+    _d("body_water", "body", weight_at("bodyWater", digits=1, zero_is_none=True), unit=PERCENTAGE, icon="mdi:water-percent"),
+    _d("muscle_mass", "body", weight_at("muscleMass", scale=1000, digits=2, zero_is_none=True), unit=UnitOfMass.KILOGRAMS,
        device_class=SensorDeviceClass.WEIGHT),
-    _d("bone_mass", "body", weight_at("boneMass", scale=1000, digits=2), unit=UnitOfMass.KILOGRAMS,
+    _d("bone_mass", "body", weight_at("boneMass", scale=1000, digits=2, zero_is_none=True), unit=UnitOfMass.KILOGRAMS,
        device_class=SensorDeviceClass.WEIGHT),
     _d("visceral_fat", "body", weight_at("visceralFat"), enabled=False),
     _d("metabolic_age", "body", weight_at("metabolicAge", digits=0), unit="a", enabled=False),
