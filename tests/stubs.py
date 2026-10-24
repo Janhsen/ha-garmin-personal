@@ -231,6 +231,12 @@ class CoordinatorEntity:
         self.coordinator = coordinator
         self.state_writes = 0
 
+    async def async_added_to_hass(self):
+        return None
+
+    def async_write_ha_state(self):
+        self.state_writes += 1
+
     def _handle_coordinator_update(self):
         self.state_writes += 1
 
