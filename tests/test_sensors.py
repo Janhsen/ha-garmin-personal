@@ -5,6 +5,7 @@ import importlib.util
 import sys
 import types
 import unittest
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -203,27 +204,35 @@ class PruneTests(unittest.TestCase):
     def setUpClass(cls):
         cls.sensor = load_sensor()
 
-    def test_prunes_only_empty_fields_of_answered_endpoints(self):
-        data = {k: dict(v) for k, v in DATA.items()}
-        data["sleep"] = {"sleep": None, "hrv_summaries": []}  # sleep not available yet
-        pruned = self.sensor.sensors_to_prune(data)
+    NOW = datetime(2026, 10, 24, 12, 0, tzinfo=timezone.utc)
+    OLD = NOW - timedelta(days=3)
+
+    def prune(self, data):
+        return self.sensor.sensors_to_prune(data, self.OLD, self.NOW)
+
+    def synced(self, data):
+        data = {k: dict(v) for k, v in data.items()}
+        data["daily"]["summary"] = {**data["daily"]["summary"], "lastSyncTimestampGMT": "2026-10-24T06:00:00.0"}
+        return data
+
+    def test_prunes_only_empty_body_and_activity_fields_of_answered_endpoints(self):
+        data = self.synced(DATA)
+        pruned = self.prune(data)
         # weight answered: BMI is empty -> pruned; body fat has a value -> kept
         self.assertIn("bmi", pruned)
         self.assertNotIn("body_fat", pruned)
         self.assertNotIn("weight", pruned)
-        # summary answered but has no active calories -> pruned
-        self.assertIn("active_calories", pruned)
-        self.assertNotIn("consumed_calories", pruned)  # already disabled by default
-        self.assertNotIn("steps", pruned)
-        # sleep endpoint returned nothing: nothing of it is pruned
-        self.assertFalse({k for k in pruned if k.startswith("sleep_") or k.startswith("hrv_")})
+        # daily and sleep values can still appear later in the day: never disabled automatically
+        by = {d.key: d for d in self.sensor.SENSOR_DESCRIPTIONS}
+        self.assertFalse({k for k in pruned if by[k].group in ("daily", "sleep")})
+        self.assertNotIn("active_calories", pruned)
 
     def test_nothing_pruned_without_data(self):
-        self.assertEqual(self.sensor.sensors_to_prune({}), set())
-        self.assertEqual(self.sensor.sensors_to_prune({"daily": {}}), set())
+        self.assertEqual(self.prune({}), set())
+        self.assertEqual(self.prune({"daily": {}}), set())
 
     def test_hidden_by_default_and_diagnostics_untouched(self):
-        pruned = self.sensor.sensors_to_prune(DATA)
+        pruned = self.prune(self.synced(DATA))
         by = {d.key: d for d in self.sensor.SENSOR_DESCRIPTIONS}
         for key in pruned:
             self.assertTrue(by[key].entity_registry_enabled_default)

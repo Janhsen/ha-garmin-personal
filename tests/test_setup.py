@@ -128,15 +128,15 @@ class DisableOnce(unittest.TestCase):
         self.assertEqual(seen["body"], {"weight": []})
 
     def test_with_real_sensors_to_prune(self):
+        # Ohne Alter des Eintrags (entry_created) deaktiviert sensors_to_prune nichts (siehe tests/test_sensors_*.py).
         gp.sensors_to_prune = self.orig
         coords = dict(COMPLETE, daily=coord({"summary": {"unrelated": 1}}))
-        expected = self.orig({n: c.data for n, c in coords.items()})
-        self.assertTrue(expected)  # Summary beantwortet, aber ohne bekannte Felder -> Sensoren leer
-        register(*expected, "steps_not_pruned_marker")
+        self.assertEqual(self.orig({n: c.data for n, c in coords.items()}), set())
+        register("steps")
         entry = entry_with(coords)
         self.run_it(entry)
-        self.assertEqual({eid.split("_", 1)[1] for eid, _ in REG.updates}, expected)
-        self.assertIsNone(REG.entries["E1_steps_not_pruned_marker"].disabled_by)
+        self.assertEqual(REG.updates, [])
+        self.assertIsNone(REG.entries["E1_steps"].disabled_by)
 
 
 class Misc(unittest.TestCase):
