@@ -9,6 +9,9 @@ fetch:
       example: daily_summary
       selector:
         select:
+          translation_key: endpoint
+          custom_value: false
+          mode: dropdown
           options:
             - activities
             - activity
@@ -36,22 +39,26 @@ fetch:
             - heart_rate
             - wellness_activities
     date:
+      example: "2026-10-01"
       selector:
         date:
     start_date:
+      example: "2026-09-25"
       selector:
         date:
     end_date:
+      example: "2026-10-01"
       selector:
         date:
     activity_id:
+      example: 12345678901
       selector:
         number:
           min: 1
           max: 99999999999999
           mode: box
     filters:
-      example: '{"activity_type": "running"}'
+      example: {"activity_type": "running", "min_distance": 10000, "favorite": false}
       selector:
         object:
     limit:
@@ -68,7 +75,7 @@ search_activities:
         config_entry:
           integration: garmin_personal
     filters:
-      example: '{"activity_type": "running", "min_distance": 10000}'
+      example: {"activity_type": "running", "min_distance": 10000, "favorite": false}
       selector:
         object:
     limit:
@@ -86,12 +93,14 @@ download_activity:
           integration: garmin_personal
     activity_id:
       required: true
+      example: 12345678901
       selector:
         number:
           min: 1
           max: 99999999999999
           mode: box
     path:
+      example: /media/garmin_personal/activity_12345678901.zip
       selector:
         text:
 backfill_statistics:
@@ -101,17 +110,21 @@ backfill_statistics:
         config_entry:
           integration: garmin_personal
     start_date:
+      example: "2026-01-01"
       selector:
         date:
     end_date:
+      example: "2026-10-23"
       selector:
         date:
     days:
       default: 90
+      example: 365
       selector:
         number:
           min: 1
           max: 3650
+          unit_of_measurement: d
           mode: box
     include_third_party_steps:
       default: false
