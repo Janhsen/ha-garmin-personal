@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
@@ -39,6 +40,11 @@ def to_number(value: Any) -> float | int | None:
     return None
 
 
+# Only a long digit string counts as epoch milliseconds (13 digits today); a shorter one could
+# be seconds or a compact date and is left alone.
+_EPOCH_TEXT = re.compile(r"\d{12,}(\.\d+)?")
+
+
 def parse_timestamp(value: Any) -> datetime | None:
     """Parse Garmin timestamps: epoch milliseconds or ISO strings, as UTC.
 
@@ -53,6 +59,9 @@ def parse_timestamp(value: Any) -> datetime | None:
             return None
     if isinstance(value, str):
         text = value.strip().replace("Z", "+00:00")
+        if _EPOCH_TEXT.fullmatch(text):
+            # Garmin types some timestamps (sleep start/end) as strings holding epoch milliseconds.
+            return parse_timestamp(float(text))
         try:
             parsed = datetime.fromisoformat(text)
         except ValueError:
@@ -231,6 +240,41 @@ def latest_hrv(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
         if isinstance(item, Mapping) and to_number(item.get("lastNightAvg")) is not None
     ]
     return max(candidates, key=lambda c: (c[0], c[1]))[2] if candidates else None
+
+
+def fitness_age_item(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """The fitness age record from the ``fitness_age`` answer, whichever shape Garmin sends.
+
+    Garmin's specification describes a list of records, earlier answers were a single object:
+    both are accepted. From a list, the record with the newest ``lastUpdated`` that has a
+    fitness age is taken (the last one if no time can be read), else the last record.
+    """
+    raw = data.get("fitness_age")
+    if isinstance(raw, Mapping):
+        return raw
+    if not isinstance(raw, list):
+        return None
+    records = [(index, item) for index, item in enumerate(raw) if isinstance(item, Mapping)]
+    if not records:
+        return None
+    measured = [(i, item) for i, item in records if to_number(item.get("fitnessAge")) is not None]
+
+    def newest(entry: tuple[int, Mapping[str, Any]]) -> tuple[float, int]:
+        stamp = parse_timestamp(entry[1].get("lastUpdated"))
+        return (stamp.timestamp() if stamp else float("-inf"), entry[0])
+
+    return max(measured or records, key=newest)[1]
+
+
+def fitness_age_at(key: str, *, digits: int | None = None) -> ValueFn:
+    """Value function: one number of the fitness age record."""
+
+    def value(data: Mapping[str, Any]) -> float | int | None:
+        item = fitness_age_item(data)
+        number = to_number(item.get(key)) if item else None
+        return None if number is None else finish_number(number, digits=digits)
+
+    return value
 
 
 def item_number(group: str, key: str, *, scale: float | None = None, digits: int | None = None) -> ValueFn:

@@ -16,6 +16,7 @@ import base64
 import binascii
 import json
 import logging
+import re
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
@@ -227,6 +228,44 @@ def _looks_like_html(body: str, content_type: str | None) -> bool:
     return body.lstrip()[:1] == "<"
 
 
+ERROR_DETAIL_MAX = 200
+_SECRET_LIKE = re.compile(
+    r"(?i)(bearer|apikey|api[-_ ]key|authorization|token)\s*[:=]?\s*\S+|eyJ[\w-]+\.[\w-]+\.[\w-]*|[A-Za-z0-9_\-+/=]{32,}"
+)
+
+
+def error_detail(body: str | bytes | None, content_type: str | None = None, *, secrets: Iterable[str] = ()) -> str:
+    """Garmin's explanation of a failed request, shortened for a message (``""`` if there is none).
+
+    Garmin names the reason of an HTTP 400 (unknown activity type, box too large, ...). Only that
+    text is kept: no HTML pages, no header or token look-alikes, at most ``ERROR_DETAIL_MAX`` characters.
+    """
+    if not body:
+        return ""
+    text = body.decode("utf-8", errors="replace") if isinstance(body, bytes) else body
+    if _looks_like_html(text, content_type):
+        return ""
+    try:
+        decoded = json.loads(text)
+    except ValueError:
+        decoded = None
+    if isinstance(decoded, Mapping):
+        parts = [
+            str(decoded[key])
+            for key in ("message", "error", "errorMessage", "detail", "description")
+            if isinstance(decoded.get(key), str | int | float) and not isinstance(decoded.get(key), bool)
+        ]
+        text = "; ".join(parts) if parts else ""
+    elif isinstance(decoded, str):
+        text = decoded
+    for secret in secrets:
+        if secret:
+            text = text.replace(secret, "[removed]")
+    text = _SECRET_LIKE.sub("[removed]", text)
+    text = " ".join("".join(ch if ch.isprintable() else " " for ch in text).split())
+    return text if len(text) <= ERROR_DETAIL_MAX else text[: ERROR_DETAIL_MAX - 1] + "…"
+
+
 def _plausible_token(token: str) -> bool:
     """Reject bodies that are clearly not a bearer token (HTML, JSON, text with blanks)."""
     return bool(token) and token[0] not in "<{[" and not any(ch.isspace() for ch in token)
@@ -418,6 +457,7 @@ class GarminPersonalApi:
                 ) as response:
                     status = response.status
                     retry_header = response.headers.get("Retry-After")
+                    content_type = response.headers.get("Content-Type")
                     body = await (response.read() if binary else response.text())
             except (ClientError, TimeoutError) as err:
                 if attempt < MAX_RETRIES:
@@ -448,7 +488,17 @@ class GarminPersonalApi:
                 self._block(wait, error)
                 raise error
             if status >= 400:
-                raise GarminApiError(f"GET {path} failed (HTTP {status})", status)
+                message = f"GET {path} failed (HTTP {status})"
+                # Garmin explains HTTP 400 (bad parameter) and, for an activity, 404 (no such activity).
+                if status == 400 or (status == 404 and path.startswith("/activity-service/")):
+                    detail = error_detail(
+                        body, content_type, secrets=(self._api_key, token)
+                    )
+                    if not detail and status == 404:
+                        detail = "no activity with this id"
+                    if detail:
+                        message = f"{message}: {detail}"
+                raise GarminApiError(message, status)
             if status == 204 or not body:
                 return None
             if binary:
@@ -767,11 +817,19 @@ class GarminPersonalApi:
         activity_id: int | None = None,
         filters: Mapping[str, Any] | None = None,
         limit: int = ACTIVITY_PAGE_DEFAULT,
+        chunks: int | None = None,
+        full_history_scan: bool | None = None,
+        include_all: bool | None = None,
     ) -> Any:
         """Call one of the endpoints by its short name (see ``ENDPOINT_NAMES``).
 
         ``today`` is the current day in the Home Assistant time zone, supplied by the
         caller. Only if it is missing, the process-local date is used as a fallback.
+
+        ``chunks`` (``body_battery``), ``full_history_scan`` (``fitness_age``) and
+        ``include_all`` (``weight_range``) are raw Garmin parameters for reading tests.
+        Left out (``None``), the request is exactly the one the sensors send; every
+        other endpoint ignores them.
         """
         today = today or date.today()
         day = day or today
@@ -789,7 +847,9 @@ class GarminPersonalApi:
             case "hr_zones":
                 return await self.get_hr_zones()
             case "fitness_age":
-                return await self.get_fitness_age(day)
+                return await self.get_fitness_age(
+                    day, full_history_scan=bool(full_history_scan)
+                )
             case "weight_goals":
                 return await self.get_weight_goals(start, end)
             case "hrv":
@@ -821,9 +881,11 @@ class GarminPersonalApi:
             case "weights_all":
                 return await self.get_weights_all(start, end)
             case "weight_range":
-                return await self.get_weight_range(start, end)
+                return await self.get_weight_range(
+                    start, end, include_all=True if include_all is None else include_all
+                )
             case "body_battery":
-                return await self.get_body_battery(start, end)
+                return await self.get_body_battery(start, end, chunks=chunks)
             case "spo2":
                 return await self.get_spo2(day)
             case "heart_rate":

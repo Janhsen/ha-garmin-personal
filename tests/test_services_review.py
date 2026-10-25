@@ -459,6 +459,55 @@ class UnitClass(Base):
         self.assertIn("hrv_5_min_high", sv.HRV_FIELDS)
 
 
+class NewStatistics058(Base):
+    """0.5.8: new statistic ids for sleep and body values; existing ids stay as they were."""
+
+    def test_sleep_and_weight_additions(self):
+        self.api.sleeps = [{
+            "calendarDate": "2026-10-20", "sleepTimeSeconds": 27000, "averageSpO2Value": 94.5,
+            "lowestSpO2Value": 88, "lowestRespirationValue": 10.0, "highestRespirationValue": 20.0,
+            "napTimeSeconds": 1200, "nextSleepNeed": {"actual": 470},
+            "sleepScores": {"remPercentage": {"value": 22}, "lightPercentage": {"value": 55},
+                            "deepPercentage": {"value": 23}},
+        }]
+        self.api.weights = {"dailyWeightSummaries": [
+            {"summaryDate": "2026-10-20", "latestWeight": {"weight": 80000, "sourceType": "MANUAL",
+                                                           "visceralFat": 7, "metabolicAge": 35.5}}]}
+        self.call("backfill_statistics", {"days": 5})
+        rows = {m.kw["statistic_id"].split(":", 1)[1].split("_", 1)[1]: (m.kw, r) for _, m, r in stubs.RECORDED}
+        mean = lambda name: rows[name][1][0].mean  # noqa: E731
+        self.assertEqual((mean("sleep_spo2_average"), mean("sleep_spo2_lowest")), (94.5, 88.0))
+        self.assertEqual((mean("sleep_respiration_lowest"), mean("sleep_respiration_highest")), (10.0, 20.0))
+        self.assertEqual((mean("nap_duration"), mean("sleep_need_next")), (1200.0, 470.0))
+        self.assertEqual((mean("sleep_score_rem"), mean("sleep_score_light"), mean("sleep_score_deep")), (22.0, 55.0, 23.0))
+        self.assertEqual((mean("visceral_fat"), mean("metabolic_age")), (7.0, 35.5))
+        self.assertEqual(rows["metabolic_age"][0]["unit_of_measurement"], "yr")
+        self.assertEqual(mean("weight"), 80.0)  # unchanged: grams / 1000
+
+    def test_unchanged_ids_still_there(self):
+        for name in ("steps", "distance", "active_calories", "resting_calories", "total_calories",
+                     "resting_heart_rate", "min_heart_rate", "max_heart_rate", "stress_average", "stress_max",
+                     "body_battery_high", "body_battery_low", "body_battery_charged", "body_battery_drained",
+                     "moderate_intensity_minutes", "vigorous_intensity_minutes", "floors_ascended",
+                     "respiration_average"):
+            self.assertIn(name, sv.BACKFILL_FIELDS)
+        self.assertEqual(sv.BACKFILL_FIELDS["distance"][1][0], ("movement", "steps", "distanceInMeters"))
+        self.assertEqual(sv.BACKFILL_FIELDS["min_heart_rate"][1][0], ("heartRate", "minValue"))
+        self.assertEqual(sv.WEIGHT_FIELDS["weight"][2], 1000.0)
+
+    def test_volume_unit_class(self):
+        models = sys.modules["homeassistant.components.recorder.models"]
+        models.StatisticMetaData.__annotations__["unit_class"] = str
+        try:
+            self.api.summaries = [{"calendarDate": "2026-10-20", "source": "garmin", "totalSteps": 1,
+                                   "hydration": {"consumedInFractionalMl": 500}}]
+            self.call("backfill_statistics", {"days": 5})
+        finally:
+            del models.StatisticMetaData.__annotations__["unit_class"]
+        meta = {m.kw["statistic_id"].split(":", 1)[1].split("_", 1)[1]: m.kw for _, m, _ in stubs.RECORDED}
+        self.assertEqual(meta["hydration"]["unit_class"], "volume")
+
+
 class Download(Base):
     def setUp(self):
         super().setUp()

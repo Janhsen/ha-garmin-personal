@@ -67,6 +67,9 @@ ATTR_END = "end_date"
 ATTR_ACTIVITY_ID = "activity_id"
 ATTR_FILTERS = "filters"
 ATTR_LIMIT = "limit"
+ATTR_CHUNKS = "chunks"
+ATTR_FULL_HISTORY_SCAN = "full_history_scan"
+ATTR_INCLUDE_ALL = "include_all"
 ATTR_PATH = "path"
 ATTR_DAYS = "days"
 ATTR_THIRD_PARTY = "include_third_party_steps"
@@ -149,6 +152,10 @@ FETCH_SCHEMA = vol.Schema(
         vol.Optional(ATTR_LIMIT, default=ACTIVITY_PAGE_DEFAULT): vol.All(
             vol.Coerce(int), vol.Range(min=1, max=ACTIVITY_SEARCH_MAX_TOTAL)
         ),
+        # Raw Garmin parameters for reading tests; only sent when given.
+        vol.Optional(ATTR_CHUNKS): vol.All(vol.Coerce(int), vol.Range(min=1, max=1440)),
+        vol.Optional(ATTR_FULL_HISTORY_SCAN): cv.boolean,
+        vol.Optional(ATTR_INCLUDE_ALL): cv.boolean,
     }
 )
 
@@ -221,6 +228,27 @@ BACKFILL_FIELDS: dict[str, tuple[str | None, tuple[tuple[str, ...], ...]]] = {
     "vigorous_intensity_minutes": ("min", (("intensityMinutes", "vigorous"), ("vigorousIntensityMinutes",))),
     "floors_ascended": (None, (("movement", "floorsAscended", "value"), ("floorsAscended",))),
     "respiration_average": ("brpm", (("respiration", "avgValue"), ("avgWakingRespirationValue",))),
+    # Added in 0.5.8 (new statistic ids only). Paths: V2 range format first, then the flat single-day name.
+    "hydration": ("mL", (("hydration", "consumedInFractionalMl"), ("hydrationValueInML",))),
+    "hydration_goal": ("mL", (("hydration", "goalInMl"), ("hydrationGoalInML",))),
+    "spo2_average": ("%", (("pulseOx", "avgValue"), ("averageSpo2",))),
+    "spo2_lowest": ("%", (("pulseOx", "minValue"), ("lowestSpo2",))),
+    "respiration_lowest": ("brpm", (("respiration", "minValue"), ("lowestRespirationValue",))),
+    "respiration_highest": ("brpm", (("respiration", "maxValue"), ("highestRespirationValue",))),
+    "floors_descended": (None, (("movement", "floorsDescended", "value"), ("floorsDescended",))),
+    "step_goal": ("steps", (("movement", "steps", "goal"), ("dailyStepGoal",))),
+    # V2 gives durations in milliseconds (divisor below); no flat fallback, that one is in seconds.
+    "stress_rest_time": ("s", (("stress", "restDurationInMillis"),)),
+    "stress_low_time": ("s", (("stress", "lowStressDurationInMillis"),)),
+    "stress_medium_time": ("s", (("stress", "mediumStressDurationInMillis"),)),
+    "stress_high_time": ("s", (("stress", "highStressDurationInMillis"),)),
+}
+# Statistics whose Garmin value is divided before it is stored (milliseconds -> seconds).
+BACKFILL_DIVISORS: dict[str, float] = {
+    "stress_rest_time": 1000.0,
+    "stress_low_time": 1000.0,
+    "stress_medium_time": 1000.0,
+    "stress_high_time": 1000.0,
 }
 
 
@@ -242,6 +270,14 @@ SKIP_ZERO_FIELDS = frozenset(
         "sleep_heart_rate",
         "sleep_stress",
         "sleep_respiration",
+        "spo2_average",
+        "spo2_lowest",
+        "respiration_lowest",
+        "respiration_highest",
+        "sleep_spo2_average",
+        "sleep_spo2_lowest",
+        "sleep_respiration_lowest",
+        "sleep_respiration_highest",
     }
 )
 
@@ -331,6 +367,11 @@ def async_register_services(hass: HomeAssistant) -> None:
             _check_span(data.get(ATTR_START) or last - timedelta(days=6), last)
         # Only the endpoint name is logged: answers can hold nutrition or cycle data.
         _LOGGER.debug("Service fetch for endpoint %s", data[ATTR_ENDPOINT])
+        raw = {
+            key: data[key]
+            for key in (ATTR_CHUNKS, ATTR_FULL_HISTORY_SCAN, ATTR_INCLUDE_ALL)
+            if data.get(key) is not None
+        }
         try:
             result = await entry.runtime_data.api.fetch(
                 data[ATTR_ENDPOINT],
@@ -341,6 +382,7 @@ def async_register_services(hass: HomeAssistant) -> None:
                 filters=data.get(ATTR_FILTERS),
                 limit=data[ATTR_LIMIT],
                 today=today,
+                **raw,
             )
         except ValueError as err:
             raise _invalid(ERR_INVALID_REQUEST, error=err) from err
@@ -760,6 +802,16 @@ SLEEP_FIELDS: dict[str, tuple[str | None, tuple[tuple[str, ...], ...]]] = {
     "sleep_respiration": ("brpm", (("averageRespirationValue",),)),
     "sleep_need": ("min", (("sleepNeed", "actual"),)),
     "sleep_awake_count": (None, (("awakeCount",),)),
+    # Added in 0.5.8 (new statistic ids only).
+    "sleep_spo2_average": ("%", (("averageSpO2Value",),)),
+    "sleep_spo2_lowest": ("%", (("lowestSpO2Value",),)),
+    "sleep_respiration_lowest": ("brpm", (("lowestRespirationValue",),)),
+    "sleep_respiration_highest": ("brpm", (("highestRespirationValue",),)),
+    "sleep_need_next": ("min", (("nextSleepNeed", "actual"),)),
+    "nap_duration": ("s", (("napTimeSeconds",),)),
+    "sleep_score_rem": ("%", (("sleepScores", "remPercentage", "value"),)),
+    "sleep_score_light": ("%", (("sleepScores", "lightPercentage", "value"),)),
+    "sleep_score_deep": ("%", (("sleepScores", "deepPercentage", "value"),)),
 }
 HRV_FIELDS: dict[str, tuple[str | None, tuple[tuple[str, ...], ...]]] = {
     "hrv_last_night": ("ms", (("lastNightAvg",),)),
@@ -774,6 +826,9 @@ WEIGHT_FIELDS: dict[str, tuple[str | None, tuple[tuple[str, ...], ...], float]] 
     "body_water": ("%", (("bodyWater",),), 1.0),
     "muscle_mass": ("kg", (("muscleMass",),), 1000.0),
     "bone_mass": ("kg", (("boneMass",),), 1000.0),
+    # Added in 0.5.8 (new statistic ids only).
+    "visceral_fat": (None, (("visceralFat",),), 1.0),
+    "metabolic_age": ("yr", (("metabolicAge",),), 1.0),
 }
 
 
@@ -863,9 +918,8 @@ def _import_statistics(
             value = first_number(summary, *paths)
             if value is None or value < 0 or (value == 0 and name in SKIP_ZERO_FIELDS):
                 continue
-            rows.append(
-                StatisticData(start=_local_day(day), mean=float(value), min=float(value), max=float(value))
-            )
+            value = float(value) / BACKFILL_DIVISORS.get(name, 1.0)
+            rows.append(StatisticData(start=_local_day(day), mean=value, min=value, max=value))
             days.append((day, is_third_party))
         if _write_series(hass, entry, name, unit, rows, tally=tally):
             count += 1

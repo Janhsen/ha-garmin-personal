@@ -54,11 +54,12 @@ class SensorEntityDescription:
     entity_category: object = None
     icon: str | None = None
     suggested_display_precision: int | None = None
+    suggested_unit_of_measurement: str | None = None
     options: object = None
 
 
 def install_stubs():
-    dc = make_enum("SensorDeviceClass", "DISTANCE", "DURATION", "ENUM", "TIMESTAMP", "VOLUME", "WEIGHT")
+    dc = make_enum("SensorDeviceClass", "DISTANCE", "DURATION", "ENUM", "TIMESTAMP", "SPEED", "VOLUME", "WEIGHT")
     sc = make_enum("SensorStateClass", "MEASUREMENT", "TOTAL", "TOTAL_INCREASING")
     stub("homeassistant")
     stub("homeassistant.components")
@@ -67,6 +68,7 @@ def install_stubs():
     stub("homeassistant.const", PERCENTAGE="%",
          EntityCategory=make_enum("EntityCategory", "DIAGNOSTIC", "CONFIG"),
          UnitOfLength=make_enum("UnitOfLength", "METERS"), UnitOfMass=make_enum("UnitOfMass", "KILOGRAMS"),
+         UnitOfSpeed=make_enum("UnitOfSpeed", "METERS_PER_SECOND", "KILOMETERS_PER_HOUR"),
          UnitOfTime=make_enum("UnitOfTime", "MINUTES", "SECONDS", "YEARS"),
          UnitOfVolume=make_enum("UnitOfVolume", "MILLILITERS"))
     stub("homeassistant.core", HomeAssistant=Anything, callback=lambda f: f)

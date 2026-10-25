@@ -20,6 +20,7 @@ from homeassistant.const import (
     EntityCategory,
     UnitOfLength,
     UnitOfMass,
+    UnitOfSpeed,
     UnitOfTime,
     UnitOfVolume,
 )
@@ -44,6 +45,8 @@ from .values import (
     dig,
     finish_number,
     first_item,
+    fitness_age_at,
+    fitness_age_item,
     from_garmin,
     hr_zone_at,
     item_number,
@@ -97,6 +100,7 @@ def _d(
     precision: int | None = None,
     labels: str | None = None,
     open_enum: bool = False,
+    suggested_unit: str | None = None,
 ) -> GarminSensorDescription:
     if unit == MINUTES and device_class is None:
         device_class = DURATION
@@ -126,6 +130,7 @@ def _d(
         attrs_fn=attrs,
         intraday=intraday,
         suggested_display_precision=precision,
+        suggested_unit_of_measurement=suggested_unit,
         labels=labels,
         options=options,
     )
@@ -329,6 +334,17 @@ def _activity_attrs(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
         "differenceBodyBattery",
         "avgStress",
         "avgRespirationRate",
+        "hrTimeInZone_1",
+        "hrTimeInZone_2",
+        "hrTimeInZone_3",
+        "hrTimeInZone_4",
+        "hrTimeInZone_5",
+        "fastestSplit_1000",
+        "fastestSplit_1609",
+        "fastestSplit_5000",
+        "fastestSplit_10000",
+        "fastestSplit_21098",
+        "fastestSplit_42195",
     )
     attrs: dict[str, Any] = {k: activity[k] for k in keys if k in activity}
     if isinstance(attrs.get("description"), str):
@@ -379,17 +395,29 @@ def _weight_attrs(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
 
 
 def _fitness_age_attrs(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
-    fitness = data.get("fitness_age")
-    if not isinstance(fitness, Mapping):
+    fitness = fitness_age_item(data)
+    if fitness is None:
         return None
     attrs: dict[str, Any] = {
         "invalid_reason": fitness.get("invalidReason"),
         "last_updated": fitness.get("lastUpdated"),
     }
+    if fitness.get("previousFitnessAge") is not None:
+        attrs["previous_fitness_age"] = fitness["previousFitnessAge"]  # Garmin's own earlier value
     components = fitness.get("components")
     if isinstance(components, Mapping):
         attrs["components"] = dict(components)
     return attrs
+
+
+def _heart_rate_alert_attrs(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """Garmin's alert thresholds, when the heart rate answer of the day was requested."""
+    out: dict[str, Any] = {}
+    for name, key in (("high_threshold", "abnormalHrThresholdValue"), ("low_threshold", "lowAbnormalHrThresholdValue")):
+        value = to_number(dig(data, "heart_rate", key))
+        if value is not None:
+            out[name] = value
+    return out or None
 
 
 SENSORS: tuple[GarminSensorDescription, ...] = (
@@ -423,6 +451,8 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
     _d("heart_rate_min", "daily", _summary("minHeartRate", zero_is_none=True), unit=BPM),
     _d("heart_rate_max", "daily", _summary("maxHeartRate", zero_is_none=True), unit=BPM,
        attrs=_hr_intraday, intraday=True),
+    _d("heart_rate_alerts", "daily", _summary("abnormalHeartRateAlertsCount"), state_class=TOTAL, precision=0,
+       attrs=_heart_rate_alert_attrs, enabled=False),
     _d("stress_average", "daily", _summary("averageStressLevel")),
     _d("stress_max", "daily", _summary("maxStressLevel"), enabled=False),
     _d("stress_qualifier", "daily", _stress_qualifier, labels="stress"),
@@ -533,10 +563,10 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
        device_class=SensorDeviceClass.WEIGHT, precision=2),
     _d("visceral_fat", "body", weight_at("visceralFat"), enabled=False),
     _d("metabolic_age", "body", weight_at("metabolicAge", digits=0), unit=YEARS, enabled=False),
-    _d("fitness_age", "body", number_at("fitness_age", "fitnessAge", digits=1), unit=YEARS, attrs=_fitness_age_attrs),
-    _d("fitness_age_achievable", "body", number_at("fitness_age", "achievableFitnessAge", digits=1), unit=YEARS,
+    _d("fitness_age", "body", fitness_age_at("fitnessAge", digits=1), unit=YEARS, attrs=_fitness_age_attrs),
+    _d("fitness_age_achievable", "body", fitness_age_at("achievableFitnessAge", digits=1), unit=YEARS,
        enabled=False),
-    _d("chronological_age", "body", number_at("fitness_age", "chronologicalAge"), unit=YEARS, enabled=False,
+    _d("chronological_age", "body", fitness_age_at("chronologicalAge"), unit=YEARS, enabled=False,
        category=EntityCategory.DIAGNOSTIC),
     # ---- Activities (group "activities") ----------------------------------------------
     _d("last_activity", "activities", activity_text("activityName"), state_class=NO_CLASS, attrs=_activity_attrs),
@@ -556,8 +586,14 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
        state_class=NO_CLASS, enabled=False),
     _d("last_activity_load", "activities", activity_number("activityTrainingLoad", digits=0), state_class=NO_CLASS,
        enabled=False),
-    _d("last_activity_vo2max", "activities", activity_number("vO2MaxValue", digits=1), state_class=NO_CLASS,
-       enabled=False),
+    _d("last_activity_vo2max", "activities", activity_number("vO2MaxValue", digits=1), unit="ml/kg/min",
+       state_class=NO_CLASS, enabled=False),
+    _d("last_activity_avg_speed", "activities", activity_number("averageSpeed", zero_is_none=True),
+       unit=UnitOfSpeed.METERS_PER_SECOND, device_class=SensorDeviceClass.SPEED, state_class=NO_CLASS,
+       suggested_unit=UnitOfSpeed.KILOMETERS_PER_HOUR, precision=1, enabled=False),
+    _d("last_activity_max_speed", "activities", activity_number("maxSpeed", zero_is_none=True),
+       unit=UnitOfSpeed.METERS_PER_SECOND, device_class=SensorDeviceClass.SPEED, state_class=NO_CLASS,
+       suggested_unit=UnitOfSpeed.KILOMETERS_PER_HOUR, precision=1, enabled=False),
     _d("last_activity_elevation", "activities", activity_number("elevationGain", digits=0), unit=UnitOfLength.METERS,
        device_class=SensorDeviceClass.DISTANCE, state_class=NO_CLASS, enabled=False),
     _d("wellness_activities", "activities", lambda d: _count(d, "wellness_activities"), state_class=NO_CLASS,

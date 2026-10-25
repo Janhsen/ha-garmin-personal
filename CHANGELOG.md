@@ -3,6 +3,42 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## 0.5.8
+
+### Added
+- `garmin_personal.fetch` accepts the raw Garmin parameters `chunks` (Body Battery), `full_history_scan` (fitness age) and
+  `include_all` (weight range), for reading tests. They are only sent when given; without them the request is the one the
+  sensors send.
+- Sensor *Heart rate alerts* (Garmin's count of abnormal heart rate alerts per day, disabled by default) with the high and
+  low alert thresholds as attributes when the heart rate answer of the day is requested.
+- Sensors *Last activity average speed* and *Last activity maximum speed* (disabled by default): Garmin's value in m/s, shown
+  in km/h by default.
+- *Last activity*: attributes `hrTimeInZone_1` to `_5` (seconds per heart rate zone) and `fastestSplit_1000`, `_1609`,
+  `_5000`, `_10000`, `_21098`, `_42195` (seconds), when Garmin sends them.
+- The fitness age sensor has Garmin's `previous_fitness_age` as an attribute.
+- New statistics for `backfill_statistics` (new IDs only): `hydration`, `hydration_goal`, `spo2_average`, `spo2_lowest`,
+  `respiration_lowest`, `respiration_highest`, `floors_descended`, `step_goal`, `stress_rest_time`, `stress_low_time`,
+  `stress_medium_time`, `stress_high_time`, `sleep_spo2_average`, `sleep_spo2_lowest`, `sleep_respiration_lowest`,
+  `sleep_respiration_highest`, `sleep_need_next`, `nap_duration`, `sleep_score_rem`, `sleep_score_light`,
+  `sleep_score_deep`, `visceral_fat`, `metabolic_age`. A value Garmin does not send for a day is not written.
+- The unit of *Last activity VO2max* is shown (ml/kg/min).
+- Documentation: table of all endpoints with short name, largest range, entities and refresh (generated from the code), steps
+  as a daily total only, 24-hour token without refresh token, key validity and Garmin's e-mail, list of what the API does not
+  offer, units (weight: Garmin's specification says kilograms, real responses contain grams, the integration divides by 1000),
+  differences between imported days and live sensors, the fitness age 28-day look-back.
+- `scripts/api_fields.py` can read Garmin's specification: `--spec`, `--write-spec`, `--check-spec`, `--diff-spec OLD NEW`,
+  `--table`, `--write-readme`. New `tests/test_spec_fields.py` fails when the specification file changes or has fields that
+  the integration neither reads nor lists in `docs/api-fields/spec-unused.json` (deliberately not used).
+
+### Changed
+- The fitness age answer is read as a list of records (as in Garmin's specification) as well as a single object; from a list
+  the newest record that has a fitness age is used. The request itself is unchanged.
+- A failed request now carries Garmin's own explanation for HTTP 400 (for example an unknown activity type) and for HTTP 404
+  of an activity, shortened to 200 characters and without keys, tokens or headers; it appears in the service error.
+- Timestamps that arrive as text holding epoch milliseconds (sleep start and end) are read.
+- README: the statements on Body Battery (about 6 points) and SpO2 (hourly averages) now say which request they refer to and
+  that the specification offers more (`chunks`, `spO2SingleValues`); both are untested and not used yet.
+
 ## 0.5.7
 
 ### Added

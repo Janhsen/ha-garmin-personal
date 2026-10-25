@@ -13,7 +13,7 @@ from .intraday import HourStat
 
 # Recorder unit classes for units Home Assistant can convert (statistics cards then follow the
 # unit system); other units stay without a class. Only set when the recorder knows the field.
-UNIT_CLASSES: dict[str, str] = {"m": "distance", "kg": "mass", "s": "duration", "min": "duration"}
+UNIT_CLASSES: dict[str, str] = {"m": "distance", "kg": "mass", "s": "duration", "min": "duration", "mL": "volume"}
 
 
 def statistic_id(entry_id: str, name: str) -> str:

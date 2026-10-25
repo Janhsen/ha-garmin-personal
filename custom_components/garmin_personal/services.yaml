@@ -68,6 +68,19 @@ fetch:
           min: 1
           max: 500
           mode: box
+    chunks:
+      example: 12
+      selector:
+        number:
+          min: 1
+          max: 1440
+          mode: box
+    full_history_scan:
+      selector:
+        boolean:
+    include_all:
+      selector:
+        boolean:
 search_activities:
   fields:
     config_entry_id:

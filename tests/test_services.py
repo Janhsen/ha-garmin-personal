@@ -188,6 +188,19 @@ class Handlers(unittest.TestCase):
         self.assertEqual(kw, {"day": date(2026, 10, 1), "start": None, "end": None, "activity_id": None,
                               "filters": {"a": 1}, "limit": 20, "today": self.today})
 
+    def test_fetch_raw_parameters_are_passed_only_when_given(self):
+        self.call("fetch", {"endpoint": "body_battery", "limit": 20, "chunks": 96,
+                            "full_history_scan": True, "include_all": False})
+        kw = self.api.calls[0][2]
+        self.assertEqual((kw["chunks"], kw["full_history_scan"], kw["include_all"]), (96, True, False))
+        self.call("fetch", {"endpoint": "body_battery", "limit": 20})
+        for name in ("chunks", "full_history_scan", "include_all"):
+            self.assertNotIn(name, self.api.calls[1][2])
+
+    def test_fetch_schema_knows_the_raw_parameters(self):
+        keys = {getattr(k, "schema", k) for k in sv.FETCH_SCHEMA.schema}
+        self.assertTrue({"chunks", "full_history_scan", "include_all"} <= keys)
+
     def test_fetch_value_error_becomes_validation_error(self):
         self.api.error = ValueError("bad range")
         with self.assertRaises(SVC_ERR) as ctx:
@@ -389,15 +402,51 @@ class ImportStatistics(unittest.TestCase):
             "movement": {"steps": {"value": 4000, "distanceInMeters": 3100.5}, "floorsAscended": {"value": 7}},
             "calories": {"burnedActive": 300, "burnedResting": 1700, "burnedTotal": 2000},
             "heartRate": {"restingValue": 50, "minValue": 45, "maxValue": 150},
-            "stress": {"avgLevel": 30, "maxLevel": 90},
             "bodyBattery": {"maxValue": 90, "minValue": 10, "chargedValue": 60, "drainedValue": 70},
             "intensityMinutes": {"moderate": 20, "vigorous": 5},
-            "respiration": {"avgValue": 14},
+            "respiration": {"avgValue": 14, "minValue": 9, "maxValue": 22},
+            "hydration": {"consumedInFractionalMl": 1750.5, "goalInMl": 2800},
+            "pulseOx": {"avgValue": 95, "minValue": 88},
+            "stress": {"avgLevel": 30, "maxLevel": 90, "restDurationInMillis": 7200000,
+                       "lowStressDurationInMillis": 3600000, "mediumStressDurationInMillis": 1800000,
+                       "highStressDurationInMillis": 900000},
         }])
-        self.assertEqual(n, len(sv.BACKFILL_FIELDS))
+        # floors_descended and step_goal are missing from this day: no value, no series
+        self.assertEqual(n, len(sv.BACKFILL_FIELDS) - 2)
         self.assertEqual(rec["steps"][1][0].mean, 4000.0)
         self.assertEqual(rec["distance"][1][0].mean, 3100.5)
         self.assertEqual(rec["floors_ascended"][1][0].mean, 7.0)
+
+    def test_new_fields_0_5_8(self):
+        """New statistic ids: hydration, SpO2, breathing range, stress durations (ms -> s)."""
+        _, rec = self.run_import([{
+            "calendarDate": "2026-10-01", "source": "garmin",
+            "movement": {"steps": {"value": 4000, "goal": 10000}, "floorsDescended": {"value": 5}},
+            "hydration": {"consumedInFractionalMl": 1750.5, "goalInMl": 2800},
+            "pulseOx": {"avgValue": 95, "minValue": 88},
+            "respiration": {"minValue": 9, "maxValue": 22},
+            "stress": {"restDurationInMillis": 7200000, "highStressDurationInMillis": 900000},
+        }])
+        value = lambda name: rec[name][1][0].mean  # noqa: E731
+        self.assertEqual((value("hydration"), value("hydration_goal")), (1750.5, 2800.0))
+        self.assertEqual((value("spo2_average"), value("spo2_lowest")), (95.0, 88.0))
+        self.assertEqual((value("respiration_lowest"), value("respiration_highest")), (9.0, 22.0))
+        self.assertEqual((value("floors_descended"), value("step_goal")), (5.0, 10000.0))
+        self.assertEqual((value("stress_rest_time"), value("stress_high_time")), (7200.0, 900.0))
+        self.assertEqual(rec["hydration"][0].kw["unit_of_measurement"], "mL")
+        self.assertNotIn("stress_low_time", rec)  # no value, nothing invented
+
+    def test_new_fields_flat_and_zero(self):
+        """Single-day format works for the fields that exist there; 0 SpO2 means not measured."""
+        _, rec = self.run_import([{
+            "calendarDate": "2026-10-01", "totalSteps": 100, "hydrationValueInML": 0, "averageSpo2": 0,
+            "lowestSpo2": 90, "dailyStepGoal": 8000, "restStressDuration": 5000,
+        }])
+        self.assertEqual(rec["hydration"][1][0].mean, 0.0)  # drinking nothing is a real 0
+        self.assertNotIn("spo2_average", rec)
+        self.assertEqual(rec["spo2_lowest"][1][0].mean, 90.0)
+        self.assertEqual(rec["step_goal"][1][0].mean, 8000.0)
+        self.assertNotIn("stress_rest_time", rec)  # the flat field is in seconds: not mixed with V2 ms
 
     def test_flat_format(self):
         n, rec = self.run_import([{
@@ -471,7 +520,7 @@ class ImportStatistics(unittest.TestCase):
     def test_every_field_has_unique_id_suffix_and_paths(self):
         for name, (unit, paths) in sv.BACKFILL_FIELDS.items():
             self.assertTrue(paths, name)
-            self.assertRegex(name, r"^[a-z_]+$")
+            self.assertRegex(name, r"^[a-z0-9_]+$")
 
 
 if __name__ == "__main__":

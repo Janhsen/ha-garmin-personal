@@ -179,6 +179,9 @@
       "heart_rate_max": {
         "name": "Maximaler Puls"
       },
+      "heart_rate_alerts": {
+        "name": "Pulsalarme"
+      },
       "stress_average": {
         "name": "Durchschnittlicher Stress"
       },
@@ -624,6 +627,12 @@
       "last_activity_vo2max": {
         "name": "Letzte Aktivität: VO2max"
       },
+      "last_activity_avg_speed": {
+        "name": "Letzte Aktivität: Durchschnittsgeschwindigkeit"
+      },
+      "last_activity_max_speed": {
+        "name": "Letzte Aktivität: Höchstgeschwindigkeit"
+      },
       "last_activity_elevation": {
         "name": "Letzte Aktivität: Höhenmeter (Anstieg)"
       },
@@ -731,6 +740,18 @@
         "limit": {
           "name": "Limit",
           "description": "Maximale Anzahl Aktivitäten."
+        },
+        "chunks": {
+          "name": "Body-Battery-Intervalle (chunks)",
+          "description": "Nur für den Endpunkt body_battery: Garmin-Rohparameter chunks, die Anzahl der Zeitintervalle, in die jeder Tag geteilt wird (Garmin liefert je Intervall den niedrigsten und höchsten Wert). Ohne Angabe wird die Anfrage der Sensoren gesendet. Für Lesetests."
+        },
+        "full_history_scan": {
+          "name": "Gesamten Verlauf durchsuchen (Fitnessalter)",
+          "description": "Nur für den Endpunkt fitness_age: Garmin-Rohparameter fullHistoryScan. Aus (Standard, wie ihn die Sensoren senden) sucht Garmin nur in den letzten 28 Tagen vor dem Datum. Für Lesetests."
+        },
+        "include_all": {
+          "name": "Alle Wiegungen einschließen",
+          "description": "Nur für den Endpunkt weight_range: Garmin-Rohparameter includeAll. An (Standard, wie ihn die Sensoren senden) liefert jede Wiegung eines Tages, aus nur die letzte. Für Lesetests."
         }
       }
     },

@@ -363,6 +363,7 @@ class SensorEntityDescription:
     entity_category: object = None
     icon: str | None = None
     suggested_display_precision: int | None = None
+    suggested_unit_of_measurement: str | None = None
     options: object = None
 
 
@@ -590,7 +591,7 @@ class FakeCall:
 # --------------------------------------------------------------------------- install + load
 def install() -> None:
     Platform = make_enum("Platform", "SENSOR", "BINARY_SENSOR", "CALENDAR", "EVENT")
-    sensor_dc = make_enum("SensorDeviceClass", "DISTANCE", "DURATION", "ENUM", "TIMESTAMP", "VOLUME", "WEIGHT")
+    sensor_dc = make_enum("SensorDeviceClass", "DISTANCE", "DURATION", "ENUM", "TIMESTAMP", "SPEED", "VOLUME", "WEIGHT")
     sensor_sc = make_enum("SensorStateClass", "MEASUREMENT", "TOTAL", "TOTAL_INCREASING")
 
     stub("voluptuous", Schema=Schema, Required=Required, Optional=Optional, In=In, All=All,
@@ -600,6 +601,7 @@ def install() -> None:
          EntityCategory=make_enum("EntityCategory", "DIAGNOSTIC", "CONFIG"),
          UnitOfLength=make_enum("UnitOfLength", "METERS"),
          UnitOfMass=make_enum("UnitOfMass", "KILOGRAMS"),
+         UnitOfSpeed=make_enum("UnitOfSpeed", "METERS_PER_SECOND", "KILOMETERS_PER_HOUR"),
          UnitOfTime=make_enum("UnitOfTime", "MINUTES", "SECONDS", "YEARS"),
          UnitOfVolume=make_enum("UnitOfVolume", "MILLILITERS"))
     stub("homeassistant.core", HomeAssistant=Anything, ServiceCall=FakeCall, ServiceResponse=dict,

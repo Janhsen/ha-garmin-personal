@@ -74,6 +74,9 @@ N = {
  "last_activity_load": ("Last activity training load", "Letzte Aktivität: Trainingsbelastung"),
  "last_activity_vo2max": ("Last activity VO2max", "Letzte Aktivität: VO2max"),
  "last_activity_elevation": ("Last activity elevation gain", "Letzte Aktivität: Höhenmeter (Anstieg)"),
+ "last_activity_avg_speed": ("Last activity average speed", "Letzte Aktivität: Durchschnittsgeschwindigkeit"),
+ "last_activity_max_speed": ("Last activity maximum speed", "Letzte Aktivität: Höchstgeschwindigkeit"),
+ "heart_rate_alerts": ("Heart rate alerts", "Pulsalarme"),
  "wellness_activities": ("Wellness activities today", "Wellness-Aktivitäten heute"),
  "account": ("Account", "Konto"), "hr_max_used": ("Maximum heart rate (set)", "Maximaler Puls (eingestellt)"),
  "hr_resting_used": ("Resting heart rate (set)", "Ruhepuls (eingestellt)"),
@@ -107,6 +110,9 @@ ICONS = {
     "heart_rate_resting_7d": "heart-pulse",
     "heart_rate_min": "heart-pulse",
     "heart_rate_max": "heart-pulse",
+    "heart_rate_alerts": "heart-alert-outline",
+    "last_activity_avg_speed": "speedometer",
+    "last_activity_max_speed": "speedometer",
     "stress_average": "emoticon-neutral",
     "body_battery": "battery-heart-variant",
     "body_battery_level": "battery-heart-variant",
@@ -241,7 +247,31 @@ EXTRA_ISSUES: dict[str, dict[str, tuple[str, str]]] = {
 }
 
 # Extra service fields: service -> field -> {"name": (en, de), "description": (en, de)}; added to the built-in fields.
-EXTRA_SERVICE_FIELDS: dict[str, dict[str, dict[str, tuple[str, str]]]] = {}
+EXTRA_SERVICE_FIELDS: dict[str, dict[str, dict[str, tuple[str, str]]]] = {
+    "fetch": {
+        "chunks": {
+            "name": ("Body Battery intervals (chunks)", "Body-Battery-Intervalle (chunks)"),
+            "description": (
+                "Only for endpoint body_battery: raw Garmin parameter chunks, the number of time intervals each day is divided into (Garmin returns the lowest and highest reading of each). Left out, the request is the one the sensors send. For reading tests.",
+                "Nur für den Endpunkt body_battery: Garmin-Rohparameter chunks, die Anzahl der Zeitintervalle, in die jeder Tag geteilt wird (Garmin liefert je Intervall den niedrigsten und höchsten Wert). Ohne Angabe wird die Anfrage der Sensoren gesendet. Für Lesetests.",
+            ),
+        },
+        "full_history_scan": {
+            "name": ("Scan full history (fitness age)", "Gesamten Verlauf durchsuchen (Fitnessalter)"),
+            "description": (
+                "Only for endpoint fitness_age: raw Garmin parameter fullHistoryScan. Off (default, as the sensors send it), Garmin only looks at the last 28 days before the date. For reading tests.",
+                "Nur für den Endpunkt fitness_age: Garmin-Rohparameter fullHistoryScan. Aus (Standard, wie ihn die Sensoren senden) sucht Garmin nur in den letzten 28 Tagen vor dem Datum. Für Lesetests.",
+            ),
+        },
+        "include_all": {
+            "name": ("Include all weigh-ins", "Alle Wiegungen einschließen"),
+            "description": (
+                "Only for endpoint weight_range: raw Garmin parameter includeAll. On (default, as the sensors send it) returns every weigh-in of a day, off only the latest. For reading tests.",
+                "Nur für den Endpunkt weight_range: Garmin-Rohparameter includeAll. An (Standard, wie ihn die Sensoren senden) liefert jede Wiegung eines Tages, aus nur die letzte. Für Lesetests.",
+            ),
+        },
+    },
+}
 
 
 class GeneratorError(Exception):

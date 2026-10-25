@@ -179,6 +179,9 @@
       "heart_rate_max": {
         "name": "Maximum heart rate"
       },
+      "heart_rate_alerts": {
+        "name": "Heart rate alerts"
+      },
       "stress_average": {
         "name": "Average stress"
       },
@@ -624,6 +627,12 @@
       "last_activity_vo2max": {
         "name": "Last activity VO2max"
       },
+      "last_activity_avg_speed": {
+        "name": "Last activity average speed"
+      },
+      "last_activity_max_speed": {
+        "name": "Last activity maximum speed"
+      },
       "last_activity_elevation": {
         "name": "Last activity elevation gain"
       },
@@ -731,6 +740,18 @@
         "limit": {
           "name": "Limit",
           "description": "Maximum number of activities."
+        },
+        "chunks": {
+          "name": "Body Battery intervals (chunks)",
+          "description": "Only for endpoint body_battery: raw Garmin parameter chunks, the number of time intervals each day is divided into (Garmin returns the lowest and highest reading of each). Left out, the request is the one the sensors send. For reading tests."
+        },
+        "full_history_scan": {
+          "name": "Scan full history (fitness age)",
+          "description": "Only for endpoint fitness_age: raw Garmin parameter fullHistoryScan. Off (default, as the sensors send it), Garmin only looks at the last 28 days before the date. For reading tests."
+        },
+        "include_all": {
+          "name": "Include all weigh-ins",
+          "description": "Only for endpoint weight_range: raw Garmin parameter includeAll. On (default, as the sensors send it) returns every weigh-in of a day, off only the latest. For reading tests."
         }
       }
     },

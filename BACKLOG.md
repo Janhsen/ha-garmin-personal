@@ -6,6 +6,14 @@ Ideas and open points, roughly by priority. Nothing here is promised; items move
 - **Hourly statistics from intraday series** (heart rate, Body Battery, SpO2): min/max/mean per full hour from the real
   Garmin points, written continuously and via `backfill_intraday` (in development, 0.5.0).
 
+## Needs a live test (read-only, with `garmin_personal.fetch` since 0.5.8)
+- Body Battery `chunks` (12, 48, 96, 288): does the series get denser? Then use it for the sensors and bump the history ledger.
+- `spO2SingleValues` of the SpO2 answer: filled? Then read the raw series instead of the hourly averages.
+- Fitness age: real shape (list or object) and `full_history_scan: true`.
+- `weights_all`: still HTTP 400? Weight range with `include_all: false`.
+- Daily summaries (V2) against the live sensors: minimum/maximum heart rate, distance and respiration differ in meaning
+  (see README, "backfill_statistics"); compare one real day before changing any existing statistic.
+
 ## To think about
 - **Raw intraday points in full resolution.** Home Assistant statistics only accept full hours and the recorder drops
   large attributes, so the real points (heart rate about every 2 minutes; Body Battery, SpO2 and stress to be checked

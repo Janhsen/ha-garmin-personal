@@ -2,9 +2,7 @@
 
 *[Deutsche Fassung](README.de.md)*
 
-Custom integration (HACS) exposing **all 26 read endpoints** of the official Garmin Connect Personal API:
-sensors for the common values and services for everything else. Nothing is calculated or invented:
-what Garmin does not deliver stays empty (`unknown`).
+Custom integration (HACS) exposing **all 26 read paths** (25 data endpoints and the download of an activity file) of the official Garmin Connect Personal API: sensors for the common values and services for everything else. Nothing is calculated or invented: what Garmin does not deliver stays empty (`unknown`). The one exception is the expiry date of the API key, which Garmin does not reveal and which is counted locally (see "Key expiry").
 
 > **Status:** running against a real Garmin account in Home Assistant (current version: see `manifest.json` and the
 > [changelog](CHANGELOG.md)). Tokens, retries, time windows, filters, value extraction and the sensor list are tested
@@ -53,8 +51,15 @@ Garmin does not reveal the expiry date through the API. The date shown is theref
 Garmin: the integration counts from the moment you add the key with the validity you picked (30/90/180/365 days).
 Pick the same validity you chose at Garmin, otherwise the date is wrong and the warning comes too late or too early.
 A diagnostic sensor "API key expires" shows the calculated date (it works locally and does not depend on the connection
-to Garmin). A repair issue appears **7 days before** (checked hourly) and turns into an error after the date. To renew: create a new key, then *Reconfigure* the entry. If Garmin rejects the key earlier, Home Assistant starts
-re-authentication automatically.
+to Garmin). A repair issue appears **7 days before** (checked hourly) and turns into an error after the date. To renew: create a new key, then *Reconfigure* the entry. If Garmin rejects the key earlier, Home Assistant starts re-authentication automatically.
+
+**Key and token.** The key you create at Garmin is exchanged for an access token that is valid for **24 hours**. There is
+no refresh token: the integration exchanges the key again when the token runs out or Garmin rejects it (HTTP 401). The key
+itself is valid for 30, 90, 180 or 365 days (your choice at Garmin); Garmin sends an e-mail about **a week before** it
+expires, and this integration raises its repair notice 7 days before the calculated date. Garmin shows a key **only once**:
+if you lose it, create a new one (the old one stays valid until it expires or you revoke it at Garmin) and use
+*Reconfigure*; entities and history stay. When you renew, pick the validity of the new key again, because it sets the
+calculated date.
 
 ## Sensors (~120)
 
@@ -89,8 +94,7 @@ In addition: a **calendar** entity with the latest activities (about 20, from Ga
 Garmin delivers it; distance in your unit system, calories and average heart rate in the description; the entity
 shows only a running or the next upcoming activity as its current event), disabled-by-default sensors for stress shares,
 average altitude, highest/lowest respiration, lowest/highest average heart rate, the Body Battery level with Garmin's
-feedback and event list as attributes, and the sleep alignment with Garmin's recommended window (minutes after
-midnight, as delivered).
+feedback and event list as attributes, the sleep alignment with Garmin's recommended window (minutes after midnight, as delivered), *Heart rate alerts* (Garmin's count per day; the high and low alert thresholds appear as attributes when the heart rate answer of the day is requested), and the average and maximum speed of the last activity.
 
 Options: update interval for the daily values (this is the sync check), sync warning threshold, and whether intraday
 series (heart rate, Body Battery, SpO2) are attached as attributes (large, not stored in the recorder). Only with this
@@ -103,8 +107,7 @@ statistics"). It reuses the requests that run anyway and otherwise asks once mor
 The option **Fill history automatically** (on by default) appends the real measuring points to the (history) sensors
 that you enabled; see `backfill_history` below. Without an enabled and recorded history sensor it does nothing.
 
-Units: distances are in meters and durations in seconds (sleep need in minutes); the unit is shown on each sensor,
-and a dashboard card can convert it. Many "today" values (steps, minimum/maximum heart rate) start again at midnight.
+Units: distances are in meters, durations in seconds, speeds in m/s (the optional *Last activity average/maximum speed* sensors are shown in km/h by default), hydration in mL, heart rate in bpm, breathing in breaths per minute, SpO2 and Body Battery in percent / 0-100. The unit is shown on each sensor, and a dashboard card can convert it. Sleep need in minutes and HRV in ms are the usual units but are an observation: the specification names no unit for them. **Weight and body mass are shown in kg. Garmin's specification says kilograms, but real responses contain grams; the integration divides by 1000** (checked against a real weigh-in). Attributes keep Garmin's own values and units: `averageSpeed` and `maxSpeed` of *Last activity* are m/s, `elevationGain`/`elevationLoss` meters, power in watts, `hrTimeInZone_1` to `_5` and `fastestSplit_*` seconds, the series attributes `[time in ms (UTC), value]` pairs, `weight_delta_g` grams, the `*_min` attributes of the sleep alignment minutes after midnight. Many "today" values (steps, minimum/maximum heart rate) start again at midnight.
 
 Request volume: about 290 requests per day and account for the sync check, plus about 9 per watch sync and the
 fallbacks, roughly 400 to 500 in total (without intraday series). Hourly statistics add about 2 requests per watch
@@ -113,8 +116,7 @@ of each day and after each sync before 10:00 local time, so roughly 30 to 60 mor
 attributes on, today's series are requested anyway and only yesterday's 3 remain. Garmin names no limits for the
 Personal API and offers no push; the integration only polls.
 
-Not part of the Personal API (and therefore not available): Training Readiness, training status, VO2max as a daily
-value, race predictions. VO2max exists only per activity.
+The Personal API has no Training Readiness, training status, VO2max as a daily value or race predictions (VO2max exists only per activity); see "Endpoints and services" for the full list of what is not available.
 
 Sleep, HRV and body sensors keep their **last known value** while Garmin returns nothing (e.g. the next morning
 before the new night is synced), also across restarts. The attributes `held_value` (true while the value is old)
@@ -125,7 +127,66 @@ about 15 minutes (or three update intervals) without a successful update they be
 placeholder values that Garmin sends for "not measured" (for example a weight of 0 or a night of 0 seconds) are
 treated as no value. The weight sensors ignore entries that are only a profile change.
 
-## Examples
+The zone floors (lower heart rate limits of zones 1 to 5) are attributes of *Maximum heart rate (set)*; the fitness age
+sensor has Garmin's `previous_fitness_age` as an attribute. Garmin documents the fitness age answer as a list of records
+(earlier answers were a single object): both are read, from a list the newest record that has a fitness age. The request
+sends `fullHistoryScan=false`, so Garmin only looks at the last 28 days before the date: without a new value in that
+time the answer carries an `invalidReason` and the fitness age sensors stay empty. (`fetch` with
+`full_history_scan: true` shows what Garmin has in its full history.)
+
+## Endpoints and services
+
+The integration covers all 26 paths of the Garmin Connect Personal API specification (`docs/garmin-personal-swagger.json`,
+version 1.0.0): 25 data endpoints, read with the service `garmin_personal.fetch` under the short name in the table, and
+the download of an activity file (`garmin_personal.download_activity`). Everything is read-only (all paths are GET). The
+table is generated from the code (`scripts/api_fields.py --write-readme`); the limit is the longest date range per request,
+longer ranges are split automatically. *spec* marks limits from Garmin's specification, *observed* limits that were
+measured against the real service and may change.
+
+<!-- endpoints:start (generated by scripts/api_fields.py --write-readme) -->
+
+| Endpoint | Short name / service | Largest range per request | Entities and attributes | Refresh |
+|---|---|---|---|---|
+| `/activity-service/activity/{activityId}` | `activity` | – | service only | on call |
+| `/activity-service/activity/{activityId}/workouts` | `activity_workouts` | – | service only | on call |
+| `/activitylist-service/activities/search/activities` | `activities` | about 45 per page (observed) | *Last activity* sensors and their attributes, event *Activity*, calendar | new sync, otherwise 1 h |
+| `/biometric-service/heartRateZones/v2` | `hr_zones` | – | maximum, resting and lactate threshold heart rate; zone floors as attributes of *Maximum heart rate (set)* | 24 h |
+| `/download-service/files/activity/{activityId}` | `download_activity` | – | service `download_activity` (ZIP with the FIT file) | on call |
+| `/fitnessage-service/fitnessage/v2/{calendarDate}` | `fitness_age` | 28 days look-back (spec) | fitness age, achievable and chronological age; attributes `previous_fitness_age`, `components` | new sync, otherwise 1 h |
+| `/goal-service/goal/user/effective/weightgoal/{startDate}/{endDate}` | `weight_goals` | – | service only | on call |
+| `/hrv-service/hrv/{calendarDate}` | `hrv` | 1 day (spec) | *HRV (history)* (nightly readings) | new sync, with the history option |
+| `/hrv-service/hrv/daily/{fromDate}/{toDate}` | `hrv_summaries` | 365 days (observed) | HRV last night, week, 5-minute high, status, feedback | new sync, otherwise 2 h |
+| `/nutrition-service/food/logs/{date}` | `nutrition` | 1 day (spec) | no sensor by design (service only) | on call |
+| `/periodichealth-service/menstrualcycle/summary/{calendarDate}` | `menstrual_summary` | 1 day (spec) | no sensor by design (service only) | on call |
+| `/periodichealth-service/menstrualcycle/dayview/{calendarDate}` | `menstrual_day` | 1 day (spec) | no sensor by design (service only) | on call |
+| `/sleep-service/sleep/dailySleep` | `sleep` | 1 day (spec) | sleep sensors (duration, stages, score and sub-scores, start/end, need, alignment, breathing) | new sync, otherwise 2 h |
+| `/sleep-service/sleep/dailySleepSummariesByDate` | `sleep_summaries` | 31 days (spec) | statistics import `backfill_statistics` | on call |
+| `/userprofile-service/userprofile/settings` | `profile` | – | *Account* (attributes: locale, units, time zone, ...) | 24 h |
+| `/usersummary-service/stats/hydration/daily/{startDate}/{endDate}` | `hydration` | 31 days (spec) | hydration, goal, sweat loss | new sync, otherwise 1 h |
+| `/usersummary-service/stats/steps/daily/{startDate}/{endDate}` | `steps` | 28 days (spec) | service only: daily totals (no values within a day) | on call |
+| `/usersummary-service/stats/stress/daily/{startDate}/{endDate}` | `stress` | 28 days (spec) | service only: daily values (no stress curve) | on call |
+| `/usersummary-service/usersummary/daily` | `daily_summary` | 1 day (spec) | daily sensors: steps, distance, calories, intensity minutes, floors, heart rate, stress, Body Battery, respiration, heart rate alerts, last sync | every 5 min (sync check) |
+| `/usersummary-service/v2/dailysummaries` | `daily_summaries` | 31 days (spec: 1 year) (code) | statistics import `backfill_statistics` | on call |
+| `/weight-service/weight/all/{startDate}/{endDate}` | `weights_all` | – | service only; Garmin currently answers HTTP 400 | on call |
+| `/weight-service/weight/range/{startDate}/{endDate}` | `weight_range` | 360 days (observed) | weight, BMI, body fat/water, muscle/bone mass, visceral fat, metabolic age | new sync, otherwise 1 h (90 days) |
+| `/wellness-service/wellness/bodyBattery/reports/daily` | `body_battery` | 31 days (spec) | Body Battery series (attribute, hourly statistics, *Body Battery (history)*) | new sync, with an intraday, hourly or history option |
+| `/wellness-service/wellness/daily/spo2acclimation/{calendarDate}` | `spo2` | 1 day (spec) | SpO2 average, lowest, latest, 7 days; hourly SpO2 series | new sync, otherwise 1 h |
+| `/wellness-service/wellness/dailyHeartRate` | `heart_rate` | 1 day (spec) | heart rate series (attribute, hourly statistics, *Heart rate (history)*); alert thresholds as attributes of *Heart rate alerts* | new sync, with an intraday, hourly or history option |
+| `/wellnessactivity-service/activity/summary/range/{fromDate}/{untilDate}` | `wellness_activities` | 31 days (observed) | *Wellness activities today* (count) | new sync, otherwise 1 h |
+
+<!-- endpoints:end -->
+
+**Steps are a daily total only.** Garmin's Personal API delivers steps (and distance and floors) once per calendar day,
+nothing within the day; the specification was checked for this. The sensor *Steps* therefore counts up during the day and
+starts at 0 after midnight. A curve over the day exists only as far as Home Assistant records the sensor, so its
+resolution is the time between two watch syncs, not a minute-by-minute graph like in the Garmin app. Nothing is estimated
+or interpolated.
+
+**Not available (the specification is the limit).** The Personal API has no: steps within the day, stress, sleep-stage
+or respiration time series (only daily values; a heart rate, Body Battery, SpO2 and HRV series do exist), Training
+Readiness, training status, VO2max as a daily value (only per activity), race predictions, endurance or hill score,
+blood pressure, device or battery data, gear, raw activity streams (use the FIT download), webhooks or push, and no write
+access. If it is not in the specification, the integration cannot show it.
 
 Notification after a new activity:
 
@@ -171,7 +232,11 @@ with a translated error that lists the accounts. All service errors are translat
 
 * `garmin_personal.fetch` – any endpoint by short name (`daily_summary`, `sleep`, `hrv_summaries`, `stress`,
   `menstrual_summary`, `nutrition`, `activity`, …) for a day or a range. Long ranges are split into the windows
-  Garmin allows.
+  Garmin allows. Optional raw Garmin parameters for reading tests (only sent when given; left out, the request is the
+  one the sensors send): `chunks` (`body_battery`: number of time intervals per day, Garmin returns the lowest and
+  highest reading of each), `full_history_scan` (`fitness_age`) and `include_all` (`weight_range`: every weigh-in of a
+  day instead of the latest). A failed request reports Garmin's own explanation of an HTTP 400 (for example an unknown
+  activity type or a too large bounding box) and of an HTTP 404 for an activity, shortened to 200 characters.
 * `garmin_personal.search_activities` – filters such as `activity_type`, `min_distance`, `start_date`,
   `bounding_box`, with automatic paging.
 * `garmin_personal.download_activity` – original ZIP (FIT) into a folder that Home Assistant allows
@@ -187,8 +252,17 @@ with a translated error that lists the accounts. All service errors are translat
   it overwrites the same days. Without `end_date` the import ends yesterday (today only if you give it explicitly,
   because today is incomplete); at most 3650 days; it runs in 31-day windows and only one import per account at a
   time. The response reports `complete`, `last_completed_day` and `error` after an interruption, plus
-  `days_imported`, `statistic_series` and `statistic_rows`. Days with a value of 0 for resting/minimum/maximum heart
-  rate, stress or respiration are not written.
+  `days_imported`, `statistic_series` and `statistic_rows`. Days with a value of 0 for resting/minimum/maximum heart rate, stress, SpO2 or respiration are not written.
+  Since 0.5.8 these are imported too (new statistic IDs, same names as the live sensors where there is one):
+  `hydration`, `hydration_goal` (mL), `spo2_average`, `spo2_lowest`, `respiration_lowest`, `respiration_highest`,
+  `floors_descended`, `step_goal`, `stress_rest_time`/`_low_time`/`_medium_time`/`_high_time` (seconds, Garmin
+  gives milliseconds), `sleep_spo2_average`/`_lowest`, `sleep_respiration_lowest`/`_highest`, `sleep_need_next`,
+  `nap_duration`, `sleep_score_rem`/`_light`/`_deep` (%), `visceral_fat` and `metabolic_age`. A value Garmin does not
+  send for a day is simply not written. **Imported days are not the same quantity as the live sensors in every
+  case:** in Garmin's daily-summaries format (used for the import) minimum and maximum heart rate are the minimum and
+  maximum *2-minute average* (the live sensors read the absolute minimum/maximum), `distance` is the distance of the
+  steps only (the live sensor adds activity distance), and `respiration_average` is the day average (the live
+  sensor is the waking average). Existing statistic IDs were not changed, so compare like with like.
 * `garmin_personal.backfill_intraday` – writes the day curves of **heart rate, Body Battery and SpO2** retroactively as
   **hourly statistics** (minimum, maximum and mean per full hour, see "History and long-term statistics"). `days`
   (default 7), `start_date` and `end_date` work as above; without `end_date` it ends today (only completed hours are
@@ -224,8 +298,7 @@ with a translated error that lists the accounts. All service errors are translat
   from the HRV endpoint). A night belongs to the day you wake up, so its points lie in the evening before and the
   morning of that day; today's night is fetched again after each sync and only the points not written before are
   appended, so a night that completes late is not duplicated. There is no hourly statistic for HRV (it would cost one
-  more request on every sync for night-only data). *Body Battery (history)* only has the few points per day that
-  Garmin's Personal API delivers (about 6), not Garmin Connect's dense curve; nothing is filled in. SpO2 uses the
+  more request on every sync for night-only data). *Body Battery (history)* only has the few points per day that Garmin's Personal API delivers with the request used here (about 6; the specification also offers a `chunks` parameter that divides the day into more intervals, which is not used yet and can be tried with `fetch`), not Garmin Connect's dense curve; nothing is filled in. SpO2 uses the
   `spo2Level` column named by Garmin's descriptor list (the environment column is not SpO2 and is ignored).
 
   **Automatic variant** (option *Fill history automatically*, on by default): it only acts for a series whose history
@@ -285,8 +358,7 @@ has no word list yet because the values Garmin sends are not known; each value s
   yesterday are recalculated and overwritten after each sync, so later corrections by Garmin are taken over. Hours
   without a measurement stay empty: nothing is interpolated or filled, and placeholder values (0 or negative for heart
   rate and SpO2, negative for Body Battery) are dropped. Hours are full UTC hours. Heart rate has about one point every
-  two minutes, so an hour has up to 30 points; Garmin's SpO2 answer only holds hourly averages, so minimum, maximum and
-  mean of an SpO2 hour are the same. Where to see them: a *Statistics graph* card (pick the statistic, period *hour*
+  two minutes, so an hour has up to 30 points; the SpO2 values read here are Garmin's hourly averages (the specification also lists raw single readings, `spO2SingleValues`, which are not read yet), so minimum, maximum and mean of an SpO2 hour are the same. Where to see them: a *Statistics graph* card (pick the statistic, period *hour*
   or *day*, `stat_types` `min`, `max`, `mean`) or Developer tools → Statistics. They do **not** appear in the History
   panel, which only shows states of entities; they are not states, so they are not stored there or in the attributes.
   In time zones whose offset is not a whole number of hours, the hour around local midnight is left out at the edge
@@ -306,8 +378,15 @@ has no word list yet because the values Garmin sends are not known; each value s
 ## Spotting Garmin API changes
 
 `docs/api-fields/` holds the key paths (names only, no values) of known Garmin responses. `scripts/api_fields.py --diff`
-compares a fresh response with them and lists new (+) and removed (-) fields, so additions or changes on Garmin's side
-become visible instead of silently missing.
+compares a fresh response with them and lists new (+) and removed (-) fields, so additions or changes on Garmin's side become visible instead of silently missing.
+
+The specification itself is checked without a Garmin account: `docs/api-fields/spec-paths.json` holds the key paths it
+lists per endpoint, `scripts/api_fields.py --spec` prints them, and `--diff-spec OLD NEW` shows what a new specification
+file adds or removes. `tests/test_spec_fields.py` fails when the specification file changes, when a path has no short
+name, or when it has a field that the integration neither reads nor lists in `docs/api-fields/spec-unused.json`
+("deliberately not used"; regenerate the lists with `--write-spec` after looking at the difference). The specification
+and real responses differ in both directions (for example `sleepScores` is empty in the specification), so the two kinds
+of list are kept apart.
 
 ## Privacy
 
@@ -321,8 +400,7 @@ without login, unlike the `www` folder.
 
 ## Garmin quirks that are handled
 
-Range limits (steps/stress 28 days, sleep/hydration/Body Battery 31 days, HRV 365 days), about 45 activities per
-page, retry on 429/5xx honouring `Retry-After`, a new token exchange on 401, timestamps as ISO or milliseconds.
+Range limits (steps/stress 28 days, sleep/hydration/Body Battery 31 days per the specification; `daily_summaries` allows one year per the specification but is asked in 31-day windows; HRV 365 days and weight 360 days observed), about 45 activities per page (observed), retry on 429/5xx honouring `Retry-After`, a new token exchange on 401, timestamps as ISO or milliseconds.
 `weight/all` currently always returns HTTP 400 at Garmin and is reachable via `fetch` only for completeness.
 
 ## Troubleshooting

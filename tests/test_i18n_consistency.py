@@ -198,7 +198,7 @@ class OtherEntitiesAndMessages(unittest.TestCase):
 
     def test_icons_json_covers_every_listed_sensor(self):
         icons = json.loads((PKG / "icons.json").read_text())
-        self.assertEqual(len(icons["entity"]["sensor"]), 45)
+        self.assertEqual(len(icons["entity"]["sensor"]), 48)
         self.assertLessEqual(set(icons["entity"]["sensor"]), set(EN["entity"]["sensor"]))
         for node in icons["entity"]["sensor"].values():
             self.assertRegex(node["default"], r"^mdi:[a-z0-9-]+$")
