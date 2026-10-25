@@ -3,6 +3,11 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## 0.5.7
+
+### Added
+- Translations for newly seen Garmin keywords: sleep feedback and insights, personal sleep insights, HRV feedback (balanced, unbalanced, low with their number), sleep alignment, Body Battery level "moderate" and the rating "invalid".
+
 ## 0.5.6
 
 ### Fixed

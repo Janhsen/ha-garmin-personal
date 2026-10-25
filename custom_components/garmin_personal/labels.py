@@ -14,6 +14,7 @@ LABELS: dict[str, dict[str, tuple[str, str]]] = {
         "good": ("Good", "Gut"),
         "fair": ("Fair", "Mittelmäßig"),
         "poor": ("Poor", "Schlecht"),
+        "invalid": ("Invalid", "Ungültig"),
     },
     "sleep_feedback": {
         # Only keys seen in real responses; the words of the key are translated literally.
@@ -31,6 +32,11 @@ LABELS: dict[str, dict[str, tuple[str, str]]] = {
         "negative_light": ("Negative: light", "Negativ: leicht"),
         "negative_short_and_poor_structure": ("Negative: short and poor structure", "Negativ: kurz und schlecht strukturiert"),
         "negative_not_enough_rem": ("Negative: not enough REM", "Negativ: zu wenig REM-Schlaf"),
+        "positive_deep": ("Positive: deep", "Positiv: tief"),
+        "positive_highly_recovering": ("Positive: highly recovering", "Positiv: sehr erholsam"),
+        "negative_not_restorative": ("Negative: not restorative", "Negativ: nicht erholsam"),
+        "negative_long_but_not_restorative": ("Negative: long but not restorative", "Negativ: lang, aber nicht erholsam"),
+        "negative_short_and_nonrecovering": ("Negative: short and non-recovering", "Negativ: kurz und nicht erholsam"),
     },
     "sleep_insight": {
         "positive_restful_day": ("Positive: restful day", "Positiv: erholsamer Tag"),
@@ -41,19 +47,26 @@ LABELS: dict[str, dict[str, tuple[str, str]]] = {
         "negative_strenuous_exercise": ("Negative: strenuous exercise", "Negativ: anstrengendes Training"),
         "negative_late_strenuous_exercise": ("Negative: late strenuous exercise", "Negativ: spätes anstrengendes Training"),
         "negative_acclimatization_in_progress": ("Negative: acclimatization in progress", "Negativ: Akklimatisierung läuft"),
+        "negative_stressful_day": ("Negative: stressful day", "Negativ: stressiger Tag"),
         "none": ("None", "Kein Einblick"),
     },
     "hrv_feedback": {
         # Numbered text variants of Garmin's app; only the number is shown, never a meaning.
-        **{f"hrv_balanced_{n}": (f"Balanced: {n}", f"Ausgeglichen: {n}") for n in (2, 3, 5, 6, 7, 8)},
+        **{f"hrv_balanced_{n}": (f"Balanced: {n}", f"Ausgeglichen: {n}") for n in (2, 3, 4, 5, 6, 7, 8)},
+        **{f"hrv_unbalanced_{n}": (f"Unbalanced: {n}", f"Unausgeglichen: {n}") for n in (10, 11, 12)},
+        **{f"hrv_low_{n}": (f"Low: {n}", f"Niedrig: {n}") for n in (3, 4, 7)},
         "onboarding_1": ("Setup phase: 1", "Einführung: 1"),
     },
     "sleep_alignment": {
         "behind": ("Behind", "Im Rückstand"),
+        "aligned": ("Aligned", "Im Einklang"),
+        "not_aligned": ("Not aligned", "Nicht im Einklang"),
+        "onboarding": ("Setup phase", "Einführung"),
     },
     "body_battery_level": {
         # Only levels seen in real responses.
         "high": ("High", "Hoch"),
+        "moderate": ("Moderate", "Moderat"),
     },
     "hrv_status": {
         "balanced": ("Balanced", "Ausgeglichen"),
@@ -131,6 +144,12 @@ _CONTEXT = {
     "MODERATE_CLOSE_BED": ("moderate close to bedtime", "moderat kurz vor dem Schlafen"),
     "MODERATE_DURING_DAY": ("moderate during the day", "moderat im Tagesverlauf"),
     "REALLY_LATE_TIMING": ("really late timing", "sehr später Zeitpunkt"),
+    "STRESSFUL_DAY_POOR_HISTORY": ("stressful day, poor history", "stressiger Tag, schlechter Verlauf"),
+    "STRESSFUL_EVENING": ("stressful evening", "stressiger Abend"),
+    "MODERATE_DURING_DAY_OUTDOOR": ("moderate outdoors during the day", "moderat draußen im Tagesverlauf"),
+    "MOD_TO_VIG_DURING_DAY_OUTDOOR": ("moderate to vigorous outdoors during the day", "moderat bis intensiv draußen im Tagesverlauf"),
+    "EXCELLENT_TIMING": ("excellent timing", "ausgezeichneter Zeitpunkt"),
+    "RELAX_CLOSE_BED": ("relaxing close to bedtime", "entspannt kurz vor dem Schlafen"),
 }
 _SEEN_PERSONAL = [
     "STRESS_POS_EXCELLENT_OR_GOOD_SLEEP_RESTFUL_EVENING", "HARD_EXERCISE_NEG_FAIR_OR_POOR_SLEEP_HARD_CLOSE_BED",
@@ -143,6 +162,10 @@ _SEEN_PERSONAL = [
     "MOD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_VIGOROUS_DURING_DAY_OUTDOOR",
     "STRESS_POS_EXCELLENT_OR_GOOD_SLEEP_RESTFUL_DAY", "MOD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_MODERATE_CLOSE_BED",
     "STRESS_POS_EXCELLENT_OR_GOOD_SLEEP_VERY_RESTFUL_DAY", "GENERAL_POS_EXCELLENT_OR_GOOD_SLEEP",
+    "STRESS_NEG_FAIR_OR_POOR_SLEEP_STRESSFUL_DAY_POOR_HISTORY", "MOD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_MODERATE_DURING_DAY_OUTDOOR",
+    "STRESS_NEG_POOR_SLEEP_STRESSFUL_EVENING", "RHYTHM_POS_FAIR_OR_POOR_SLEEP_EXCELLENT_TIMING",
+    "MOD_EXERCISE_POS_FAIR_SLEEP_MOD_TO_VIG_DURING_DAY_OUTDOOR", "HARD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_HARD_DURING_DAY",
+    "MOD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_RELAX_CLOSE_BED",
 ]
 
 

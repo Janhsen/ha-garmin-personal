@@ -212,7 +212,8 @@
       "body_battery_level": {
         "name": "Body-Battery-Stufe",
         "state": {
-          "high": "Hoch"
+          "high": "Hoch",
+          "moderate": "Moderat"
         }
       },
       "body_battery_high": {
@@ -323,7 +324,8 @@
           "excellent": "Ausgezeichnet",
           "good": "Gut",
           "fair": "Mittelmäßig",
-          "poor": "Schlecht"
+          "poor": "Schlecht",
+          "invalid": "Ungültig"
         }
       },
       "sleep_score_stress": {
@@ -332,7 +334,8 @@
           "excellent": "Ausgezeichnet",
           "good": "Gut",
           "fair": "Mittelmäßig",
-          "poor": "Schlecht"
+          "poor": "Schlecht",
+          "invalid": "Ungültig"
         }
       },
       "sleep_score_restlessness": {
@@ -341,7 +344,8 @@
           "excellent": "Ausgezeichnet",
           "good": "Gut",
           "fair": "Mittelmäßig",
-          "poor": "Schlecht"
+          "poor": "Schlecht",
+          "invalid": "Ungültig"
         }
       },
       "sleep_score_awake_count": {
@@ -350,7 +354,8 @@
           "excellent": "Ausgezeichnet",
           "good": "Gut",
           "fair": "Mittelmäßig",
-          "poor": "Schlecht"
+          "poor": "Schlecht",
+          "invalid": "Ungültig"
         }
       },
       "sleep_score_rem": {
@@ -408,7 +413,12 @@
           "negative_discontinuous": "Negativ: unterbrochen",
           "negative_light": "Negativ: leicht",
           "negative_short_and_poor_structure": "Negativ: kurz und schlecht strukturiert",
-          "negative_not_enough_rem": "Negativ: zu wenig REM-Schlaf"
+          "negative_not_enough_rem": "Negativ: zu wenig REM-Schlaf",
+          "positive_deep": "Positiv: tief",
+          "positive_highly_recovering": "Positiv: sehr erholsam",
+          "negative_not_restorative": "Negativ: nicht erholsam",
+          "negative_long_but_not_restorative": "Negativ: lang, aber nicht erholsam",
+          "negative_short_and_nonrecovering": "Negativ: kurz und nicht erholsam"
         }
       },
       "sleep_insight": {
@@ -422,6 +432,7 @@
           "negative_strenuous_exercise": "Negativ: anstrengendes Training",
           "negative_late_strenuous_exercise": "Negativ: spätes anstrengendes Training",
           "negative_acclimatization_in_progress": "Negativ: Akklimatisierung läuft",
+          "negative_stressful_day": "Negativ: stressiger Tag",
           "none": "Kein Einblick"
         }
       },
@@ -447,13 +458,23 @@
           "stress_pos_excellent_or_good_sleep_restful_day": "Stress positiv: ausgezeichneter oder guter Schlaf, erholsamer Tag",
           "mod_exercise_pos_excellent_or_good_sleep_moderate_close_bed": "Moderates Training positiv: ausgezeichneter oder guter Schlaf, moderat kurz vor dem Schlafen",
           "stress_pos_excellent_or_good_sleep_very_restful_day": "Stress positiv: ausgezeichneter oder guter Schlaf, sehr erholsamer Tag",
-          "general_pos_excellent_or_good_sleep": "Allgemein positiv: ausgezeichneter oder guter Schlaf"
+          "general_pos_excellent_or_good_sleep": "Allgemein positiv: ausgezeichneter oder guter Schlaf",
+          "stress_neg_fair_or_poor_sleep_stressful_day_poor_history": "Stress negativ: mittelmäßiger oder schlechter Schlaf, stressiger Tag, schlechter Verlauf",
+          "mod_exercise_pos_excellent_or_good_sleep_moderate_during_day_outdoor": "Moderates Training positiv: ausgezeichneter oder guter Schlaf, moderat draußen im Tagesverlauf",
+          "stress_neg_poor_sleep_stressful_evening": "Stress negativ: schlechter Schlaf, stressiger Abend",
+          "rhythm_pos_fair_or_poor_sleep_excellent_timing": "Rhythmus positiv: mittelmäßiger oder schlechter Schlaf, ausgezeichneter Zeitpunkt",
+          "mod_exercise_pos_fair_sleep_mod_to_vig_during_day_outdoor": "Moderates Training positiv: mittelmäßiger Schlaf, moderat bis intensiv draußen im Tagesverlauf",
+          "hard_exercise_pos_excellent_or_good_sleep_hard_during_day": "Hartes Training positiv: ausgezeichneter oder guter Schlaf, hart im Tagesverlauf",
+          "mod_exercise_pos_excellent_or_good_sleep_relax_close_bed": "Moderates Training positiv: ausgezeichneter oder guter Schlaf, entspannt kurz vor dem Schlafen"
         }
       },
       "sleep_alignment": {
         "name": "Schlafausrichtung",
         "state": {
-          "behind": "Im Rückstand"
+          "behind": "Im Rückstand",
+          "aligned": "Im Einklang",
+          "not_aligned": "Nicht im Einklang",
+          "onboarding": "Einführung"
         }
       },
       "sleep_breathing_disruption": {
@@ -483,10 +504,17 @@
         "state": {
           "hrv_balanced_2": "Ausgeglichen: 2",
           "hrv_balanced_3": "Ausgeglichen: 3",
+          "hrv_balanced_4": "Ausgeglichen: 4",
           "hrv_balanced_5": "Ausgeglichen: 5",
           "hrv_balanced_6": "Ausgeglichen: 6",
           "hrv_balanced_7": "Ausgeglichen: 7",
           "hrv_balanced_8": "Ausgeglichen: 8",
+          "hrv_unbalanced_10": "Unausgeglichen: 10",
+          "hrv_unbalanced_11": "Unausgeglichen: 11",
+          "hrv_unbalanced_12": "Unausgeglichen: 12",
+          "hrv_low_3": "Niedrig: 3",
+          "hrv_low_4": "Niedrig: 4",
+          "hrv_low_7": "Niedrig: 7",
           "onboarding_1": "Einführung: 1"
         }
       },
