@@ -132,7 +132,7 @@ sensor has Garmin's `previous_fitness_age` as an attribute. Garmin documents the
 (earlier answers were a single object): both are read, from a list the newest record that has a fitness age. The request
 sends `fullHistoryScan=false`, so Garmin only looks at the last 28 days before the date: without a new value in that
 time the answer carries an `invalidReason` and the fitness age sensors stay empty. (`fetch` with
-`full_history_scan: true` shows what Garmin has in its full history.)
+`full_history_scan: true` shows what Garmin has in its full history; live test: with `fullHistoryScan=true` the answer is a single object, not a list, which the parser already reads.)
 
 ## Endpoints and services
 
@@ -298,7 +298,7 @@ with a translated error that lists the accounts. All service errors are translat
   from the HRV endpoint). A night belongs to the day you wake up, so its points lie in the evening before and the
   morning of that day; today's night is fetched again after each sync and only the points not written before are
   appended, so a night that completes late is not duplicated. There is no hourly statistic for HRV (it would cost one
-  more request on every sync for night-only data). *Body Battery (history)* only has the few points per day that Garmin's Personal API delivers with the request used here (about 6; the specification also offers a `chunks` parameter that divides the day into more intervals, which is not used yet and can be tried with `fetch`), not Garmin Connect's dense curve; nothing is filled in. SpO2 uses the
+  more request on every sync for night-only data). *Body Battery (history)* has one point every 3 minutes (about 480 a day, the watch's own resolution) since 0.5.9: the request sends `chunks=288` (live tested; without it Garmin delivers only about 6 points a day, `chunks=48` about 97). Garmin repeats some timestamps (same value) and ends the answer with about 96 placeholder rows whose value is `null`; both are dropped, nothing is filled in. Days the initial load had already finished with the thin raster are loaded **once more** (backwards up to the recorder's keep days, at most 400, one request per day as before); the points already in the recorder are not written twice. Heart rate, SpO2 and HRV are not reloaded. Expect many more stored states: about 480 per Body Battery day instead of 6, so up to roughly 190,000 for 400 days. SpO2 uses the
   `spo2Level` column named by Garmin's descriptor list (the environment column is not SpO2 and is ignored).
 
   **Automatic variant** (option *Fill history automatically*, on by default): it only acts for a series whose history
@@ -358,7 +358,7 @@ has no word list yet because the values Garmin sends are not known; each value s
   yesterday are recalculated and overwritten after each sync, so later corrections by Garmin are taken over. Hours
   without a measurement stay empty: nothing is interpolated or filled, and placeholder values (0 or negative for heart
   rate and SpO2, negative for Body Battery) are dropped. Hours are full UTC hours. Heart rate has about one point every
-  two minutes, so an hour has up to 30 points; the SpO2 values read here are Garmin's hourly averages (the specification also lists raw single readings, `spO2SingleValues`, which are not read yet), so minimum, maximum and mean of an SpO2 hour are the same. Where to see them: a *Statistics graph* card (pick the statistic, period *hour*
+  two minutes, so an hour has up to 30 points; the SpO2 values read here are Garmin's hourly averages (the specification also lists raw single readings, `spO2SingleValues`; live test with both watches: the list is empty and `spo2Level` is `null`, so there is no raw value to read), so minimum, maximum and mean of an SpO2 hour are the same. Body Battery has a point every 3 minutes since 0.5.9 (up to 20 per hour), so its hourly minimum, maximum and mean are more accurate than before (6 points a day); the new values overwrite the stored hours of the same statistic ID and hour (today and yesterday automatically, older days with `backfill_intraday`). Where to see them: a *Statistics graph* card (pick the statistic, period *hour*
   or *day*, `stat_types` `min`, `max`, `mean`) or Developer tools → Statistics. They do **not** appear in the History
   panel, which only shows states of entities; they are not states, so they are not stored there or in the attributes.
   In time zones whose offset is not a whole number of hours, the hour around local midnight is left out at the edge

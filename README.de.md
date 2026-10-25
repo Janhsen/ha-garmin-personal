@@ -139,7 +139,7 @@ Fitnessalter-Sensor hat Garmins `previous_fitness_age` als Attribut. Garmin besc
 Liste von Datensätzen (frühere Antworten waren ein einzelnes Objekt): Beides wird gelesen, aus einer Liste der neueste
 Datensatz mit Fitnessalter. Die Anfrage sendet `fullHistoryScan=false`, Garmin sucht also nur in den letzten 28 Tagen vor
 dem Datum: Gab es in dieser Zeit keinen neuen Wert, enthält die Antwort einen `invalidReason` und die Fitnessalter-Sensoren
-bleiben leer. (`fetch` mit `full_history_scan: true` zeigt, was Garmin im gesamten Verlauf hat.)
+bleiben leer. (`fetch` mit `full_history_scan: true` zeigt, was Garmin im gesamten Verlauf hat; Livetest: mit `fullHistoryScan=true` ist die Antwort ein einzelnes Objekt, keine Liste, was der Parser bereits liest.)
 
 ## Endpunkte und Services
 
@@ -313,7 +313,7 @@ Fehlermeldung ab, die die Konten auflistet. Alle Service-Fehler sind übersetzt.
   Morgen dieses Tages. Die heutige Nacht wird nach jeder Synchronisierung neu abgefragt und nur noch nicht
   geschriebene Punkte werden angehängt, eine spät vollständige Nacht wird also nicht doppelt geschrieben. Für die HRV
   gibt es keine Stundenstatistik (sie kostete bei jeder Synchronisierung eine weitere Anfrage für reine Nachtdaten).
-  *Body Battery (Verlauf)* hat nur die wenigen Punkte pro Tag (etwa 6), die Garmins Personal API bei der hier genutzten Anfrage liefert (die Spezifikation bietet außerdem einen Parameter `chunks`, der den Tag in mehr Intervalle teilt; er wird noch nicht genutzt und lässt sich mit `fetch` ausprobieren), nicht die dichte Kurve aus Garmin Connect; es wird nichts aufgefüllt. SpO2 liest die Spalte `spo2Level`, die Garmins
+  *Body Battery (Verlauf)* hat seit 0.5.9 alle 3 Minuten einen Punkt (etwa 480 pro Tag, die Auflösung der Uhr): Die Anfrage sendet `chunks=288` (live getestet; ohne liefert Garmin nur etwa 6 Punkte pro Tag, mit `chunks=48` etwa 97). Garmin wiederholt einzelne Zeitstempel (gleicher Wert) und hängt am Ende etwa 96 Platzhalterzeilen mit dem Wert `null` an; beides wird verworfen, es wird nichts aufgefüllt. Tage, die das Nachladen schon mit dem dünnen Raster abgeschlossen hatte, werden **einmal neu** geladen (rückwärts bis zu den Aufbewahrungstagen des Recorders, höchstens 400, eine Anfrage pro Tag wie bisher); Punkte, die schon im Recorder stehen, werden nicht doppelt geschrieben. Puls, SpO2 und HRV werden nicht neu geladen. Es gibt deutlich mehr gespeicherte Zustände: etwa 480 statt 6 pro Body-Battery-Tag, bei 400 Tagen bis zu rund 190.000. SpO2 liest die Spalte `spo2Level`, die Garmins
   Descriptor-Liste nennt (die Umgebungsspalte ist kein SpO2 und wird ignoriert).
 
   **Automatische Variante** (Option *Verlauf automatisch nachtragen*, standardmäßig an): Sie wirkt nur für eine Reihe,
@@ -373,7 +373,7 @@ die Werte, die Garmin schickt, nicht bekannt sind; jeder gesehene Wert wird unve
   laufende; die Stunden von heute und gestern werden nach jedem Sync neu berechnet und überschrieben, spätere
   Korrekturen von Garmin werden also übernommen. Stunden ohne Messung bleiben leer: es wird nichts interpoliert oder
   aufgefüllt, Platzhalterwerte (0 oder negativ bei Puls und SpO2, negativ bei Body Battery) werden verworfen. Gemeint
-  sind volle UTC-Stunden. Der Puls hat etwa alle zwei Minuten einen Punkt, eine Stunde also bis zu 30 Punkte; die hier gelesenen SpO2-Werte sind Garmins Stundenmittel (die Spezifikation nennt außerdem einzelne Rohmessungen, `spO2SingleValues`, die noch nicht gelesen werden), Minimum, Maximum und Mittelwert einer SpO2-Stunde sind daher gleich. Zu sehen:
+  sind volle UTC-Stunden. Der Puls hat etwa alle zwei Minuten einen Punkt, eine Stunde also bis zu 30 Punkte; die hier gelesenen SpO2-Werte sind Garmins Stundenmittel (die Spezifikation nennt außerdem einzelne Rohmessungen, `spO2SingleValues`; Livetest mit beiden Uhren: die Liste ist leer und `spo2Level` ist `null`, einen Rohwert gibt es also nicht), Minimum, Maximum und Mittelwert einer SpO2-Stunde sind daher gleich. Body Battery hat seit 0.5.9 alle 3 Minuten einen Punkt (bis zu 20 pro Stunde), Minimum, Maximum und Mittelwert der Stunde sind daher genauer als vorher (6 Punkte pro Tag); die neuen Werte überschreiben die gespeicherten Stunden derselben Statistik-ID und Stunde (heute und gestern automatisch, ältere Tage mit `backfill_intraday`). Zu sehen:
   in einer *Statistik-Diagramm*-Karte (Statistik wählen, Periode *Stunde* oder *Tag*, `stat_types` `min`, `max`,
   `mean`) oder unter Entwicklerwerkzeuge → Statistiken. Im Bereich *Verlauf* erscheinen sie **nicht**, denn der zeigt
   nur Zustände von Entitäten; es sind keine Zustände, sie liegen deshalb weder dort noch in den Attributen.

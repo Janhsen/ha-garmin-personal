@@ -26,6 +26,10 @@ HOUR_MS = 3_600_000
 _MIN_TS_MS = 100_000_000_000
 _MAX_TS_MS = 4_000_000_000_000
 
+# Body Battery: ``chunks=288`` makes Garmin answer with one value every 3 minutes (the device's own
+# resolution, about 480 points a day, live tested); without it the day has only about 6 points.
+BODY_BATTERY_CHUNKS = 288
+
 # A measuring point: (epoch milliseconds UTC, value).
 Point = tuple[int, float]
 
@@ -119,7 +123,10 @@ def body_battery_points(payload: Any) -> list[Point] | None:
     """Points of the Body Battery report (a list with one report per day, or one report).
 
     The column of the level is looked up in Garmin's descriptor list; without it there is
-    no series (a column is never guessed). Negative values are placeholders; 0 is a real level.
+    no series (a column is never guessed). Negative and ``null`` values are placeholders (with
+    ``chunks=288`` the answer ends in about 96 rows ``[ts, null]`` whose timestamps count up by 1 ms);
+    0 is a real level. Garmin repeats some timestamps (at interval borders, with the same value):
+    a timestamp counts once, the first value stays.
     """
     if payload is None:
         return []
@@ -139,7 +146,7 @@ def body_battery_points(payload: Any) -> list[Point] | None:
         if level_col is None:
             return None
         points.extend(_pairs(rows, 0 if ts_col is None else ts_col, level_col, keep=lambda v: v >= 0))
-    return points
+    return merge_points(points)
 
 
 def spo2_points(payload: Any) -> list[Point] | None:
@@ -299,7 +306,7 @@ async def fetch_series(api: Any, key: str, day: date) -> Any:
     """Ask Garmin for one series of one day (one request)."""
     fetchers: dict[str, Callable[[], Awaitable[Any]]] = {
         "heart_rate": lambda: api.get_heart_rate(day),
-        "body_battery": lambda: api.get_body_battery(day, day),
+        "body_battery": lambda: api.get_body_battery(day, day, chunks=BODY_BATTERY_CHUNKS),
         "spo2": lambda: api.get_spo2(day),
         "hrv": lambda: api.get_hrv(day),
     }

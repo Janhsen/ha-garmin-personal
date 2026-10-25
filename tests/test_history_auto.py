@@ -96,7 +96,7 @@ class BackfillApi:
     async def get_hrv(self, day):
         return self._go("hrv", getattr(self, "hrv", {}), day)
 
-    async def get_body_battery(self, a, b):
+    async def get_body_battery(self, a, b, chunks=None):
         return self._go("body_battery", {}, a)
 
     def n(self, series=None):

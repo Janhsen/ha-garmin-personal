@@ -25,6 +25,7 @@ from .api import GarminAuthError, GarminError, GarminPersonalApi, GarminRateLimi
 from .const import DAILY_FULL_REFRESH, DOMAIN
 from .history import append_points, manager_for
 from .intraday import (
+    BODY_BATTERY_CHUNKS,
     HISTORY_SERIES,
     SERIES,
     closed_hours,
@@ -501,7 +502,8 @@ def make_daily_calls(intraday: bool) -> CallBuilder:
         }
         if intraday:
             calls["heart_rate"] = lambda: api.get_heart_rate(today)
-            calls["body_battery"] = lambda: api.get_body_battery(today, today)
+            # Same request as the series job (chunks=288: a value every 3 minutes), so it can be reused.
+            calls["body_battery"] = lambda: api.get_body_battery(today, today, chunks=BODY_BATTERY_CHUNKS)
         return calls
 
     return daily_calls

@@ -114,7 +114,7 @@ class FakeApi:
         self.calls += 1
         return self.hr.get(day)
 
-    async def get_body_battery(self, a, b):
+    async def get_body_battery(self, a, b, chunks=None):
         self.calls += 1
 
     async def get_spo2(self, day):

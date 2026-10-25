@@ -114,7 +114,7 @@ class Registry(unittest.TestCase):
             async def get_heart_rate(self, day):
                 calls.append(("hr", day))
 
-            async def get_body_battery(self, a, b):
+            async def get_body_battery(self, a, b, chunks=None):
                 calls.append(("bb", a, b))
 
             async def get_spo2(self, day):

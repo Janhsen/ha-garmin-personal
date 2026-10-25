@@ -189,6 +189,10 @@ class Ledger:
 
     VERSION = 1
     MAX_DONE_DAYS = 500
+    # Series whose points became denser (Body Battery: 6 -> about 480 a day with chunks=288, 0.5.9). Their
+    # "done" days live under a new key, so days finished with the thin raster are loaded once more;
+    # the ledger version stays 1, and every other series keeps its done days untouched.
+    DONE_KEYS: dict[str, str] = {"body_battery": "body_battery@288"}
 
     def __init__(self, data: dict[str, Any] | None = None) -> None:
         """Load from the dict a store returned (``None``/wrong version: a fresh, empty ledger)."""
@@ -205,16 +209,32 @@ class Ledger:
 
     def is_done(self, series: str, day: str) -> bool:
         """Whether the initial load has finished this (past) day of this series."""
-        return day in self.data.get("done", {}).get(series, ())
+        return day in self.data.get("done", {}).get(self.DONE_KEYS.get(series, series), ())
 
     def mark_done(self, series: str, day: str) -> None:
         """Remember a finished past day (never today); the list is bounded."""
         self.data.get("defer", {}).get(series, {}).pop(day, None)
-        days = self.data.setdefault("done", {}).setdefault(series, [])
+        days = self.data.setdefault("done", {}).setdefault(self.DONE_KEYS.get(series, series), [])
         if day not in days:
             days.append(day)
             days.sort()
             del days[: max(0, len(days) - self.MAX_DONE_DAYS)]
+
+    def drop_thin_mark(self, series: str, day: str) -> bool:
+        """Forget the *mark* of a day written at the old, thin resolution so it is looked up in the recorder again.
+
+        Only for series in ``DONE_KEYS`` and only for a compacted day (a mark covers first..last, so
+        the new points between would all count as written) that was not reloaded yet. A day with its
+        exact timestamps is kept: new timestamps are new points anyway. What the recorder holds for the
+        day is adopted before anything is written, so nothing is written twice.
+        """
+        if series not in self.DONE_KEYS or self.is_done(series, day):
+            return False
+        entry = self._day(series, day)
+        if entry is None or "p" in entry:
+            return False
+        del self.data["series"][series][day]
+        return True
 
     def oldest_contiguous_done(self, series: str, yesterday: date) -> str | None:
         """The oldest day of the unbroken run of finished days that ends at ``yesterday``."""
@@ -391,6 +411,7 @@ async def append_points(
     if not points:
         return result
     iso = day.isoformat()
+    ledger.drop_thin_mark(series, iso)
     if not ledger.knows(series, iso):
         try:
             found = await recorded_points(hass, entry, series, day)

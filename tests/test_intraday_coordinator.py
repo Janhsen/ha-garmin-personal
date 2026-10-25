@@ -46,7 +46,7 @@ class FakeApi:
         self._log("heart_rate", day)
         return self.hr.get(day)
 
-    async def get_body_battery(self, a, b):
+    async def get_body_battery(self, a, b, chunks=None):
         self._log("body_battery", a)
         return self.bb.get(a)
 

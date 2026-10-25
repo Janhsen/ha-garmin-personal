@@ -48,7 +48,7 @@ class FakeApi:
             await self.gate.wait()
         return self._answer("heart_rate", self.hr, day)
 
-    async def get_body_battery(self, start, end):
+    async def get_body_battery(self, start, end, chunks=None):
         assert start == end
         return self._answer("body_battery", self.bb, start)
 

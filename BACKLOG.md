@@ -7,9 +7,8 @@ Ideas and open points, roughly by priority. Nothing here is promised; items move
   Garmin points, written continuously and via `backfill_intraday` (in development, 0.5.0).
 
 ## Needs a live test (read-only, with `garmin_personal.fetch` since 0.5.8)
-- Body Battery `chunks` (12, 48, 96, 288): does the series get denser? Then use it for the sensors and bump the history ledger.
-- `spO2SingleValues` of the SpO2 answer: filled? Then read the raw series instead of the hourly averages.
-- Fitness age: real shape (list or object) and `full_history_scan: true`.
+- Body Battery `chunks=288` over a multi-day range (only one day tested live; the integration asks one day at a time).
+- Done live (0.5.9): `chunks=288` gives a point every 3 minutes (used); `spO2SingleValues` is empty and `spo2Level` null on both watches (no raw SpO2); fitness age with `fullHistoryScan=true` is an object.
 - `weights_all`: still HTTP 400? Weight range with `include_all: false`.
 - Daily summaries (V2) against the live sensors: minimum/maximum heart rate, distance and respiration differ in meaning
   (see README, "backfill_statistics"); compare one real day before changing any existing statistic.

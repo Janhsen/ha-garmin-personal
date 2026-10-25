@@ -3,6 +3,31 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## 0.5.9
+
+### Changed
+- **Body Battery every 3 minutes.** All requests that fetch the Body Battery series (hourly statistics, *Body Battery
+  (history)*, the intraday attribute, `backfill_intraday`, `backfill_history`, the initial load) now send `chunks=288`.
+  Live tested: Garmin then delivers one value every 3 minutes (about 480 points a day) instead of about 6; `chunks=48`
+  gave about 97. The daily request of the sensors is the same request, so no extra request is made.
+- The Body Battery parser drops the `null` placeholder rows that end a `chunks=288` answer (about 96 rows, timestamps
+  counting up by 1 ms) and counts a timestamp Garmin repeats (same value, at interval borders) once. The mean of an
+  hour is no longer skewed by repeated points. Points are still `(epoch_ms, value)`; no real point is lost.
+- **One-time reload.** Body Battery days that the initial load had finished with the thin raster are loaded once more
+  (backwards up to the recorder's keep days, at most 400 days, one request per day as before). Heart rate, SpO2 and HRV are
+  not reloaded. Points already in the recorder are not written twice (days that were shrunk to a mark are looked up in
+  the recorder first). Errors, rate limits and cancellation behave as in 0.5.6: the ledger only notes what was handed over.
+  The ledger version stays 1; the finished days of Body Battery are kept under a new key `body_battery@288`.
+- The hourly Body Battery statistics (min, max, mean) are more accurate with dense points. They overwrite the stored hours
+  of the same statistic ID and hour: today and yesterday automatically, older days with `backfill_intraday`. No statistic
+  or entity ID changed.
+- More stored states: about 480 per Body Battery day instead of 6 (up to roughly 190,000 for 400 days).
+
+### Documentation
+- README: the "about 6 points" statement is replaced by the live result; SpO2 raw values do not exist on both watches
+  (`spO2SingleValues` empty, `spo2Level` null; nothing to implement); the fitness age answer with `fullHistoryScan=true`
+  is an object, not a list (the parser reads both).
+
 ## 0.5.8
 
 ### Added

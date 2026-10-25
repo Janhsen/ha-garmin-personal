@@ -296,7 +296,11 @@ def _body_battery_intraday(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
             break
     if index is None:
         return {"values": []}  # column unknown: no series rather than a guessed column
-    return {"values": series_pairs(dig(report, "bodyBatteryValuesArray"), index)}
+    # chunks=288 repeats some timestamps (same value) and ends in null placeholders (dropped by series_pairs)
+    unique: dict[float, list[float]] = {}
+    for pair in series_pairs(dig(report, "bodyBatteryValuesArray"), index):
+        unique.setdefault(pair[0], pair)
+    return {"values": list(unique.values())}
 
 
 def _spo2_intraday(data: Mapping[str, Any]) -> Mapping[str, Any] | None:
