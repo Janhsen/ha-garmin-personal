@@ -560,7 +560,7 @@ class FakeHass:
 
 
 class FakeEntry:
-    def __init__(self, entry_id="E1", title="Jan", data=None, options=None, unique_id=None,
+    def __init__(self, entry_id="E1", title="Alex", data=None, options=None, unique_id=None,
                  runtime_data="UNSET", state=None):
         self.entry_id = entry_id
         self.state = state or (ConfigEntryState.LOADED if runtime_data not in ("UNSET", None)

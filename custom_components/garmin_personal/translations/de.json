@@ -10,7 +10,7 @@
           "key_validity_days": "Beim Erstellen gewählte Gültigkeit (Tage)"
         },
         "data_description": {
-          "name": "Anzeigename des Kontos, z. B. der Vorname. Er wird Gerätename und Teil aller Entitäts-IDs (z. B. sensor.jan_steps bei dem Namen Jan); späteres Umbenennen ändert bestehende IDs nicht.",
+          "name": "Anzeigename des Kontos, z. B. der Vorname. Er wird Gerätename und Teil aller Entitäts-IDs (z. B. sensor.alex_steps bei dem Namen Alex); späteres Umbenennen ändert bestehende IDs nicht.",
           "api_key": "Der Schlüssel aus Garmin Connect (Einstellungen > Persönlicher API-Schlüssel). Garmin zeigt ihn nur einmal.",
           "key_validity_days": "Dieselbe Dauer, die du beim Erzeugen des Schlüssels in Garmin gewählt hast. Garmin verrät das Ablaufdatum nicht; es wird daraus berechnet und nur für die Erinnerung vor dem Ablauf genutzt."
         }

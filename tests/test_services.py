@@ -79,7 +79,7 @@ def make_hass(*entries, config=None):
     return hass
 
 
-def loaded(entry_id="E1", api=None, title="Jan"):
+def loaded(entry_id="E1", api=None, title="Alex"):
     return stubs.FakeEntry(entry_id=entry_id, title=title, runtime_data=FakeRuntime(api or FakeApi()))
 
 
@@ -347,7 +347,7 @@ class ImportStatistics(unittest.TestCase):
     def setUp(self):
         stubs.RECORDED.clear()
         self.hass = make_hass()
-        self.entry = stubs.FakeEntry(entry_id="AbC123", title="Jan")
+        self.entry = stubs.FakeEntry(entry_id="AbC123", title="Alex")
         self.models = sys.modules["homeassistant.components.recorder.models"]
 
     def run_import(self, summaries):
@@ -481,13 +481,13 @@ class ImportStatistics(unittest.TestCase):
         meta = rec["steps"][0].kw
         self.assertEqual(meta["statistic_id"], "garmin_personal:abc123_steps")
         self.assertEqual(meta["source"], DOMAIN)
-        self.assertEqual(meta["name"], "Jan steps")
+        self.assertEqual(meta["name"], "Alex steps")
         self.assertIs(meta["has_sum"], False)
         self.assertEqual(meta["unit_of_measurement"], "steps")
         self.assertEqual(rec["distance"][0].kw["unit_of_measurement"], "m")
-        self.assertEqual(rec["distance"][0].kw["name"], "Jan distance")
+        self.assertEqual(rec["distance"][0].kw["name"], "Alex distance")
         self.assertIsNone(rec["stress_average"][0].kw["unit_of_measurement"])
-        self.assertEqual(rec["stress_average"][0].kw["name"], "Jan stress average")
+        self.assertEqual(rec["stress_average"][0].kw["name"], "Alex stress average")
         self.assertEqual(meta["mean_type"], self.models.StatisticMeanType.ARITHMETIC)
         self.assertNotIn("has_mean", meta)
 

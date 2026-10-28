@@ -195,9 +195,9 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
 DATA_DESCRIPTIONS: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
     ("config", "user"): {
         "name": ("Display name of the account, e.g. a first name. It becomes the device name and part of every entity ID "
-                 "(for example sensor.jan_steps if the name is Jan); renaming later does not change existing entity IDs.",
+                 "(for example sensor.alex_steps if the name is Alex); renaming later does not change existing entity IDs.",
                  "Anzeigename des Kontos, z. B. der Vorname. Er wird Gerätename und Teil aller Entitäts-IDs "
-                 "(z. B. sensor.jan_steps bei dem Namen Jan); späteres Umbenennen ändert bestehende IDs nicht."),
+                 "(z. B. sensor.alex_steps bei dem Namen Alex); späteres Umbenennen ändert bestehende IDs nicht."),
         "api_key": ("The key from Garmin Connect (Settings > Personal API key). Garmin shows it only once.",
                     "Der Schlüssel aus Garmin Connect (Einstellungen > Persönlicher API-Schlüssel). Garmin zeigt ihn nur einmal."),
         "key_validity_days": ("The same duration you chose in Garmin when creating the key. Garmin does not report the expiry date; "

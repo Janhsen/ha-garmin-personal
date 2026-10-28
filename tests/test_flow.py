@@ -86,7 +86,7 @@ class Helpers(unittest.TestCase):
 
 
 class UserStep(FlowBase):
-    INPUT = {"name": " Jan ", "api_key": "  KEY  ", "key_validity_days": "90"}
+    INPUT = {"name": " Alex ", "api_key": "  KEY  ", "key_validity_days": "90"}
 
     def test_form_shown_first_with_defaults(self):
         result = stubs.run(self.flow().async_step_user())
@@ -101,7 +101,7 @@ class UserStep(FlowBase):
         flow = self.flow()
         result = stubs.run(flow.async_step_user(dict(self.INPUT)))
         self.assertEqual(result["type"], "create_entry")
-        self.assertEqual(result["title"], "Jan")  # getrimmt
+        self.assertEqual(result["title"], "Alex")  # getrimmt
         data = result["data"]
         self.assertEqual(data["api_key"], "KEY")  # gespeichert getrimmt
         self.assertEqual(data["account_id_source"], "profile_id")
@@ -163,8 +163,8 @@ class UserStep(FlowBase):
 
     def test_form_after_error_keeps_entered_name(self):
         FakeApi.error = api_mod.GarminAuthError("nope")
-        result = stubs.run(self.flow().async_step_user({**self.INPUT, "name": "Katrin"}))
-        self.assertEqual(result["data_schema"].default_of("name"), "Katrin")
+        result = stubs.run(self.flow().async_step_user({**self.INPUT, "name": "Sam"}))
+        self.assertEqual(result["data_schema"].default_of("name"), "Sam")
         self.assertEqual(result["data_schema"].default_of("key_validity_days"), "90")
 
     def test_duplicate_account_aborts(self):
@@ -187,7 +187,7 @@ class UserStep(FlowBase):
 
 
 class ReplaceKey(FlowBase):
-    def entry(self, unique_id="4711", title="Jan", **data):
+    def entry(self, unique_id="4711", title="Alex", **data):
         base = {"account_id_source": "profile_id", "api_key": "OLD", "key_validity_days": "90"}
         base.update(data)
         return stubs.FakeEntry(title=title, unique_id=unique_id, data=base)
@@ -208,7 +208,7 @@ class ReplaceKey(FlowBase):
         result = stubs.run(flow.async_step_reauth({}))
         self.assertEqual((result["type"], result["step_id"]), ("form", "reauth_confirm"))
         self.assertEqual(set(result["description_placeholders"]), {"account", "expires", "key_url"})
-        self.assertEqual(result["description_placeholders"]["account"], "Jan")
+        self.assertEqual(result["description_placeholders"]["account"], "Alex")
 
     def test_reconfigure_form(self):
         result = stubs.run(self.flow_for(self.entry(), "reconfigure").async_step_reconfigure())

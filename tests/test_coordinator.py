@@ -48,7 +48,7 @@ class Calls:
 
 
 def make(cls, calls, sticky=(), group="g"):
-    entry = stubs.FakeEntry(entry_id="E1", title="Jan")
+    entry = stubs.FakeEntry(entry_id="E1", title="Alex")
     return cls(stubs.FakeHass(), entry, object(), group, timedelta(minutes=5), calls, sticky=sticky)
 
 
