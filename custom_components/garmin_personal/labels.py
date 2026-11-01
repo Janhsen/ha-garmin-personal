@@ -57,6 +57,10 @@ LABELS: dict[str, dict[str, tuple[str, str]]] = {
         **{f"hrv_low_{n}": (f"Low: {n}", f"Niedrig: {n}") for n in (3, 4, 7)},
         "onboarding_1": ("Setup phase: 1", "Einführung: 1"),
     },
+    "nap_feedback": {
+        # Only keys seen in real responses; the words of the key are translated literally.
+        "long_duration_low_need": ("Long duration, low need", "Lange Dauer, geringer Bedarf"),
+    },
     "sleep_alignment": {
         "behind": ("Behind", "Im Rückstand"),
         "aligned": ("Aligned", "Im Einklang"),

@@ -318,6 +318,12 @@
       "nap_duration": {
         "name": "Nickerchen-Dauer"
       },
+      "nap_feedback": {
+        "name": "Nickerchen-Feedback",
+        "state": {
+          "long_duration_low_need": "Lange Dauer, geringer Bedarf"
+        }
+      },
       "sleep_score": {
         "name": "Schlafwert"
       },

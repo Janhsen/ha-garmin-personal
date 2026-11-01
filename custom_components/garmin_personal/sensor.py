@@ -520,6 +520,8 @@ SENSORS: tuple[GarminSensorDescription, ...] = (
        state_class=NO_CLASS),
     _d("nap_duration", "sleep", number_at("sleep", "napTimeSeconds"), unit=SECONDS, device_class=DURATION,
        state_class=NO_CLASS, enabled=False),
+    _d("nap_feedback", "sleep", text_at("sleep", "dailyNapDTOS", 0, "napFeedback"), labels="nap_feedback",
+       state_class=NO_CLASS, enabled=False),
     _d("sleep_score", "sleep", _sleep_score("overall"), attrs=_sleep_score_attrs("overall")),
     _d("sleep_score_duration", "sleep", _sleep_score_label("totalDuration"), labels="rating", attrs=_sleep_score_attrs("totalDuration"), enabled=False),
     _d("sleep_score_stress", "sleep", _sleep_score_label("stress"), labels="rating", attrs=_sleep_score_attrs("stress"), enabled=False),

@@ -318,6 +318,12 @@
       "nap_duration": {
         "name": "Nap duration"
       },
+      "nap_feedback": {
+        "name": "Nap feedback",
+        "state": {
+          "long_duration_low_need": "Long duration, low need"
+        }
+      },
       "sleep_score": {
         "name": "Sleep score"
       },

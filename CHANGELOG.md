@@ -3,6 +3,11 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## 0.5.11
+
+### Added
+- Sensor *Nap feedback* (disabled by default): Garmin's feedback word of the first nap of the day, with a literal translation.
+
 ## 0.5.10
 
 ### Added
