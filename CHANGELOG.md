@@ -3,6 +3,11 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## 0.5.10
+
+### Added
+- Translations for two more personal sleep insights (literal wording of the key).
+
 ## 0.5.9
 
 ### Changed

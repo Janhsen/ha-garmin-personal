@@ -131,6 +131,7 @@ _DIR = {"POS": ("positive", "positiv"), "NEG": ("negative", "negativ")}
 _SLEEP = {
     "EXCELLENT_OR_GOOD_SLEEP": ("excellent or good sleep", "ausgezeichneter oder guter Schlaf"),
     "FAIR_OR_POOR_SLEEP": ("fair or poor sleep", "mittelmäßiger oder schlechter Schlaf"),
+    "GOOD_OR_FAIR_SLEEP": ("good or fair sleep", "guter oder mittelmäßiger Schlaf"),
     "FAIR_SLEEP": ("fair sleep", "mittelmäßiger Schlaf"), "POOR_SLEEP": ("poor sleep", "schlechter Schlaf"),
 }
 _CONTEXT = {
@@ -166,6 +167,7 @@ _SEEN_PERSONAL = [
     "STRESS_NEG_POOR_SLEEP_STRESSFUL_EVENING", "RHYTHM_POS_FAIR_OR_POOR_SLEEP_EXCELLENT_TIMING",
     "MOD_EXERCISE_POS_FAIR_SLEEP_MOD_TO_VIG_DURING_DAY_OUTDOOR", "HARD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_HARD_DURING_DAY",
     "MOD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_RELAX_CLOSE_BED",
+    "MOD_EXERCISE_NEG_FAIR_SLEEP_VIGOROUS_CLOSE_BED", "STRESS_NEG_GOOD_OR_FAIR_SLEEP_STRESSFUL_EVENING",
 ]
 
 

@@ -468,7 +468,9 @@
           "rhythm_pos_fair_or_poor_sleep_excellent_timing": "Rhythmus positiv: mittelmäßiger oder schlechter Schlaf, ausgezeichneter Zeitpunkt",
           "mod_exercise_pos_fair_sleep_mod_to_vig_during_day_outdoor": "Moderates Training positiv: mittelmäßiger Schlaf, moderat bis intensiv draußen im Tagesverlauf",
           "hard_exercise_pos_excellent_or_good_sleep_hard_during_day": "Hartes Training positiv: ausgezeichneter oder guter Schlaf, hart im Tagesverlauf",
-          "mod_exercise_pos_excellent_or_good_sleep_relax_close_bed": "Moderates Training positiv: ausgezeichneter oder guter Schlaf, entspannt kurz vor dem Schlafen"
+          "mod_exercise_pos_excellent_or_good_sleep_relax_close_bed": "Moderates Training positiv: ausgezeichneter oder guter Schlaf, entspannt kurz vor dem Schlafen",
+          "mod_exercise_neg_fair_sleep_vigorous_close_bed": "Moderates Training negativ: mittelmäßiger Schlaf, intensiv kurz vor dem Schlafen",
+          "stress_neg_good_or_fair_sleep_stressful_evening": "Stress negativ: guter oder mittelmäßiger Schlaf, stressiger Abend"
         }
       },
       "sleep_alignment": {

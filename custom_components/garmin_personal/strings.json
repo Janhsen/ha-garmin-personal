@@ -468,7 +468,9 @@
           "rhythm_pos_fair_or_poor_sleep_excellent_timing": "Rhythm positive: fair or poor sleep, excellent timing",
           "mod_exercise_pos_fair_sleep_mod_to_vig_during_day_outdoor": "Moderate exercise positive: fair sleep, moderate to vigorous outdoors during the day",
           "hard_exercise_pos_excellent_or_good_sleep_hard_during_day": "Hard exercise positive: excellent or good sleep, hard during the day",
-          "mod_exercise_pos_excellent_or_good_sleep_relax_close_bed": "Moderate exercise positive: excellent or good sleep, relaxing close to bedtime"
+          "mod_exercise_pos_excellent_or_good_sleep_relax_close_bed": "Moderate exercise positive: excellent or good sleep, relaxing close to bedtime",
+          "mod_exercise_neg_fair_sleep_vigorous_close_bed": "Moderate exercise negative: fair sleep, vigorous close to bedtime",
+          "stress_neg_good_or_fair_sleep_stressful_evening": "Stress negative: good or fair sleep, stressful evening"
         }
       },
       "sleep_alignment": {
