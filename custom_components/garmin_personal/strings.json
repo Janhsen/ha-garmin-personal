@@ -216,7 +216,8 @@
         "name": "Body Battery level",
         "state": {
           "high": "High",
-          "moderate": "Moderate"
+          "moderate": "Moderate",
+          "low": "Low"
         }
       },
       "body_battery_high": {
@@ -321,7 +322,8 @@
       "nap_feedback": {
         "name": "Nap feedback",
         "state": {
-          "long_duration_low_need": "Long duration, low need"
+          "long_duration_low_need": "Long duration, low need",
+          "ideal_timing_ideal_duration_low_need": "Ideal timing, ideal duration, low need"
         }
       },
       "sleep_score": {
@@ -417,6 +419,7 @@
           "positive_long_and_continuous": "Positive: long and continuous",
           "positive_long_and_refreshing": "Positive: long and refreshing",
           "positive_long_and_deep": "Positive: long and deep",
+          "positive_long_and_recovering": "Positive: long and recovering",
           "positive_continuous": "Positive: continuous",
           "positive_optimal_structure": "Positive: optimal structure",
           "negative_discontinuous": "Negative: discontinuous",
@@ -525,6 +528,7 @@
           "hrv_unbalanced_12": "Unbalanced: 12",
           "hrv_low_3": "Low: 3",
           "hrv_low_4": "Low: 4",
+          "hrv_low_5": "Low: 5",
           "hrv_low_7": "Low: 7",
           "onboarding_1": "Setup phase: 1"
         }

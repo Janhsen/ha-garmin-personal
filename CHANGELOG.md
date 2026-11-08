@@ -3,6 +3,11 @@
 All notable changes to the Garmin Connect Personal API integration. Versions follow `manifest.json`;
 each GitHub release shows the matching section.
 
+## 0.5.12
+
+### Added
+- Translations for further keys Garmin now delivers: sleep feedback, nap feedback, HRV feedback and Body Battery level (literal wording of the key).
+
 ## 0.5.11
 
 ### Added

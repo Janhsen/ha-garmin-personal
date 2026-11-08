@@ -26,6 +26,7 @@ LABELS: dict[str, dict[str, tuple[str, str]]] = {
         "positive_long_and_continuous": ("Positive: long and continuous", "Positiv: lang und durchgehend"),
         "positive_long_and_refreshing": ("Positive: long and refreshing", "Positiv: lang und erfrischend"),
         "positive_long_and_deep": ("Positive: long and deep", "Positiv: lang und tief"),
+        "positive_long_and_recovering": ("Positive: long and recovering", "Positiv: lang und erholsam"),
         "positive_continuous": ("Positive: continuous", "Positiv: durchgehend"),
         "positive_optimal_structure": ("Positive: optimal structure", "Positiv: optimale Struktur"),
         "negative_discontinuous": ("Negative: discontinuous", "Negativ: unterbrochen"),
@@ -54,12 +55,13 @@ LABELS: dict[str, dict[str, tuple[str, str]]] = {
         # Numbered text variants of Garmin's app; only the number is shown, never a meaning.
         **{f"hrv_balanced_{n}": (f"Balanced: {n}", f"Ausgeglichen: {n}") for n in (2, 3, 4, 5, 6, 7, 8)},
         **{f"hrv_unbalanced_{n}": (f"Unbalanced: {n}", f"Unausgeglichen: {n}") for n in (10, 11, 12)},
-        **{f"hrv_low_{n}": (f"Low: {n}", f"Niedrig: {n}") for n in (3, 4, 7)},
+        **{f"hrv_low_{n}": (f"Low: {n}", f"Niedrig: {n}") for n in (3, 4, 5, 7)},
         "onboarding_1": ("Setup phase: 1", "Einführung: 1"),
     },
     "nap_feedback": {
         # Only keys seen in real responses; the words of the key are translated literally.
         "long_duration_low_need": ("Long duration, low need", "Lange Dauer, geringer Bedarf"),
+        "ideal_timing_ideal_duration_low_need": ("Ideal timing, ideal duration, low need", "Ideale Zeit, ideale Dauer, geringer Bedarf"),
     },
     "sleep_alignment": {
         "behind": ("Behind", "Im Rückstand"),
@@ -71,6 +73,7 @@ LABELS: dict[str, dict[str, tuple[str, str]]] = {
         # Only levels seen in real responses.
         "high": ("High", "Hoch"),
         "moderate": ("Moderate", "Moderat"),
+        "low": ("Low", "Niedrig"),
     },
     "hrv_status": {
         "balanced": ("Balanced", "Ausgeglichen"),

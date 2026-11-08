@@ -216,7 +216,8 @@
         "name": "Body-Battery-Stufe",
         "state": {
           "high": "Hoch",
-          "moderate": "Moderat"
+          "moderate": "Moderat",
+          "low": "Niedrig"
         }
       },
       "body_battery_high": {
@@ -321,7 +322,8 @@
       "nap_feedback": {
         "name": "Nickerchen-Feedback",
         "state": {
-          "long_duration_low_need": "Lange Dauer, geringer Bedarf"
+          "long_duration_low_need": "Lange Dauer, geringer Bedarf",
+          "ideal_timing_ideal_duration_low_need": "Ideale Zeit, ideale Dauer, geringer Bedarf"
         }
       },
       "sleep_score": {
@@ -417,6 +419,7 @@
           "positive_long_and_continuous": "Positiv: lang und durchgehend",
           "positive_long_and_refreshing": "Positiv: lang und erfrischend",
           "positive_long_and_deep": "Positiv: lang und tief",
+          "positive_long_and_recovering": "Positiv: lang und erholsam",
           "positive_continuous": "Positiv: durchgehend",
           "positive_optimal_structure": "Positiv: optimale Struktur",
           "negative_discontinuous": "Negativ: unterbrochen",
@@ -525,6 +528,7 @@
           "hrv_unbalanced_12": "Unausgeglichen: 12",
           "hrv_low_3": "Niedrig: 3",
           "hrv_low_4": "Niedrig: 4",
+          "hrv_low_5": "Niedrig: 5",
           "hrv_low_7": "Niedrig: 7",
           "onboarding_1": "Einführung: 1"
         }
