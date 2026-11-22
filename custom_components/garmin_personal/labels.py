@@ -37,6 +37,7 @@ LABELS: dict[str, dict[str, tuple[str, str]]] = {
         "positive_highly_recovering": ("Positive: highly recovering", "Positiv: sehr erholsam"),
         "negative_not_restorative": ("Negative: not restorative", "Negativ: nicht erholsam"),
         "negative_long_but_not_restorative": ("Negative: long but not restorative", "Negativ: lang, aber nicht erholsam"),
+        "negative_long_but_poor_quality": ("Negative: long but poor quality", "Negativ: lang, aber schlechte Qualität"),
         "negative_short_and_nonrecovering": ("Negative: short and non-recovering", "Negativ: kurz und nicht erholsam"),
     },
     "sleep_insight": {
@@ -49,13 +50,14 @@ LABELS: dict[str, dict[str, tuple[str, str]]] = {
         "negative_late_strenuous_exercise": ("Negative: late strenuous exercise", "Negativ: spätes anstrengendes Training"),
         "negative_acclimatization_in_progress": ("Negative: acclimatization in progress", "Negativ: Akklimatisierung läuft"),
         "negative_stressful_day": ("Negative: stressful day", "Negativ: stressiger Tag"),
+        "negative_highly_stressful_day": ("Negative: highly stressful day", "Negativ: sehr stressiger Tag"),
         "none": ("None", "Kein Einblick"),
     },
     "hrv_feedback": {
         # Numbered text variants of Garmin's app; only the number is shown, never a meaning.
         **{f"hrv_balanced_{n}": (f"Balanced: {n}", f"Ausgeglichen: {n}") for n in (2, 3, 4, 5, 6, 7, 8)},
         **{f"hrv_unbalanced_{n}": (f"Unbalanced: {n}", f"Unausgeglichen: {n}") for n in (10, 11, 12)},
-        **{f"hrv_low_{n}": (f"Low: {n}", f"Niedrig: {n}") for n in (3, 4, 5, 7)},
+        **{f"hrv_low_{n}": (f"Low: {n}", f"Niedrig: {n}") for n in (3, 4, 5, 6, 7)},
         "onboarding_1": ("Setup phase: 1", "Einführung: 1"),
     },
     "nap_feedback": {
@@ -139,6 +141,7 @@ _SLEEP = {
     "EXCELLENT_OR_GOOD_SLEEP": ("excellent or good sleep", "ausgezeichneter oder guter Schlaf"),
     "FAIR_OR_POOR_SLEEP": ("fair or poor sleep", "mittelmäßiger oder schlechter Schlaf"),
     "GOOD_OR_FAIR_SLEEP": ("good or fair sleep", "guter oder mittelmäßiger Schlaf"),
+    "GOOD_SLEEP": ("good sleep", "guter Schlaf"), "GOOD_OR_WORSE_SLEEP": ("good or worse sleep", "guter oder schlechterer Schlaf"),
     "FAIR_SLEEP": ("fair sleep", "mittelmäßiger Schlaf"), "POOR_SLEEP": ("poor sleep", "schlechter Schlaf"),
 }
 _CONTEXT = {
@@ -153,6 +156,7 @@ _CONTEXT = {
     "MODERATE_DURING_DAY": ("moderate during the day", "moderat im Tagesverlauf"),
     "REALLY_LATE_TIMING": ("really late timing", "sehr später Zeitpunkt"),
     "STRESSFUL_DAY_POOR_HISTORY": ("stressful day, poor history", "stressiger Tag, schlechter Verlauf"),
+    "STRESSFUL_DAY": ("stressful day", "stressiger Tag"), "VERY_STRESSFUL_DAY": ("very stressful day", "sehr stressiger Tag"),
     "STRESSFUL_EVENING": ("stressful evening", "stressiger Abend"),
     "MODERATE_DURING_DAY_OUTDOOR": ("moderate outdoors during the day", "moderat draußen im Tagesverlauf"),
     "MOD_TO_VIG_DURING_DAY_OUTDOOR": ("moderate to vigorous outdoors during the day", "moderat bis intensiv draußen im Tagesverlauf"),
@@ -173,7 +177,8 @@ _SEEN_PERSONAL = [
     "STRESS_NEG_FAIR_OR_POOR_SLEEP_STRESSFUL_DAY_POOR_HISTORY", "MOD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_MODERATE_DURING_DAY_OUTDOOR",
     "STRESS_NEG_POOR_SLEEP_STRESSFUL_EVENING", "RHYTHM_POS_FAIR_OR_POOR_SLEEP_EXCELLENT_TIMING",
     "MOD_EXERCISE_POS_FAIR_SLEEP_MOD_TO_VIG_DURING_DAY_OUTDOOR", "HARD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_HARD_DURING_DAY",
-    "MOD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_RELAX_CLOSE_BED",
+    "MOD_EXERCISE_POS_EXCELLENT_OR_GOOD_SLEEP_RELAX_CLOSE_BED", "RHYTHM_POS_GOOD_SLEEP_EXCELLENT_TIMING",
+    "STRESS_NEG_GOOD_OR_WORSE_SLEEP_STRESSFUL_DAY", "STRESS_NEG_POOR_SLEEP_VERY_STRESSFUL_DAY",
     "MOD_EXERCISE_NEG_FAIR_SLEEP_VIGOROUS_CLOSE_BED", "STRESS_NEG_GOOD_OR_FAIR_SLEEP_STRESSFUL_EVENING",
 ]
 

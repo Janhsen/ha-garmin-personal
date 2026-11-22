@@ -430,6 +430,7 @@
           "positive_highly_recovering": "Positive: highly recovering",
           "negative_not_restorative": "Negative: not restorative",
           "negative_long_but_not_restorative": "Negative: long but not restorative",
+          "negative_long_but_poor_quality": "Negative: long but poor quality",
           "negative_short_and_nonrecovering": "Negative: short and non-recovering"
         }
       },
@@ -445,6 +446,7 @@
           "negative_late_strenuous_exercise": "Negative: late strenuous exercise",
           "negative_acclimatization_in_progress": "Negative: acclimatization in progress",
           "negative_stressful_day": "Negative: stressful day",
+          "negative_highly_stressful_day": "Negative: highly stressful day",
           "none": "None"
         }
       },
@@ -478,6 +480,9 @@
           "mod_exercise_pos_fair_sleep_mod_to_vig_during_day_outdoor": "Moderate exercise positive: fair sleep, moderate to vigorous outdoors during the day",
           "hard_exercise_pos_excellent_or_good_sleep_hard_during_day": "Hard exercise positive: excellent or good sleep, hard during the day",
           "mod_exercise_pos_excellent_or_good_sleep_relax_close_bed": "Moderate exercise positive: excellent or good sleep, relaxing close to bedtime",
+          "rhythm_pos_good_sleep_excellent_timing": "Rhythm positive: good sleep, excellent timing",
+          "stress_neg_good_or_worse_sleep_stressful_day": "Stress negative: good or worse sleep, stressful day",
+          "stress_neg_poor_sleep_very_stressful_day": "Stress negative: poor sleep, very stressful day",
           "mod_exercise_neg_fair_sleep_vigorous_close_bed": "Moderate exercise negative: fair sleep, vigorous close to bedtime",
           "stress_neg_good_or_fair_sleep_stressful_evening": "Stress negative: good or fair sleep, stressful evening"
         }
@@ -529,6 +534,7 @@
           "hrv_low_3": "Low: 3",
           "hrv_low_4": "Low: 4",
           "hrv_low_5": "Low: 5",
+          "hrv_low_6": "Low: 6",
           "hrv_low_7": "Low: 7",
           "onboarding_1": "Setup phase: 1"
         }
